@@ -22,14 +22,9 @@ interface Props {
 }
 
 const colorOptions = [
-  { value: "#ef4444", label: "Vermelho" },
-  { value: "#f97316", label: "Laranja" },
-  { value: "#f59e0b", label: "Amarelo" },
-  { value: "#10b981", label: "Verde" },
-  { value: "#3b82f6", label: "Azul" },
-  { value: "#8b5cf6", label: "Roxo" },
-  { value: "#ec4899", label: "Rosa" },
-  { value: "#6b7280", label: "Cinza" },
+  "#ef4444", "#f97316", "#f59e0b", "#10b981",
+  "#3b82f6", "#8b5cf6", "#ec4899", "#6b7280",
+  "#14b8a6", "#f43f5e",
 ];
 
 export function EditCategoryDialog({ category, open, onOpenChange }: Props) {
@@ -43,9 +38,12 @@ export function EditCategoryDialog({ category, open, onOpenChange }: Props) {
 
   useEffect(() => {
     if (category) {
-      setName(category.name); setBudgetLimit(category.budget_limit ? String(category.budget_limit) : "");
+      setName(category.name);
+      setBudgetLimit(category.budget_limit ? String(category.budget_limit) : "");
       setColor(category.color || "#ef4444");
-    } else { setName(""); setBudgetLimit(""); setColor("#ef4444"); }
+    } else {
+      setName(""); setBudgetLimit(""); setColor("#ef4444");
+    }
   }, [category, open]);
 
   const handleSave = async () => {
@@ -54,11 +52,16 @@ export function EditCategoryDialog({ category, open, onOpenChange }: Props) {
     if (isNew) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const { error } = await supabase.from("categories").insert({ user_id: user.id, name: name.trim(), budget_limit: parseFloat(budgetLimit) || null, color });
+      const { error } = await supabase.from("categories").insert({
+        user_id: user.id, name: name.trim(),
+        budget_limit: parseFloat(budgetLimit) || null, color,
+      });
       if (error) toast({ title: "Erro", description: error.message, variant: "destructive" });
       else { toast({ title: "Categoria criada!" }); queryClient.invalidateQueries({ queryKey: ["categories"] }); onOpenChange(false); }
     } else {
-      const { error } = await supabase.from("categories").update({ name: name.trim(), budget_limit: parseFloat(budgetLimit) || null, color }).eq("id", category!.id);
+      const { error } = await supabase.from("categories").update({
+        name: name.trim(), budget_limit: parseFloat(budgetLimit) || null, color,
+      }).eq("id", category!.id);
       if (error) toast({ title: "Erro", description: error.message, variant: "destructive" });
       else { toast({ title: "Categoria atualizada!" }); queryClient.invalidateQueries({ queryKey: ["categories"] }); onOpenChange(false); }
     }
@@ -75,58 +78,81 @@ export function EditCategoryDialog({ category, open, onOpenChange }: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[420px] p-0 gap-0 rounded-2xl overflow-hidden border-0 shadow-2xl">
-        <div className="p-6 pb-4">
+        <div className="p-6 pb-2">
           <DialogHeader className="text-left">
-            <DialogTitle className="text-lg font-bold text-foreground">{isNew ? "Nova Categoria" : "Editar Categoria"}</DialogTitle>
-            <DialogDescription className="text-sm text-muted-foreground">{isNew ? "Crie uma categoria para organizar" : "Altere os dados da categoria"}</DialogDescription>
+            <DialogTitle className="text-lg font-bold text-foreground">
+              {isNew ? "Nova Categoria" : "Editar Categoria"}
+            </DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground">
+              {isNew ? "Crie uma categoria para organizar seus gastos" : "Altere os dados da categoria"}
+            </DialogDescription>
           </DialogHeader>
         </div>
-        <div className="px-6 pb-6 space-y-5">
-          {/* Color preview */}
-          <div className="flex items-center gap-3 p-4 rounded-2xl border border-border bg-muted/30">
-            <div className="h-12 w-12 rounded-2xl shadow-lg" style={{ backgroundColor: color }} />
-            <div>
-              <p className="font-semibold text-foreground text-sm">{name || "Nome da categoria"}</p>
-              {budgetLimit && <p className="text-xs text-muted-foreground">Limite: R$ {parseFloat(budgetLimit).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>}
+
+        <div className="px-6 pb-6 space-y-4">
+          {/* Nome */}
+          <div>
+            <label className="text-sm font-semibold text-foreground mb-1.5 block">
+              Nome <span className="text-destructive">*</span>
+            </label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Alimentação" className="h-11 rounded-xl border-border" />
+          </div>
+
+          {/* Limite */}
+          <div>
+            <label className="text-sm font-semibold text-foreground mb-1.5 block">Limite de orçamento</label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">R$</span>
+              <Input value={budgetLimit} onChange={(e) => setBudgetLimit(e.target.value)} type="number" step="0.01" placeholder="Opcional" className="h-11 rounded-xl border-border pl-10" />
             </div>
           </div>
 
+          {/* Cor */}
           <div>
-            <label className="text-sm font-semibold text-foreground mb-2 block">Nome</label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Alimentação" className="h-12 rounded-xl border-border" />
-          </div>
-
-          <div>
-            <label className="text-sm font-semibold text-foreground mb-2 block">Limite de orçamento (R$)</label>
-            <Input value={budgetLimit} onChange={(e) => setBudgetLimit(e.target.value)} type="number" step="0.01" placeholder="Opcional" className="h-12 rounded-xl border-border" />
-          </div>
-
-          <div>
-            <label className="text-sm font-semibold text-foreground mb-3 block">Cor</label>
-            <div className="flex gap-3 flex-wrap">
+            <label className="text-sm font-semibold text-foreground mb-2 block">Cor</label>
+            <div className="flex items-center gap-2.5 flex-wrap">
               {colorOptions.map((c) => (
                 <button
-                  key={c.value}
-                  onClick={() => setColor(c.value)}
-                  className={`h-10 w-10 rounded-xl border-2 transition-all hover:scale-110 ${
-                    color === c.value ? "border-foreground scale-110 shadow-lg" : "border-transparent"
+                  key={c}
+                  type="button"
+                  onClick={() => setColor(c)}
+                  className={`h-9 w-9 rounded-full transition-all ${
+                    color === c
+                      ? "ring-2 ring-offset-2 ring-offset-background ring-primary scale-110"
+                      : "hover:scale-105"
                   }`}
-                  style={{ backgroundColor: c.value }}
-                  title={c.label}
+                  style={{ backgroundColor: c }}
                 />
               ))}
             </div>
           </div>
 
-          <div className="flex gap-2">
-            <Button onClick={handleSave} disabled={saving || !name.trim()} className="flex-1 h-12 rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-base shadow-lg shadow-primary/20">
-              {saving ? "Salvando..." : isNew ? "Criar Categoria" : "Salvar"}
-            </Button>
+          {/* Actions */}
+          <div className="flex gap-3 pt-1">
             {!isNew && (
-              <Button variant="outline" size="icon" onClick={handleDelete} className="h-12 w-12 rounded-2xl border-destructive/30 text-destructive hover:bg-destructive hover:text-destructive-foreground">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={handleDelete}
+                className="h-11 w-11 rounded-2xl border-destructive/30 text-destructive hover:bg-destructive hover:text-destructive-foreground shrink-0"
+              >
                 <Trash2 className="h-4 w-4" />
               </Button>
             )}
+            <Button
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              className="flex-1 h-11 rounded-2xl font-semibold"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleSave}
+              disabled={saving || !name.trim()}
+              className="flex-1 h-11 rounded-2xl font-semibold shadow-lg shadow-primary/20"
+            >
+              {saving ? "Salvando..." : isNew ? "Criar" : "Salvar"}
+            </Button>
           </div>
         </div>
       </DialogContent>
