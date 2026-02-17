@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import { motion, useScroll, useTransform, useInView } from "framer-motion";
+import heroImage from "@/assets/hero-woman.jpg";
 import {
   MessageSquare, Mic, Camera, Brain, CreditCard, Target, Wallet,
   Users, FileText, Bell, TrendingUp, ChevronRight, Star, Shield,
@@ -75,7 +76,7 @@ function Header() {
       <div className="container mx-auto flex items-center justify-between h-16 px-4">
         <a href="#" className="flex items-center gap-2 font-bold text-xl text-foreground">
           <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground text-sm font-extrabold">N</div>
-          Nylo
+          Nylo Assessor
         </a>
         <nav className="hidden md:flex items-center gap-6">
           {links.map((l) => (
@@ -84,8 +85,11 @@ function Header() {
             </a>
           ))}
         </nav>
-        <div className="hidden md:block">
-          <WhatsAppCTA size="sm" />
+        <div className="hidden md:flex items-center gap-3">
+          <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Entrar</a>
+          <Button size="sm" className="rounded-full" asChild>
+            <a href="#planos">Ver Planos <ArrowRight className="h-3.5 w-3.5 ml-1" /></a>
+          </Button>
         </div>
         <button onClick={() => setOpen(!open)} className="md:hidden text-foreground" aria-label="Menu">
           {open ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
@@ -114,54 +118,79 @@ function Hero() {
   const heroOpacity = useTransform(scrollYProgress, [0, 0.8], [1, 0.3]);
 
   return (
-    <section ref={heroRef} className="pt-28 pb-16 md:pt-36 md:pb-24 relative overflow-hidden">
+    <section ref={heroRef} className="pt-28 pb-12 md:pt-36 md:pb-20 relative overflow-hidden">
+      {/* Subtle pink glow at bottom */}
+      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[80%] h-40 bg-gradient-to-t from-primary/5 to-transparent pointer-events-none" />
+
       <div className="container mx-auto px-4 grid md:grid-cols-2 gap-12 items-center">
         <motion.div initial="hidden" animate="visible" variants={stagger} style={{ y: heroY, opacity: heroOpacity }}>
-          <motion.h1 variants={fadeUp} className="text-4xl md:text-5xl lg:text-6xl font-extrabold leading-tight text-foreground">
-            Assistente Financeiro no{" "}
-            <span className="text-primary">WhatsApp</span> com Inteligência Artificial
+          {/* Badge */}
+          <motion.div variants={fadeUp}>
+            <span className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-4 py-1.5 text-sm font-medium text-primary">
+              📱 WhatsApp + IA + Finanças
+            </span>
+          </motion.div>
+
+          <motion.h1 variants={fadeUp} className="mt-6 text-4xl md:text-5xl lg:text-[3.5rem] font-extrabold leading-[1.1] text-foreground">
+            Seu assistente financeiro{" "}
+            <span className="text-primary">no WhatsApp</span>
           </motion.h1>
-          <motion.p variants={fadeUp} className="mt-5 text-lg text-muted-foreground max-w-lg">
-            Controle suas finanças pessoais de forma automática pelo WhatsApp. Registre gastos por texto, áudio ou foto e receba insights personalizados da nossa IA.
+
+          <motion.p variants={fadeUp} className="mt-5 text-lg text-muted-foreground max-w-lg leading-relaxed">
+            Mande um zap com seu gasto. A IA registra, organiza e te mostra{" "}
+            <strong className="text-foreground">exatamente para onde seu dinheiro está indo.</strong>
           </motion.p>
-          <motion.div variants={fadeUp} className="mt-8 flex flex-wrap gap-4">
-            <WhatsAppCTA size="lg" />
-            <Button variant="outline" size="lg" className="rounded-full" asChild>
-              <a href="#como-funciona">
-                Ver como funciona <ChevronRight className="h-4 w-4" />
-              </a>
-            </Button>
+
+          <motion.div variants={fadeUp} className="mt-8">
+            <WhatsAppCTA size="lg">
+              Quero organizar minhas finanças →
+            </WhatsAppCTA>
+          </motion.div>
+
+          {/* Checklist */}
+          <motion.div variants={fadeUp} className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+            <span className="flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5 text-primary" /> Sem planilhas</span>
+            <span>•</span>
+            <span className="flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5 text-primary" /> Sem apps complicados</span>
+            <span>•</span>
+            <span className="flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5 text-primary" /> Cancele quando quiser</span>
+          </motion.div>
+
+          {/* Social proof badges */}
+          <motion.div variants={fadeUp} className="mt-6 flex flex-wrap gap-3">
+            <div className="flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm shadow-sm">
+              <Users className="h-4 w-4 text-primary" />
+              <span className="font-semibold text-foreground">+2.000 usuários</span>
+            </div>
+            <div className="flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm shadow-sm">
+              <Star className="h-4 w-4 text-amber-500 fill-amber-500" />
+              <span className="font-semibold text-foreground">4.9</span>
+            </div>
+            <div className="flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm shadow-sm">
+              <Shield className="h-4 w-4 text-primary" />
+              <span className="font-semibold text-foreground">100% seguro</span>
+            </div>
           </motion.div>
         </motion.div>
 
-        {/* WhatsApp chat mock */}
-        <motion.div initial={{ opacity: 0, x: 40, scale: 0.95 }} animate={{ opacity: 1, x: 0, scale: 1 }} transition={{ delay: 0.3, duration: 0.7, ease: "easeOut" }} style={{ y: mockY }} className="relative mx-auto w-full max-w-sm">
-          <div className="rounded-3xl border border-border bg-card shadow-2xl shadow-primary/5 overflow-hidden">
-            <div className="bg-primary/10 px-5 py-3 flex items-center gap-3">
-              <div className="h-9 w-9 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold">N</div>
-              <div>
-                <p className="text-sm font-semibold text-foreground">Nylo Assessor</p>
-                <p className="text-xs text-muted-foreground">online</p>
-              </div>
-            </div>
-            <div className="p-4 space-y-3 min-h-[260px] bg-secondary/30">
-              {/* user message */}
-              <div className="flex justify-end">
-                <div className="bg-primary/15 text-foreground text-sm rounded-2xl rounded-br-md px-4 py-2.5 max-w-[75%]">
-                  gastei 45 no mercado
-                </div>
-              </div>
-              {/* bot reply */}
-              <div className="flex justify-start">
-                <div className="bg-card border border-border text-foreground text-sm rounded-2xl rounded-bl-md px-4 py-2.5 max-w-[80%] shadow-sm">
-                  <p>✅ Registrado!</p>
-                  <p className="mt-1"><strong>R$ 45,00</strong> — Mercado</p>
-                  <p className="text-xs text-muted-foreground mt-1">📂 Categoria: Alimentação</p>
-                  <p className="text-xs text-muted-foreground">💡 Você já gastou 78% do orçamento de alimentação este mês.</p>
-                </div>
-              </div>
-            </div>
+        {/* Hero image */}
+        <motion.div
+          initial={{ opacity: 0, x: 40, scale: 0.95 }}
+          animate={{ opacity: 1, x: 0, scale: 1 }}
+          transition={{ delay: 0.3, duration: 0.7, ease: "easeOut" }}
+          style={{ y: mockY }}
+          className="relative mx-auto w-full max-w-md"
+        >
+          <div className="rounded-3xl overflow-hidden shadow-2xl shadow-primary/10">
+            <img
+              src={heroImage}
+              alt="Mulher usando o Nylo Assessor no celular"
+              className="w-full h-auto object-cover"
+              loading="eager"
+            />
           </div>
+          {/* Decorative glow behind image */}
+          <div className="absolute -inset-4 -z-10 rounded-3xl bg-gradient-to-br from-primary/10 via-transparent to-primary/5 blur-2xl" />
         </motion.div>
       </div>
     </section>
