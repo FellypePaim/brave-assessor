@@ -16,6 +16,7 @@ import Categories from "./pages/dashboard/Categories";
 import Cards from "./pages/dashboard/Cards";
 import Bills from "./pages/dashboard/Bills";
 import Goals from "./pages/dashboard/Goals";
+import Investments from "./pages/dashboard/Investments";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -49,7 +50,7 @@ const App = () => (
               <Route path="chat" element={<Placeholder />} />
               <Route path="family" element={<Placeholder />} />
               <Route path="settings" element={<Placeholder />} />
-              <Route path="investments" element={<Placeholder />} />
+              <Route path="investments" element={<Investments />} />
               <Route path="behavior" element={<Placeholder />} />
             </Route>
             <Route path="*" element={<NotFound />} />
