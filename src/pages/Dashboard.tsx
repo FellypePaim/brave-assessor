@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   X, ChevronLeft, ChevronRight, Plus, MessageSquare,
-  TrendingDown, TrendingUp, Clock, DollarSign, FileText, Smile
+  TrendingDown, TrendingUp, Clock, DollarSign, FileText, Smile,
+  RefreshCw, Sparkles, Check, CalendarCheck, AlertTriangle, ArrowRight
 } from "lucide-react";
 
 type Period = "today" | "week" | "month";
@@ -220,6 +221,90 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Previsão de Gastos */}
+      <Card>
+        <CardContent className="p-5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                <RefreshCw className="h-4 w-4 text-primary" />
+              </div>
+              <h3 className="font-semibold text-foreground">Previsão de Gastos</h3>
+            </div>
+            <button className="text-muted-foreground hover:text-foreground">
+              <RefreshCw className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="mt-6 flex flex-col items-center text-center pb-2">
+            <p className="text-sm text-muted-foreground">Gere previsões baseadas no seu histórico</p>
+            <Button className="mt-3 rounded-full">Gerar Previsões</Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Gastos por Categoria + Compromissos Futuros */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+        {/* Gastos por Categoria */}
+        <Card className="lg:col-span-3">
+          <CardContent className="p-5">
+            <h3 className="font-semibold text-foreground">Gastos por Categoria</h3>
+            <div className="mt-8 flex flex-col items-center text-center pb-6">
+              <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center">
+                <Sparkles className="h-6 w-6 text-muted-foreground/50" />
+              </div>
+              <p className="mt-3 text-sm text-muted-foreground">Nenhum gasto registrado</p>
+              <p className="text-xs text-muted-foreground">Comece a registrar seus gastos!</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Compromissos Futuros */}
+        <Card className="lg:col-span-2">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                <CalendarCheck className="h-4 w-4 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-foreground">Compromissos Futuros</h3>
+                <p className="text-xs text-muted-foreground">Nenhum compromisso</p>
+              </div>
+            </div>
+            <div className="mt-6 flex flex-col items-center text-center">
+              <div className="h-12 w-12 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                <Check className="h-6 w-6 text-emerald-500" />
+              </div>
+              <p className="mt-3 text-sm font-medium text-foreground">Tudo em dia! 🎉</p>
+              <p className="text-xs text-muted-foreground">Nenhum compromisso para os próximos 7 dias</p>
+            </div>
+            <div className="mt-4 pt-4 border-t border-border text-center">
+              <button className="text-sm text-primary hover:underline inline-flex items-center gap-1">
+                Ver todas as contas <ArrowRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Alertas Inteligentes */}
+      <Card>
+        <CardContent className="p-5">
+          <div className="flex items-center gap-2">
+            <div className="h-8 w-8 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center">
+              <AlertTriangle className="h-4 w-4 text-orange-500" />
+            </div>
+            <h3 className="font-semibold text-foreground">Alertas Inteligentes</h3>
+          </div>
+          <div className="mt-6 flex flex-col items-center text-center pb-4">
+            <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center">
+              <Sparkles className="h-6 w-6 text-muted-foreground/50" />
+            </div>
+            <p className="mt-3 text-sm text-muted-foreground">Nenhum alerta por enquanto</p>
+            <p className="text-xs text-muted-foreground">Continue registrando seus gastos!</p>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
