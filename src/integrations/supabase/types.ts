@@ -478,6 +478,7 @@ export type Database = {
           balance: number
           color: string | null
           created_at: string
+          icon: string | null
           id: string
           name: string
           type: string
@@ -487,6 +488,7 @@ export type Database = {
           balance?: number
           color?: string | null
           created_at?: string
+          icon?: string | null
           id?: string
           name: string
           type?: string
@@ -496,6 +498,7 @@ export type Database = {
           balance?: number
           color?: string | null
           created_at?: string
+          icon?: string | null
           id?: string
           name?: string
           type?: string

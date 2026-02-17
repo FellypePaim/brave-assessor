@@ -44,6 +44,7 @@ export function AddWalletDialog({ trigger }: Props) {
       type: "checking",
       balance: parseFloat(balance) || 0,
       color: walletColors[selectedColor],
+      icon: walletIcons[selectedIcon],
     });
     if (error) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
