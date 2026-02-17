@@ -21,6 +21,7 @@ import Behavior from "./pages/dashboard/Behavior";
 import Reports from "./pages/dashboard/Reports";
 import SupportChat from "./pages/dashboard/SupportChat";
 import AdminSupport from "./pages/dashboard/AdminSupport";
+import Settings from "./pages/dashboard/Settings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -53,7 +54,7 @@ const App = () => (
               <Route path="reports" element={<Reports />} />
               <Route path="chat" element={<SupportChat />} />
               <Route path="family" element={<Placeholder />} />
-              <Route path="settings" element={<Placeholder />} />
+              <Route path="settings" element={<Settings />} />
               <Route path="investments" element={<Investments />} />
               <Route path="behavior" element={<Behavior />} />
               <Route path="admin/support" element={<AdminSupport />} />

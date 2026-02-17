@@ -201,24 +201,42 @@ export type Database = {
           created_at: string
           display_name: string | null
           id: string
+          monthly_income: number | null
+          notify_email_updates: boolean | null
+          notify_monthly_report: boolean | null
+          notify_morning: boolean | null
+          notify_night: boolean | null
           subscription_plan: Database["public"]["Enums"]["subscription_plan"]
           updated_at: string
+          whatsapp_number: string | null
         }
         Insert: {
           avatar_url?: string | null
           created_at?: string
           display_name?: string | null
           id: string
+          monthly_income?: number | null
+          notify_email_updates?: boolean | null
+          notify_monthly_report?: boolean | null
+          notify_morning?: boolean | null
+          notify_night?: boolean | null
           subscription_plan?: Database["public"]["Enums"]["subscription_plan"]
           updated_at?: string
+          whatsapp_number?: string | null
         }
         Update: {
           avatar_url?: string | null
           created_at?: string
           display_name?: string | null
           id?: string
+          monthly_income?: number | null
+          notify_email_updates?: boolean | null
+          notify_monthly_report?: boolean | null
+          notify_morning?: boolean | null
+          notify_night?: boolean | null
           subscription_plan?: Database["public"]["Enums"]["subscription_plan"]
           updated_at?: string
+          whatsapp_number?: string | null
         }
         Relationships: []
       }
