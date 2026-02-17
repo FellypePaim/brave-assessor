@@ -36,11 +36,11 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        // Mobile: bottom sheet style
         "fixed z-50 grid gap-4 border bg-background shadow-lg overflow-y-auto",
-        "left-0 right-0 bottom-0 top-auto w-full max-w-lg mx-auto rounded-t-2xl p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] max-h-[85vh]",
-        // Desktop: centered modal
-        "sm:left-[50%] sm:right-auto sm:top-[50%] sm:bottom-auto sm:translate-x-[-50%] sm:translate-y-[-50%] sm:w-full sm:rounded-xl sm:p-6 sm:max-h-[85vh] sm:pb-6",
+        // Mobile: bottom sheet
+        "left-0 right-0 bottom-0 top-auto max-w-lg rounded-t-2xl p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] max-h-[85vh]",
+        // Desktop: centered overlay using inset-0 + margin auto
+        "sm:inset-0 sm:m-auto sm:h-fit sm:max-w-lg sm:rounded-xl sm:p-6 sm:max-h-[85vh] sm:pb-6",
         className,
       )}
       asChild
