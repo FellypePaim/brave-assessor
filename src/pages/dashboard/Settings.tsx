@@ -22,18 +22,13 @@ const PLAN_INFO: Record<string, { name: string; price: string; features: string[
   },
   mensal: {
     name: "Nox Mensal",
-    price: "R$ 39,90",
-    features: ["WhatsApp conectado", "1 cartão de crédito", "Orçamentos por categoria", "Relatórios básicos", "Previsões com IA"],
-  },
-  trimestral: {
-    name: "Nox Trimestral",
-    price: "R$ 29,90",
-    features: ["Tudo do Mensal", "Modo família (2 pessoas)", "Relatórios avançados", "Metas financeiras", "Suporte prioritário"],
+    price: "R$ 19,90",
+    features: ["WhatsApp conectado", "Cartões de crédito", "Orçamentos por categoria", "Relatórios", "Previsões com IA"],
   },
   anual: {
     name: "Nox Anual",
-    price: "R$ 19,90",
-    features: ["Tudo do Trimestral", "Modo família (5 pessoas)", "Investimentos", "Análise comportamental", "Assessor IA completo"],
+    price: "R$ 14,90/mês",
+    features: ["Tudo do Mensal", "Modo família (5 pessoas)", "Investimentos", "Análise comportamental", "Assessor IA completo"],
   },
 };
 

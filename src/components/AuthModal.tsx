@@ -20,36 +20,23 @@ const plans = [
   {
     id: "mensal" as const,
     name: "Mensal",
-    price: "R$ 39,90",
+    price: "R$ 19,90",
     period: "/mês",
     features: ["Todas as funcionalidades", "Cancelamento sem burocracia"],
     popular: false,
   },
   {
-    id: "trimestral" as const,
-    name: "Trimestral",
-    price: "R$ 29,90",
+    id: "anual" as const,
+    name: "Anual",
+    price: "R$ 14,90",
     period: "/mês",
     features: [
       "Todas as funcionalidades",
-      "Modo família (2 pessoas)",
+      "12x de R$ 14,90",
       "Economia de 25%",
       "Cancelamento sem burocracia",
     ],
     popular: true,
-  },
-  {
-    id: "anual" as const,
-    name: "Anual",
-    price: "R$ 19,90",
-    period: "/mês",
-    features: [
-      "Todas as funcionalidades",
-      "Modo família (5 pessoas)",
-      "Economia de 50%",
-      "Cancelamento sem burocracia",
-    ],
-    popular: false,
   },
 ];
 
