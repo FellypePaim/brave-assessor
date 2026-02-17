@@ -1,12 +1,15 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card } from "@/components/ui/card";
-import { CreditCard } from "lucide-react";
+import { CreditCard, Pencil } from "lucide-react";
 import { AddCardDialog } from "@/components/AddCardDialog";
+import { EditCardDialog } from "@/components/EditCardDialog";
 
 export default function Cards() {
   const { user } = useAuth();
+  const [editCard, setEditCard] = useState<any>(null);
 
   const { data: cards = [] } = useQuery({
     queryKey: ["cards", user?.id],
@@ -42,7 +45,14 @@ export default function Cards() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {cards.map((card) => (
-              <Card key={card.id} className="p-5 hover:shadow-md transition-shadow cursor-pointer">
+              <Card
+                key={card.id}
+                className="p-5 hover:shadow-md transition-shadow cursor-pointer group relative"
+                onClick={() => setEditCard(card)}
+              >
+                <button className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-muted">
+                  <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                </button>
                 <div className="flex items-center gap-3">
                   <CreditCard className="h-8 w-8 text-primary" />
                   <div>
@@ -62,6 +72,8 @@ export default function Cards() {
           </div>
         )}
       </Card>
+
+      <EditCardDialog card={editCard} open={!!editCard} onOpenChange={(o) => !o && setEditCard(null)} />
     </div>
   );
 }
