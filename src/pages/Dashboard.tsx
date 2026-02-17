@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -11,6 +11,8 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { AddTransactionDialog } from "@/components/AddTransactionDialog";
+import { OnboardingTour } from "@/components/OnboardingTour";
+import { AnimatePresence } from "framer-motion";
 
 type Period = "today" | "week" | "month";
 
@@ -23,9 +25,42 @@ const periodLabels: Record<Period, string> = {
 export default function Dashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const displayName = user?.user_metadata?.display_name || "Usuário";
   const [showWelcome, setShowWelcome] = useState(true);
   const [period, setPeriod] = useState<Period>("month");
+  const [showTour, setShowTour] = useState(false);
+
+  // Check if user needs onboarding
+  const { data: profile } = useQuery({
+    queryKey: ["profile-onboarding", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("has_completed_onboarding")
+        .eq("id", user!.id)
+        .single();
+      return data;
+    },
+    enabled: !!user,
+  });
+
+  useEffect(() => {
+    if (profile && !profile.has_completed_onboarding) {
+      setShowTour(true);
+    }
+  }, [profile]);
+
+  const handleTourComplete = async () => {
+    setShowTour(false);
+    if (user) {
+      await supabase
+        .from("profiles")
+        .update({ has_completed_onboarding: true })
+        .eq("id", user.id);
+      queryClient.invalidateQueries({ queryKey: ["profile-onboarding"] });
+    }
+  };
 
   const now = new Date();
   const monthName = now.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
@@ -130,6 +165,10 @@ export default function Dashboard() {
   const catColors = ["bg-rose-500", "bg-orange-500", "bg-violet-500", "bg-blue-500", "bg-emerald-500", "bg-amber-500", "bg-pink-500", "bg-slate-500"];
 
   return (
+    <>
+    <AnimatePresence>
+      {showTour && <OnboardingTour onComplete={handleTourComplete} />}
+    </AnimatePresence>
     <div className="max-w-6xl mx-auto space-y-6">
       {showWelcome && (
         <Card className="border-emerald-200 bg-emerald-50/80 dark:bg-emerald-950/20 dark:border-emerald-800/40 relative overflow-hidden">
@@ -349,5 +388,6 @@ export default function Dashboard() {
         </CardContent>
       </Card>
     </div>
+    </>
   );
 }

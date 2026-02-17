@@ -200,6 +200,7 @@ export type Database = {
           avatar_url: string | null
           created_at: string
           display_name: string | null
+          has_completed_onboarding: boolean
           id: string
           monthly_income: number | null
           notify_email_updates: boolean | null
@@ -214,6 +215,7 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           display_name?: string | null
+          has_completed_onboarding?: boolean
           id: string
           monthly_income?: number | null
           notify_email_updates?: boolean | null
@@ -228,6 +230,7 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           display_name?: string | null
+          has_completed_onboarding?: boolean
           id?: string
           monthly_income?: number | null
           notify_email_updates?: boolean | null
