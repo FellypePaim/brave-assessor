@@ -222,7 +222,7 @@ export default function SupportChat() {
         ) : (
           <>
             <div className="p-3 border-b border-border">
-              <h3 className="font-semibold text-sm text-foreground">Suporte Nylo</h3>
+              <h3 className="font-semibold text-sm text-foreground">Suporte Nox</h3>
             </div>
             <div className="flex-1 overflow-auto p-4 space-y-4">
               {messages.map((m) => {

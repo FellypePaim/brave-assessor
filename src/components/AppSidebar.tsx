@@ -59,7 +59,7 @@ export function AppSidebar() {
               N
             </div>
             <div className="group-data-[collapsible=icon]:hidden">
-              <span className="font-bold text-base text-primary leading-none">Nylo Assessor</span>
+              <span className="font-bold text-base text-primary leading-none">Nox Assessor</span>
               <p className="text-[11px] text-muted-foreground leading-tight">Finanças inteligentes</p>
             </div>
           </div>
@@ -74,7 +74,7 @@ export function AppSidebar() {
           >
             <Sparkles className="h-5 w-5 shrink-0" />
             <div className="group-data-[collapsible=icon]:hidden">
-              <span className="font-semibold text-sm leading-none">Nylo IA</span>
+              <span className="font-semibold text-sm leading-none">Nox IA</span>
               <p className="text-[11px] opacity-80 leading-tight">Seu assessor</p>
             </div>
           </NavLink>
