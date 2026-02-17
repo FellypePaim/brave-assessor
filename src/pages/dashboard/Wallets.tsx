@@ -69,22 +69,26 @@ export default function Wallets() {
     { id: "accounts", label: "Contas", icon: Building2 },
   ];
 
-  const WalletCard = ({ w }: { w: any }) => (
-    <div
-      key={w.id}
-      className="rounded-xl bg-gradient-to-br from-violet-600 to-violet-800 text-white p-4 min-w-[160px] flex items-center gap-3 cursor-pointer hover:brightness-110 transition-all group relative"
-      onClick={() => setEditWallet(w)}
-    >
-      <Pencil className="absolute top-2 right-2 h-3.5 w-3.5 opacity-0 group-hover:opacity-70 transition-opacity" />
-      <div className="h-10 w-10 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
-        <Landmark className="h-5 w-5" />
+  const WalletCard = ({ w }: { w: any }) => {
+    const bgColor = w.color || "hsl(270, 60%, 55%)";
+    return (
+      <div
+        key={w.id}
+        className="rounded-xl text-white p-4 min-w-[160px] flex items-center gap-3 cursor-pointer hover:brightness-110 transition-all group relative"
+        style={{ background: `linear-gradient(135deg, ${bgColor}, ${bgColor}dd)` }}
+        onClick={() => setEditWallet(w)}
+      >
+        <Pencil className="absolute top-2 right-2 h-3.5 w-3.5 opacity-0 group-hover:opacity-70 transition-opacity" />
+        <div className="h-10 w-10 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+          <Landmark className="h-5 w-5" />
+        </div>
+        <div>
+          <p className="text-sm font-semibold leading-tight">{w.name}</p>
+          <p className="text-sm font-bold">{fmt(Number(w.balance))}</p>
+        </div>
       </div>
-      <div>
-        <p className="text-sm font-semibold leading-tight">{w.name}</p>
-        <p className="text-sm font-bold">{fmt(Number(w.balance))}</p>
-      </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">

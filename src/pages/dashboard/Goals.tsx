@@ -154,17 +154,21 @@ export default function Goals() {
           <div className="space-y-4">
             {goals.map((goal) => {
               const pct = goal.target_amount > 0 ? Math.min((Number(goal.current_amount) / Number(goal.target_amount)) * 100, 100) : 0;
+              const goalColor = (goal as any).color || undefined;
               return (
                 <Card key={goal.id} className="p-5 hover:shadow-md transition-shadow cursor-pointer group relative" onClick={() => setEditGoal(goal)}>
                   <button className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-muted">
                     <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
                   </button>
                   <div className="flex items-center justify-between mb-2">
-                    <p className="font-semibold text-foreground">{goal.name}</p>
+                    <div className="flex items-center gap-2">
+                      {goalColor && <div className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: goalColor }} />}
+                      <p className="font-semibold text-foreground">{goal.name}</p>
+                    </div>
                     <span className="text-xs text-muted-foreground">{pct.toFixed(0)}%</span>
                   </div>
                   <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-                    <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+                    <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: goalColor || 'hsl(var(--primary))' }} />
                   </div>
                   <div className="flex justify-between mt-2 text-xs text-muted-foreground">
                     <span>R$ {Number(goal.current_amount).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>

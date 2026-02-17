@@ -17,6 +17,7 @@ export type Database = {
       cards: {
         Row: {
           brand: string | null
+          color: string | null
           created_at: string
           credit_limit: number | null
           due_day: number | null
@@ -28,6 +29,7 @@ export type Database = {
         }
         Insert: {
           brand?: string | null
+          color?: string | null
           created_at?: string
           credit_limit?: number | null
           due_day?: number | null
@@ -39,6 +41,7 @@ export type Database = {
         }
         Update: {
           brand?: string | null
+          color?: string | null
           created_at?: string
           credit_limit?: number | null
           due_day?: number | null
@@ -167,6 +170,7 @@ export type Database = {
       }
       financial_goals: {
         Row: {
+          color: string | null
           created_at: string
           current_amount: number
           deadline: string | null
@@ -176,6 +180,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          color?: string | null
           created_at?: string
           current_amount?: number
           deadline?: string | null
@@ -185,6 +190,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          color?: string | null
           created_at?: string
           current_amount?: number
           deadline?: string | null
@@ -470,6 +476,7 @@ export type Database = {
       wallets: {
         Row: {
           balance: number
+          color: string | null
           created_at: string
           id: string
           name: string
@@ -478,6 +485,7 @@ export type Database = {
         }
         Insert: {
           balance?: number
+          color?: string | null
           created_at?: string
           id?: string
           name: string
@@ -486,6 +494,7 @@ export type Database = {
         }
         Update: {
           balance?: number
+          color?: string | null
           created_at?: string
           id?: string
           name?: string

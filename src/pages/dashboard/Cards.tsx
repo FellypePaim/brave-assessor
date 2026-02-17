@@ -44,31 +44,36 @@ export default function Cards() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {cards.map((card) => (
-              <Card
-                key={card.id}
-                className="p-5 hover:shadow-md transition-shadow cursor-pointer group relative"
-                onClick={() => setEditCard(card)}
-              >
-                <button className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-muted">
-                  <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-                </button>
-                <div className="flex items-center gap-3">
-                  <CreditCard className="h-8 w-8 text-primary" />
-                  <div>
-                    <p className="font-semibold text-foreground text-sm">{card.name}</p>
-                    {card.last_4_digits && (
-                      <p className="text-xs text-muted-foreground">•••• {card.last_4_digits}</p>
+            {cards.map((card) => {
+              const cardColor = (card as any).color || "hsl(240, 10%, 15%)";
+              return (
+                <div
+                  key={card.id}
+                  className="rounded-2xl text-white p-5 hover:brightness-110 transition-all cursor-pointer group relative"
+                  style={{ background: `linear-gradient(135deg, ${cardColor}, ${cardColor}cc)` }}
+                  onClick={() => setEditCard(card)}
+                >
+                  <button className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-white/20">
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <div className="flex items-center gap-3">
+                    <CreditCard className="h-8 w-8 opacity-80" />
+                    <div>
+                      <p className="font-semibold text-sm">{card.name}</p>
+                      {card.last_4_digits && (
+                        <p className="text-xs opacity-80 font-mono">•••• {card.last_4_digits}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between text-xs opacity-80">
+                    {card.brand && <span>{card.brand}</span>}
+                    {card.credit_limit && (
+                      <span>Limite: R$ {Number(card.credit_limit).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
                     )}
                   </div>
                 </div>
-                {card.credit_limit && (
-                  <p className="text-xs text-muted-foreground mt-3">
-                    Limite: R$ {Number(card.credit_limit).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                  </p>
-                )}
-              </Card>
-            ))}
+              );
+            })}
           </div>
         )}
       </Card>

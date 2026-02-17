@@ -15,6 +15,7 @@ interface CardData {
   last_4_digits: string | null;
   credit_limit: number | null;
   due_day: number | null;
+  color?: string | null;
 }
 
 interface Props {
@@ -54,7 +55,8 @@ export function EditCardDialog({ card, open, onOpenChange }: Props) {
       setLast4(card.last_4_digits || "");
       setLimit(card.credit_limit ? String(card.credit_limit) : "");
       setDueDay(card.due_day ? String(card.due_day) : "");
-      setSelectedColor(0);
+      const colorIdx = card.color ? cardColors.indexOf(card.color) : 0;
+      setSelectedColor(colorIdx >= 0 ? colorIdx : 0);
     }
   }, [card]);
 
@@ -67,6 +69,7 @@ export function EditCardDialog({ card, open, onOpenChange }: Props) {
       last_4_digits: last4 || null,
       credit_limit: parseFloat(limit) || null,
       due_day: parseInt(dueDay) || null,
+      color: cardColors[selectedColor],
     }).eq("id", card.id);
     if (error) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
