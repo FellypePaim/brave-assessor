@@ -88,7 +88,7 @@ function Header() {
           ))}
         </nav>
         <div className="hidden md:flex items-center gap-3">
-          <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Entrar</a>
+          <a href="/login" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Entrar</a>
           <Button size="sm" className="rounded-full" asChild>
             <a href="#planos">Ver Planos <ArrowRight className="h-3.5 w-3.5 ml-1" /></a>
           </Button>
