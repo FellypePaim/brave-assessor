@@ -43,6 +43,7 @@ export function AddWalletDialog({ trigger }: Props) {
       name: name.trim(),
       type: "checking",
       balance: parseFloat(balance) || 0,
+      color: walletColors[selectedColor],
     });
     if (error) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });

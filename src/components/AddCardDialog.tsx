@@ -53,6 +53,7 @@ export function AddCardDialog({ trigger }: Props) {
       last_4_digits: last4 || null,
       credit_limit: parseFloat(limit) || null,
       due_day: parseInt(dueDay) || null,
+      color: cardColors[selectedColor],
     });
     if (error) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
