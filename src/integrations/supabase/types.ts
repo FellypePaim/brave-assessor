@@ -243,6 +243,73 @@ export type Database = {
         }
         Relationships: []
       }
+      recurring_transactions: {
+        Row: {
+          amount: number
+          card_id: string | null
+          category_id: string | null
+          created_at: string
+          day_of_month: number
+          description: string
+          expense_type: string | null
+          id: string
+          is_active: boolean
+          type: string
+          user_id: string
+          wallet_id: string | null
+        }
+        Insert: {
+          amount: number
+          card_id?: string | null
+          category_id?: string | null
+          created_at?: string
+          day_of_month?: number
+          description: string
+          expense_type?: string | null
+          id?: string
+          is_active?: boolean
+          type?: string
+          user_id: string
+          wallet_id?: string | null
+        }
+        Update: {
+          amount?: number
+          card_id?: string | null
+          category_id?: string | null
+          created_at?: string
+          day_of_month?: number
+          description?: string
+          expense_type?: string | null
+          id?: string
+          is_active?: boolean
+          type?: string
+          user_id?: string
+          wallet_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recurring_transactions_card_id_fkey"
+            columns: ["card_id"]
+            isOneToOne: false
+            referencedRelation: "cards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recurring_transactions_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recurring_transactions_wallet_id_fkey"
+            columns: ["wallet_id"]
+            isOneToOne: false
+            referencedRelation: "wallets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       support_conversations: {
         Row: {
           created_at: string
@@ -313,7 +380,10 @@ export type Database = {
           created_at: string
           date: string
           description: string
+          due_date: string | null
           id: string
+          is_paid: boolean
+          recurring_id: string | null
           type: string
           user_id: string
           wallet_id: string | null
@@ -325,7 +395,10 @@ export type Database = {
           created_at?: string
           date?: string
           description: string
+          due_date?: string | null
           id?: string
+          is_paid?: boolean
+          recurring_id?: string | null
           type?: string
           user_id: string
           wallet_id?: string | null
@@ -337,7 +410,10 @@ export type Database = {
           created_at?: string
           date?: string
           description?: string
+          due_date?: string | null
           id?: string
+          is_paid?: boolean
+          recurring_id?: string | null
           type?: string
           user_id?: string
           wallet_id?: string | null
@@ -355,6 +431,13 @@ export type Database = {
             columns: ["category_id"]
             isOneToOne: false
             referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_recurring_id_fkey"
+            columns: ["recurring_id"]
+            isOneToOne: false
+            referencedRelation: "recurring_transactions"
             referencedColumns: ["id"]
           },
           {
