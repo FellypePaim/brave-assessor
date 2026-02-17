@@ -393,27 +393,18 @@ function SocialProof() {
 const plans = [
   {
     name: "Mensal",
-    price: "39,90",
+    price: "19,90",
     period: "/mês",
     features: ["Todas as funcionalidades", "Suporte via WhatsApp", "Relatórios ilimitados"],
     highlight: false,
     badge: null,
   },
   {
-    name: "Trimestral",
-    price: "29,90",
-    period: "/mês",
-    sub: "R$ 89,70 a cada 3 meses",
-    features: ["Tudo do Mensal", "Modo família (2 pessoas)", "Economia de 25%"],
-    highlight: false,
-    badge: null,
-  },
-  {
     name: "Anual",
-    price: "19,90",
+    price: "14,90",
     period: "/mês",
-    sub: "R$ 238,80/ano",
-    features: ["Tudo do Trimestral", "Modo família (5 pessoas)", "Economia de 50%"],
+    sub: "12x de R$ 14,90",
+    features: ["Tudo do Mensal", "Modo família (5 pessoas)", "Economia de 25%"],
     highlight: true,
     badge: "Melhor custo-benefício",
   },
@@ -426,7 +417,7 @@ function Pricing() {
         <motion.h2 initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} className="text-3xl md:text-4xl font-bold text-center text-foreground">
           Planos e Preços do Nox Assessor
         </motion.h2>
-        <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={stagger} className="mt-12 grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+        <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={stagger} className="mt-12 grid md:grid-cols-2 gap-6 max-w-3xl mx-auto">
           {plans.map((p, i) => (
             <motion.div key={i} variants={fadeUp} className="relative">
               {p.badge && (
@@ -472,7 +463,7 @@ const faqs = [
   { q: "Preciso entender de finanças?", a: "De jeito nenhum. O Nox traduz tudo em linguagem simples e te dá dicas práticas, sem jargão financeiro." },
   { q: "Meus dados estão seguros?", a: "Sim. Usamos criptografia de ponta a ponta e seguimos todas as normas da LGPD. Seus dados são só seus." },
   { q: "Posso registrar gastos por voz?", a: "Pode sim! Basta mandar um áudio no WhatsApp e a IA transcreve e registra automaticamente." },
-  { q: "Posso usar com minha família?", a: "Claro! Nos planos Trimestral e Anual, você pode adicionar membros da família para controlar as finanças juntos." },
+  { q: "Posso usar com minha família?", a: "Claro! No plano Anual, você pode adicionar até 5 membros da família para controlar as finanças juntos." },
 ];
 
 function FAQ() {
