@@ -735,39 +735,41 @@ function Comparison() {
           className="mt-12 max-w-4xl mx-auto"
         >
           <Card className="border-border overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto -mx-2 px-2">
+              <table className="w-full text-sm min-w-[600px]">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="text-left p-4 text-muted-foreground font-normal">Recurso</th>
-                    <th className="p-4 text-center">
-                      <div className="font-semibold text-foreground">Planilha</div>
-                      <div className="text-xs text-muted-foreground">Excel/Sheets</div>
+                    <th className="text-left p-3 md:p-4 text-muted-foreground font-normal whitespace-nowrap">Recurso</th>
+                    <th className="p-3 md:p-4 text-center">
+                      <div className="font-semibold text-foreground text-xs md:text-sm">Planilha</div>
+                      <div className="text-[10px] md:text-xs text-muted-foreground">Excel/Sheets</div>
                     </th>
-                    <th className="p-4 text-center">
-                      <div className="font-semibold text-foreground">Apps Tradicionais</div>
-                      <div className="text-xs text-muted-foreground">Mobills, Guiabolso</div>
+                    <th className="p-3 md:p-4 text-center">
+                      <div className="font-semibold text-foreground text-xs md:text-sm">Apps Tradicionais</div>
+                      <div className="text-[10px] md:text-xs text-muted-foreground">Mobills, Guiabolso</div>
                     </th>
-                    <th className="p-4 text-center">
-                      <div className="font-semibold text-primary">Nylo</div>
-                      <div className="text-xs text-muted-foreground">IA + WhatsApp</div>
+                    <th className="p-3 md:p-4 text-center">
+                      <div className="font-semibold text-primary text-xs md:text-sm">Nylo</div>
+                      <div className="text-[10px] md:text-xs text-muted-foreground">IA + WhatsApp</div>
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {comparisonRows.map((row, i) => (
                     <tr key={i} className="border-b border-border last:border-0">
-                      <td className="p-4 flex items-center gap-2 text-foreground">
-                        <row.icon className="h-4 w-4 text-muted-foreground" />
-                        {row.label}
+                      <td className="p-3 md:p-4 whitespace-nowrap">
+                        <span className="flex items-center gap-2 text-foreground text-xs md:text-sm">
+                          <row.icon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                          {row.label}
+                        </span>
                       </td>
-                      <td className={`p-4 text-center ${(row as any).planilhaX ? "text-destructive" : (row as any).planilhaWarn ? "text-destructive" : "text-muted-foreground"}`}>
+                      <td className={`p-3 md:p-4 text-center text-xs md:text-sm ${(row as any).planilhaX ? "text-destructive" : (row as any).planilhaWarn ? "text-destructive" : "text-muted-foreground"}`}>
                         {row.planilha}
                       </td>
-                      <td className={`p-4 text-center ${(row as any).appsX ? "text-destructive" : (row as any).appsWarn ? "text-destructive" : "text-muted-foreground"}`}>
+                      <td className={`p-3 md:p-4 text-center text-xs md:text-sm ${(row as any).appsX ? "text-destructive" : (row as any).appsWarn ? "text-destructive" : "text-muted-foreground"}`}>
                         {row.apps}
                       </td>
-                      <td className={`p-4 text-center font-medium ${(row as any).nyloHighlight || (row as any).nyloCheck ? "text-primary" : "text-foreground"}`}>
+                      <td className={`p-3 md:p-4 text-center font-medium text-xs md:text-sm ${(row as any).nyloHighlight || (row as any).nyloCheck ? "text-primary" : "text-foreground"}`}>
                         {row.nylo}
                       </td>
                     </tr>
