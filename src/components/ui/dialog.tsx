@@ -36,10 +36,10 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed z-50 grid gap-4 border bg-background shadow-lg",
+        "fixed z-50 border bg-background shadow-lg flex flex-col",
         // Mobile: bottom sheet
-        "left-0 right-0 bottom-0 top-auto max-w-lg rounded-t-2xl p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] max-h-[85vh]",
-        // Desktop: centered overlay using inset-0 + margin auto
+        "left-0 right-0 bottom-0 top-auto max-w-lg rounded-t-2xl p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] max-h-[90vh]",
+        // Desktop: centered overlay
         "sm:inset-0 sm:m-auto sm:h-fit sm:max-w-lg sm:rounded-xl sm:p-6 sm:max-h-[85vh] sm:pb-6",
         className,
       )}
@@ -51,14 +51,13 @@ const DialogContent = React.forwardRef<
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: 20 }}
         transition={{ type: "spring", duration: 0.4, bounce: 0.15 }}
-        className="flex flex-col max-h-[inherit] overflow-hidden"
       >
         {/* Drag handle indicator on mobile */}
         <div className="mx-auto w-10 h-1 rounded-full bg-muted-foreground/20 mb-2 sm:hidden shrink-0" />
         <div className="overflow-y-auto flex-1 min-h-0">
-        {children}
+          {children}
         </div>
-        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity data-[state=open]:bg-accent data-[state=open]:text-muted-foreground hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
+        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity data-[state=open]:bg-accent data-[state=open]:text-muted-foreground hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none z-10">
           <X className="h-4 w-4" />
           <span className="sr-only">Close</span>
         </DialogPrimitive.Close>
