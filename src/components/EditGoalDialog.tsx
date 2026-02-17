@@ -13,6 +13,7 @@ interface Goal {
   target_amount: number;
   current_amount: number;
   deadline: string | null;
+  color?: string | null;
 }
 
 interface Props {
@@ -21,6 +22,12 @@ interface Props {
   onOpenChange: (open: boolean) => void;
 }
 
+const colorOptions = [
+  "#ef4444", "#f97316", "#f59e0b", "#10b981",
+  "#3b82f6", "#8b5cf6", "#ec4899", "#6b7280",
+  "#14b8a6", "#f43f5e",
+];
+
 export function EditGoalDialog({ goal, open, onOpenChange }: Props) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -28,6 +35,7 @@ export function EditGoalDialog({ goal, open, onOpenChange }: Props) {
   const [target, setTarget] = useState("");
   const [current, setCurrent] = useState("");
   const [deadline, setDeadline] = useState("");
+  const [color, setColor] = useState("#3b82f6");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -36,6 +44,7 @@ export function EditGoalDialog({ goal, open, onOpenChange }: Props) {
       setTarget(String(goal.target_amount));
       setCurrent(String(goal.current_amount));
       setDeadline(goal.deadline || "");
+      setColor(goal.color || "#3b82f6");
     }
   }, [goal]);
 
@@ -47,6 +56,7 @@ export function EditGoalDialog({ goal, open, onOpenChange }: Props) {
       target_amount: parseFloat(target) || 0,
       current_amount: parseFloat(current) || 0,
       deadline: deadline || null,
+      color,
     }).eq("id", goal.id);
     if (error) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
@@ -95,7 +105,7 @@ export function EditGoalDialog({ goal, open, onOpenChange }: Props) {
               <span>R$ {(parseFloat(target) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
             </div>
             <div className="w-full h-2.5 bg-muted rounded-full overflow-hidden">
-              <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+              <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: color }} />
             </div>
           </div>
 
@@ -127,6 +137,26 @@ export function EditGoalDialog({ goal, open, onOpenChange }: Props) {
           <div>
             <label className="text-sm font-semibold text-foreground mb-1.5 block">Prazo</label>
             <Input value={deadline} onChange={(e) => setDeadline(e.target.value)} type="date" className="h-11 rounded-xl border-border" />
+          </div>
+
+          {/* Cor */}
+          <div>
+            <label className="text-sm font-semibold text-foreground mb-2 block">Cor</label>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              {colorOptions.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setColor(c)}
+                  className={`h-9 w-9 rounded-full transition-all ${
+                    color === c
+                      ? "ring-2 ring-offset-2 ring-offset-background ring-primary scale-110"
+                      : "hover:scale-105"
+                  }`}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            </div>
           </div>
 
           {/* Actions */}

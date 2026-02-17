@@ -3,9 +3,12 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
-import { CreditCard, Pencil, AlertTriangle, CalendarDays, Wifi } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { CreditCard, Pencil, AlertTriangle, CalendarDays, Wifi, ChevronDown, ChevronUp, Banknote } from "lucide-react";
 import { AddCardDialog } from "@/components/AddCardDialog";
 import { EditCardDialog } from "@/components/EditCardDialog";
+import { EditTransactionDialog } from "@/components/EditTransactionDialog";
+import { PayInvoiceDialog } from "@/components/PayInvoiceDialog";
 import { Progress } from "@/components/ui/progress";
 
 const fmt = (v: number) =>
@@ -14,6 +17,9 @@ const fmt = (v: number) =>
 export default function Cards() {
   const { user } = useAuth();
   const [editCard, setEditCard] = useState<any>(null);
+  const [editTransaction, setEditTransaction] = useState<any>(null);
+  const [expandedCard, setExpandedCard] = useState<string | null>(null);
+  const [payCard, setPayCard] = useState<{ id: string; name: string; bill: number } | null>(null);
 
   const { data: cards = [] } = useQuery({
     queryKey: ["cards", user?.id],
@@ -29,7 +35,6 @@ export default function Cards() {
     enabled: !!user,
   });
 
-  // Get current month transactions linked to cards
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
     .toISOString()
@@ -55,6 +60,9 @@ export default function Cards() {
     cardTransactions
       .filter((t) => t.card_id === cardId && t.type === "expense")
       .reduce((sum, t) => sum + Number(t.amount), 0);
+
+  const getCardTransactions = (cardId: string) =>
+    cardTransactions.filter((t) => t.card_id === cardId);
 
   const getCardAlerts = () => {
     const today = now.getDate();
@@ -133,6 +141,8 @@ export default function Cards() {
             const usagePercent = limit > 0 ? Math.min(100, (bill / limit) * 100) : 0;
             const dueInfo = getDueDateLabel(card.due_day);
             const isHighUsage = usagePercent >= 80;
+            const transactions = getCardTransactions(card.id);
+            const isExpanded = expandedCard === card.id;
 
             return (
               <Card
@@ -149,13 +159,11 @@ export default function Cards() {
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
 
-                  {/* Chip + Contactless */}
                   <div className="flex items-center gap-2 mb-6">
                     <div className="h-8 w-11 rounded-md bg-amber-400/90" />
                     <Wifi className="h-5 w-5 opacity-60 rotate-90" />
                   </div>
 
-                  {/* Card Number Dots */}
                   <div className="flex items-center gap-4 mb-4 text-sm font-mono tracking-widest opacity-90">
                     <span>••••</span>
                     <span>••••</span>
@@ -163,7 +171,6 @@ export default function Cards() {
                     <span>{card.last_4_digits || "••••"}</span>
                   </div>
 
-                  {/* Card Name + Brand */}
                   <div className="flex items-end justify-between">
                     <div>
                       <p className="text-[10px] uppercase tracking-wider opacity-60">
@@ -183,7 +190,6 @@ export default function Cards() {
 
                 {/* Invoice Info */}
                 <CardContent className="p-5 space-y-4">
-                  {/* Bill + Available Limit */}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-xs text-muted-foreground">
@@ -203,7 +209,6 @@ export default function Cards() {
                     </div>
                   </div>
 
-                  {/* Usage Progress Bar */}
                   {limit > 0 && (
                     <div className="space-y-1.5">
                       <Progress
@@ -223,7 +228,6 @@ export default function Cards() {
                     </div>
                   )}
 
-                  {/* Due Date */}
                   {dueInfo && (
                     <div className="flex items-center justify-between py-2.5 border-t border-border">
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -242,13 +246,60 @@ export default function Cards() {
                     </div>
                   )}
 
-                  {/* Alert tag */}
                   {isHighUsage && (
                     <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/30">
                       <AlertTriangle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
                       <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
                         Limite alto ou vencimento próximo
                       </span>
+                    </div>
+                  )}
+
+                  {/* Pay Invoice + Toggle Transactions */}
+                  <div className="flex gap-2 pt-1">
+                    {bill > 0 && (
+                      <Button
+                        variant="outline"
+                        className="flex-1 h-10 rounded-xl gap-2 text-sm font-semibold"
+                        onClick={(e) => { e.stopPropagation(); setPayCard({ id: card.id, name: card.name, bill }); }}
+                      >
+                        <Banknote className="h-4 w-4" /> Pagar Fatura
+                      </Button>
+                    )}
+                    {transactions.length > 0 && (
+                      <Button
+                        variant="ghost"
+                        className="flex-1 h-10 rounded-xl gap-2 text-sm font-medium text-muted-foreground"
+                        onClick={(e) => { e.stopPropagation(); setExpandedCard(isExpanded ? null : card.id); }}
+                      >
+                        {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                        {transactions.length} transaç{transactions.length === 1 ? "ão" : "ões"}
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Transactions List */}
+                  {isExpanded && transactions.length > 0 && (
+                    <div className="border-t border-border pt-3 space-y-1 animate-fade-in">
+                      <p className="text-xs font-semibold text-muted-foreground mb-2">Últimas transações</p>
+                      {transactions.map((t) => (
+                        <button
+                          key={t.id}
+                          className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-muted/50 transition-colors text-left group/tx"
+                          onClick={(e) => { e.stopPropagation(); setEditTransaction(t); }}
+                        >
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-foreground truncate">{t.description}</p>
+                            <p className="text-[11px] text-muted-foreground">{new Date(t.date).toLocaleDateString("pt-BR")}</p>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className={`text-sm font-semibold ${t.type === "expense" ? "text-destructive" : "text-emerald-500"}`}>
+                              {t.type === "expense" ? "-" : "+"}{fmt(Number(t.amount))}
+                            </span>
+                            <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover/tx:opacity-100 transition-opacity" />
+                          </div>
+                        </button>
+                      ))}
                     </div>
                   )}
                 </CardContent>
@@ -263,6 +314,22 @@ export default function Cards() {
         open={!!editCard}
         onOpenChange={(o) => !o && setEditCard(null)}
       />
+
+      <EditTransactionDialog
+        transaction={editTransaction}
+        open={!!editTransaction}
+        onOpenChange={(o) => !o && setEditTransaction(null)}
+      />
+
+      {payCard && (
+        <PayInvoiceDialog
+          cardId={payCard.id}
+          cardName={payCard.name}
+          billAmount={payCard.bill}
+          open={!!payCard}
+          onOpenChange={(o) => !o && setPayCard(null)}
+        />
+      )}
     </div>
   );
 }
