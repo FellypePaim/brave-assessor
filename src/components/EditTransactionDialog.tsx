@@ -16,6 +16,7 @@ interface Transaction {
   type: string;
   category_id: string | null;
   wallet_id: string | null;
+  card_id: string | null;
   date: string;
 }
 
@@ -34,6 +35,7 @@ export function EditTransactionDialog({ transaction, open, onOpenChange }: Props
   const [type, setType] = useState("expense");
   const [categoryId, setCategoryId] = useState("");
   const [walletId, setWalletId] = useState("");
+  const [cardId, setCardId] = useState("");
   const [date, setDate] = useState("");
   const [saving, setSaving] = useState(false);
   const [payMethod, setPayMethod] = useState<"wallet" | "card">("wallet");
@@ -45,8 +47,9 @@ export function EditTransactionDialog({ transaction, open, onOpenChange }: Props
       setType(transaction.type);
       setCategoryId(transaction.category_id || "");
       setWalletId(transaction.wallet_id || "");
+      setCardId(transaction.card_id || "");
       setDate(transaction.date);
-      setPayMethod(transaction.wallet_id ? "wallet" : "card");
+      setPayMethod(transaction.card_id ? "card" : "wallet");
     }
   }, [transaction]);
 
@@ -68,8 +71,17 @@ export function EditTransactionDialog({ transaction, open, onOpenChange }: Props
     enabled: !!user && open,
   });
 
+  const { data: cards = [] } = useQuery({
+    queryKey: ["cards", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from("cards").select("id, name, brand, credit_limit, color").eq("user_id", user!.id).order("name");
+      return data || [];
+    },
+    enabled: !!user && open,
+  });
+
   const invalidateAll = () => {
-    ["transactions", "wallet-transactions", "bills-transactions", "dashboard-transactions", "behavior-transactions", "wallets"].forEach(k =>
+    ["transactions", "wallet-transactions", "bills-transactions", "dashboard-transactions", "behavior-transactions", "wallets", "cards", "card-transactions"].forEach(k =>
       queryClient.invalidateQueries({ queryKey: [k] })
     );
   };
@@ -83,6 +95,7 @@ export function EditTransactionDialog({ transaction, open, onOpenChange }: Props
       type,
       category_id: categoryId || null,
       wallet_id: payMethod === "wallet" ? (walletId || null) : null,
+      card_id: payMethod === "card" ? (cardId || null) : null,
       date,
     }).eq("id", transaction.id);
     if (error) {
@@ -108,6 +121,7 @@ export function EditTransactionDialog({ transaction, open, onOpenChange }: Props
   };
 
   const selectedWallet = wallets.find(w => w.id === walletId);
+  const selectedCard = cards.find(c => c.id === cardId);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -208,6 +222,42 @@ export function EditTransactionDialog({ transaction, open, onOpenChange }: Props
                     <span className="text-sm font-medium text-foreground">{selectedWallet.name}</span>
                   </div>
                   <span className="text-sm font-bold text-primary">R$ {Number(selectedWallet.balance).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Card selector */}
+          {payMethod === "card" && (
+            <div>
+              <label className="text-sm font-semibold text-foreground mb-1.5 flex items-center gap-1.5">
+                <CreditCard className="h-3.5 w-3.5" /> Qual cartão?
+              </label>
+              <Select value={cardId} onValueChange={setCardId}>
+                <SelectTrigger className="h-11 rounded-xl border-border">
+                  <SelectValue placeholder="Selecione o cartão" />
+                </SelectTrigger>
+                <SelectContent>
+                  {cards.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name} {c.brand ? `(${c.brand})` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedCard && (
+                <div className="mt-2 flex items-center justify-between px-3 py-2.5 rounded-xl bg-muted/50 border border-border">
+                  <div className="flex items-center gap-2">
+                    <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <CreditCard className="h-4 w-4 text-primary" />
+                    </div>
+                    <span className="text-sm font-medium text-foreground">{selectedCard.name}</span>
+                  </div>
+                  {selectedCard.credit_limit && (
+                    <span className="text-xs text-muted-foreground">
+                      Limite: {Number(selectedCard.credit_limit).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                    </span>
+                  )}
                 </div>
               )}
             </div>
