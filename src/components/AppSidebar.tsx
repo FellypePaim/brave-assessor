@@ -1,6 +1,7 @@
 import {
-  LayoutDashboard, Wallet, CreditCard, ArrowDownUp, Target,
-  PieChart, MessageSquare, Users, Settings, LogOut, Brain
+  LayoutDashboard, Wallet, Tag, CreditCard, CalendarCheck,
+  Target, TrendingUp, Brain, FileText, HeadphonesIcon,
+  Settings, LogOut, Sparkles, User
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
@@ -10,7 +11,6 @@ import {
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -18,25 +18,24 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 
-const mainItems = [
+const menuItems = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
-  { title: "Transações", url: "/dashboard/transactions", icon: ArrowDownUp },
-  { title: "Carteiras", url: "/dashboard/wallets", icon: Wallet },
+  { title: "Carteira", url: "/dashboard/wallets", icon: Wallet },
+  { title: "Categorias", url: "/dashboard/budgets", icon: Tag },
   { title: "Cartões", url: "/dashboard/cards", icon: CreditCard },
-  { title: "Orçamentos", url: "/dashboard/budgets", icon: PieChart },
+  { title: "Compromissos", url: "/dashboard/transactions", icon: CalendarCheck },
   { title: "Metas", url: "/dashboard/goals", icon: Target },
-];
-
-const extraItems = [
-  { title: "Relatórios", url: "/dashboard/reports", icon: Brain },
-  { title: "Chat IA", url: "/dashboard/chat", icon: MessageSquare },
-  { title: "Família", url: "/dashboard/family", icon: Users },
+  { title: "Investimentos", url: "/dashboard/investments", icon: TrendingUp },
+  { title: "Comportamento", url: "/dashboard/behavior", icon: Brain },
+  { title: "Relatórios", url: "/dashboard/reports", icon: FileText },
+  { title: "Suporte", url: "/dashboard/chat", icon: HeadphonesIcon },
   { title: "Configurações", url: "/dashboard/settings", icon: Settings },
 ];
 
 export function AppSidebar() {
-  const { signOut } = useAuth();
+  const { signOut, user } = useAuth();
   const navigate = useNavigate();
+  const displayName = user?.user_metadata?.display_name || "Usuário";
 
   const handleSignOut = async () => {
     await signOut();
@@ -44,52 +43,48 @@ export function AppSidebar() {
   };
 
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar collapsible="icon" className="border-r border-border">
       <SidebarContent>
         {/* Logo */}
-        <div className="flex items-center gap-2 px-4 py-4">
-          <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground text-sm font-extrabold shrink-0">
-            N
+        <div className="px-4 pt-5 pb-2 group-data-[collapsible=icon]:px-2">
+          <div className="flex items-center gap-2.5">
+            <div className="h-9 w-9 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-sm font-extrabold shrink-0">
+              N
+            </div>
+            <div className="group-data-[collapsible=icon]:hidden">
+              <span className="font-bold text-base text-primary leading-none">Nylo Assessor</span>
+              <p className="text-[11px] text-muted-foreground leading-tight">Finanças inteligentes</p>
+            </div>
           </div>
-          <span className="font-bold text-lg text-sidebar-foreground group-data-[collapsible=icon]:hidden">
-            Nylo
-          </span>
         </div>
 
+        {/* Nylo IA Button */}
+        <div className="px-3 py-2 group-data-[collapsible=icon]:px-1.5">
+          <NavLink
+            to="/dashboard/chat"
+            className="flex items-center gap-3 rounded-xl bg-primary px-4 py-3 text-primary-foreground hover:brightness-110 transition-all group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-2"
+            activeClassName="ring-2 ring-primary/30"
+          >
+            <Sparkles className="h-5 w-5 shrink-0" />
+            <div className="group-data-[collapsible=icon]:hidden">
+              <span className="font-semibold text-sm leading-none">Nylo IA</span>
+              <p className="text-[11px] opacity-80 leading-tight">Seu assessor</p>
+            </div>
+          </NavLink>
+        </div>
+
+        {/* Menu */}
         <SidebarGroup>
-          <SidebarGroupLabel>Principal</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {mainItems.map((item) => (
+              {menuItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
                     <NavLink
                       to={item.url}
                       end={item.url === "/dashboard"}
-                      className="flex items-center gap-3 hover:bg-sidebar-accent/50"
-                      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                    >
-                      <item.icon className="h-4 w-4 shrink-0" />
-                      <span>{item.title}</span>
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          <SidebarGroupLabel>Mais</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {extraItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
-                    <NavLink
-                      to={item.url}
-                      className="flex items-center gap-3 hover:bg-sidebar-accent/50"
-                      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                      className="flex items-center gap-3 text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/50 transition-colors"
+                      activeClassName="text-primary font-medium bg-transparent"
                     >
                       <item.icon className="h-4 w-4 shrink-0" />
                       <span>{item.title}</span>
@@ -102,9 +97,20 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter>
+      <SidebarFooter className="border-t border-border">
+        {/* User profile */}
+        <div className="flex items-center gap-3 px-3 py-3 group-data-[collapsible=icon]:justify-center">
+          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-sm font-bold shrink-0">
+            {displayName.charAt(0).toUpperCase()}
+          </div>
+          <div className="group-data-[collapsible=icon]:hidden min-w-0">
+            <p className="text-sm font-medium text-foreground truncate">{displayName}</p>
+            <p className="text-[11px] text-muted-foreground">Ver perfil</p>
+          </div>
+        </div>
         <Button
           variant="ghost"
+          size="sm"
           className="w-full justify-start gap-3 text-muted-foreground hover:text-destructive"
           onClick={handleSignOut}
         >
