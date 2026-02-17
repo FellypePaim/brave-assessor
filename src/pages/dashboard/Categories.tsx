@@ -17,28 +17,16 @@ const iconMap: Record<string, React.ElementType> = {
   car: Car,
 };
 
-const colorMap: Record<string, string> = {
-  red: "bg-red-400",
-  orange: "bg-orange-400",
-  pink: "bg-pink-400",
-  green: "bg-green-500",
-  blue: "bg-blue-400",
-  cyan: "bg-cyan-400",
-  gray: "bg-gray-400",
-  yellow: "bg-yellow-400",
-  emerald: "bg-emerald-500",
-};
-
-const iconBgMap: Record<string, string> = {
-  utensils: "bg-orange-100",
-  shopping: "bg-amber-100",
-  education: "bg-pink-50",
-  gamepad: "bg-gray-100",
-  home: "bg-blue-50",
-  package: "bg-amber-50",
-  dollar: "bg-green-50",
-  heart: "bg-red-50",
-  car: "bg-cyan-50",
+const styleMap: Record<string, { dot: string; bg: string; text: string }> = {
+  red:     { dot: "bg-rose-500",    bg: "bg-gradient-to-br from-rose-100 to-red-200",     text: "text-rose-600" },
+  orange:  { dot: "bg-orange-500",  bg: "bg-gradient-to-br from-orange-100 to-amber-200", text: "text-orange-600" },
+  pink:    { dot: "bg-pink-500",    bg: "bg-gradient-to-br from-pink-100 to-fuchsia-200",  text: "text-pink-600" },
+  green:   { dot: "bg-emerald-500", bg: "bg-gradient-to-br from-emerald-100 to-green-200", text: "text-emerald-600" },
+  blue:    { dot: "bg-blue-500",    bg: "bg-gradient-to-br from-blue-100 to-sky-200",      text: "text-blue-600" },
+  cyan:    { dot: "bg-cyan-500",    bg: "bg-gradient-to-br from-cyan-100 to-teal-200",     text: "text-cyan-600" },
+  gray:    { dot: "bg-slate-500",   bg: "bg-gradient-to-br from-slate-100 to-gray-200",    text: "text-slate-600" },
+  yellow:  { dot: "bg-amber-500",   bg: "bg-gradient-to-br from-amber-100 to-yellow-200",  text: "text-amber-600" },
+  emerald: { dot: "bg-emerald-500", bg: "bg-gradient-to-br from-emerald-100 to-green-200", text: "text-emerald-600" },
 };
 
 export default function Categories() {
@@ -72,15 +60,18 @@ export default function Categories() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {categories.map((cat) => {
+        {categories.map((cat, i) => {
           const IconComp = iconMap[cat.icon || ""] || Package;
-          const dotColor = colorMap[cat.color || ""] || "bg-gray-400";
-          const iconBg = iconBgMap[cat.icon || ""] || "bg-gray-100";
+          const style = styleMap[cat.color || ""] || styleMap.gray;
 
           return (
-            <Card key={cat.id} className="p-5 flex items-start gap-3 relative hover:shadow-md transition-shadow cursor-pointer">
-              <div className={`h-11 w-11 rounded-xl ${iconBg} flex items-center justify-center shrink-0`}>
-                <IconComp className="h-5 w-5 text-foreground/70" />
+            <Card
+              key={cat.id}
+              className="p-5 flex items-start gap-3 relative hover:shadow-lg hover:-translate-y-1 transition-all duration-300 cursor-pointer group animate-fade-in"
+              style={{ animationDelay: `${i * 60}ms`, animationFillMode: "both" }}
+            >
+              <div className={`h-12 w-12 rounded-2xl ${style.bg} flex items-center justify-center shrink-0 shadow-sm group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300`}>
+                <IconComp className={`h-6 w-6 ${style.text} drop-shadow-sm`} />
               </div>
               <div className="min-w-0">
                 <p className="font-semibold text-foreground text-sm">{cat.name}</p>
@@ -89,7 +80,7 @@ export default function Categories() {
                   <span>Padrão</span>
                 </div>
               </div>
-              <div className={`absolute top-4 right-4 h-3 w-3 rounded-full ${dotColor}`} />
+              <div className={`absolute top-4 right-4 h-3.5 w-3.5 rounded-full ${style.dot} shadow-md group-hover:scale-125 transition-transform duration-300`} />
             </Card>
           );
         })}
