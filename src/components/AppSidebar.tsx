@@ -68,7 +68,7 @@ export function AppSidebar() {
         {/* Nylo IA Button */}
         <div className="px-3 py-2 group-data-[collapsible=icon]:px-1.5">
           <NavLink
-            to="/dashboard/chat"
+            to="/dashboard/nylo-ia"
             className="flex items-center gap-3 rounded-xl bg-primary px-4 py-3 text-primary-foreground hover:brightness-110 transition-all group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-2"
             activeClassName="ring-2 ring-primary/30"
           >
