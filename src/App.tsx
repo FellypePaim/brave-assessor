@@ -40,8 +40,7 @@ const App = () => (
               <Route path="transactions" element={<Placeholder />} />
               <Route path="wallets" element={<Wallets />} />
               <Route path="cards" element={<Placeholder />} />
-              <Route path="categories" element={<Categories />} />
-              <Route path="budgets" element={<Placeholder />} />
+              <Route path="budgets" element={<Categories />} />
               <Route path="goals" element={<Placeholder />} />
               <Route path="reports" element={<Placeholder />} />
               <Route path="chat" element={<Placeholder />} />
