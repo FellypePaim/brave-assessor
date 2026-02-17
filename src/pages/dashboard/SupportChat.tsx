@@ -4,10 +4,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { Send, Plus, MessageCircle, ImageIcon, X } from "lucide-react";
+import { Send, Plus, MessageCircle, ImageIcon, X, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface Conversation {
   id: string;
@@ -28,6 +29,7 @@ interface Message {
 export default function SupportChat() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConv, setActiveConv] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -40,14 +42,16 @@ export default function SupportChat() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch profile name
+  // On mobile, show chat view when a conversation is active
+  const showChatView = isMobile ? !!activeConv : true;
+  const showListView = isMobile ? !activeConv : true;
+
   useEffect(() => {
     if (!user) return;
     supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle()
       .then(({ data }) => { if (data?.display_name) setMyProfile(data.display_name); });
   }, [user]);
 
-  // Fetch conversations
   useEffect(() => {
     if (!user) return;
     const fetchConvs = async () => {
@@ -61,11 +65,8 @@ export default function SupportChat() {
     fetchConvs();
   }, [user]);
 
-  // Fetch messages + realtime
   useEffect(() => {
     if (!activeConv) { setMessages([]); return; }
-
-    // Clear unread for this conv
     setUnreadConvs((prev) => { const n = new Set(prev); n.delete(activeConv); return n; });
 
     const fetchMessages = async () => {
@@ -81,9 +82,7 @@ export default function SupportChat() {
     const channel = supabase
       .channel(`support-msgs-${activeConv}`)
       .on("postgres_changes", {
-        event: "INSERT",
-        schema: "public",
-        table: "support_messages",
+        event: "INSERT", schema: "public", table: "support_messages",
         filter: `conversation_id=eq.${activeConv}`,
       }, (payload) => {
         setMessages((prev) => [...prev, payload.new as Message]);
@@ -93,28 +92,20 @@ export default function SupportChat() {
     return () => { supabase.removeChannel(channel); };
   }, [activeConv]);
 
-  // Global realtime for notifications (messages in other conversations)
   useEffect(() => {
     if (!user) return;
     const channel = supabase
       .channel("support-notifications-user")
       .on("postgres_changes", {
-        event: "INSERT",
-        schema: "public",
-        table: "support_messages",
+        event: "INSERT", schema: "public", table: "support_messages",
       }, (payload) => {
         const msg = payload.new as Message;
-        // Only notify if it's not my message and not the active conversation
         if (msg.sender_id !== user.id && msg.conversation_id !== activeConv) {
           setUnreadConvs((prev) => new Set(prev).add(msg.conversation_id));
-          toast({
-            title: "Nova mensagem",
-            description: "Você recebeu uma resposta do suporte!",
-          });
+          toast({ title: "Nova mensagem", description: "Você recebeu uma resposta do suporte!" });
         }
       })
       .subscribe();
-
     return () => { supabase.removeChannel(channel); };
   }, [user, activeConv, toast]);
 
@@ -159,13 +150,8 @@ export default function SupportChat() {
   const sendMessage = async () => {
     if ((!input.trim() && !imageFile) || !activeConv || !user) return;
     setLoading(true);
-
     let imageUrl: string | null = null;
-    if (imageFile) {
-      imageUrl = await uploadImage(imageFile);
-      clearImage();
-    }
-
+    if (imageFile) { imageUrl = await uploadImage(imageFile); clearImage(); }
     const { error } = await supabase
       .from("support_messages")
       .insert({
@@ -180,108 +166,117 @@ export default function SupportChat() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] gap-4">
+    <div className="flex h-[calc(100vh-8rem)] md:gap-4">
       {/* Conversations list */}
-      <Card className="w-72 shrink-0 flex flex-col overflow-hidden">
-        <div className="p-3 border-b border-border flex items-center justify-between">
-          <h3 className="font-semibold text-sm text-foreground">Conversas</h3>
-          <Button size="icon" variant="ghost" onClick={createConversation} className="h-8 w-8">
-            <Plus className="h-4 w-4" />
-          </Button>
-        </div>
-        <div className="flex-1 overflow-auto">
-          {conversations.length === 0 && (
-            <p className="text-xs text-muted-foreground p-4 text-center">Nenhuma conversa ainda</p>
-          )}
-          {conversations.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => setActiveConv(c.id)}
-              className={`w-full text-left px-4 py-3 border-b border-border hover:bg-muted/50 transition-colors relative ${activeConv === c.id ? "bg-accent" : ""}`}
-            >
-              <p className="text-sm font-medium text-foreground truncate">{c.subject}</p>
-              <p className="text-xs text-muted-foreground">{format(new Date(c.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}</p>
-              {unreadConvs.has(c.id) && (
-                <span className="absolute top-3 right-3 h-2.5 w-2.5 rounded-full bg-primary animate-pulse" />
-              )}
-            </button>
-          ))}
-        </div>
-      </Card>
-
-      {/* Chat area */}
-      <Card className="flex-1 flex flex-col overflow-hidden">
-        {!activeConv ? (
-          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground gap-3">
-            <MessageCircle className="h-12 w-12 opacity-30" />
-            <p className="text-sm">Selecione ou crie uma conversa</p>
-            <Button onClick={createConversation} size="sm">
-              <Plus className="h-4 w-4 mr-2" /> Nova conversa
+      {showListView && (
+        <Card className="w-full md:w-72 md:shrink-0 flex flex-col overflow-hidden">
+          <div className="p-3 border-b border-border flex items-center justify-between">
+            <h3 className="font-semibold text-sm text-foreground">Conversas</h3>
+            <Button size="icon" variant="ghost" onClick={createConversation} className="h-8 w-8">
+              <Plus className="h-4 w-4" />
             </Button>
           </div>
-        ) : (
-          <>
-            <div className="p-3 border-b border-border">
-              <h3 className="font-semibold text-sm text-foreground">Suporte Nox</h3>
-            </div>
-            <div className="flex-1 overflow-auto p-4 space-y-4">
-              {messages.map((m) => {
-                const isMe = m.sender_id === user?.id;
-                return (
-                  <div key={m.id} className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}>
-                    <div className={`flex items-center gap-1.5 mb-1 ${isMe ? "flex-row-reverse" : ""}`}>
-                      <span className="text-xs font-medium text-foreground">{isMe ? myProfile : "Suporte"}</span>
-                      <span className="text-[10px] text-muted-foreground">
-                        {format(new Date(m.created_at), "HH:mm", { locale: ptBR })}
-                      </span>
-                    </div>
-                    <div className={`max-w-[70%] px-4 py-2 rounded-2xl text-sm ${isMe ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}>
-                      {m.image_url && (
-                        <img
-                          src={m.image_url}
-                          alt="Anexo"
-                          className="rounded-lg mb-2 max-h-48 w-auto cursor-pointer"
-                          onClick={() => window.open(m.image_url!, "_blank")}
-                        />
-                      )}
-                      {m.content && m.content !== "📷 Imagem" && <p>{m.content}</p>}
-                    </div>
-                  </div>
-                );
-              })}
-              <div ref={bottomRef} />
-            </div>
-
-            {/* Image preview */}
-            {imagePreview && (
-              <div className="px-3 pt-2 flex items-center gap-2">
-                <div className="relative">
-                  <img src={imagePreview} alt="Preview" className="h-16 rounded-lg border border-border" />
-                  <button onClick={clearImage} className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center">
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
+          <div className="flex-1 overflow-auto">
+            {conversations.length === 0 && (
+              <div className="flex flex-col items-center justify-center p-8 text-center gap-3">
+                <MessageCircle className="h-10 w-10 text-muted-foreground/30" />
+                <p className="text-xs text-muted-foreground">Nenhuma conversa ainda</p>
+                <Button onClick={createConversation} size="sm" variant="outline">
+                  <Plus className="h-4 w-4 mr-2" /> Nova conversa
+                </Button>
               </div>
             )}
+            {conversations.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => setActiveConv(c.id)}
+                className={`w-full text-left px-4 py-3 border-b border-border hover:bg-muted/50 transition-colors relative ${activeConv === c.id ? "bg-accent" : ""}`}
+              >
+                <p className="text-sm font-medium text-foreground truncate">{c.subject}</p>
+                <p className="text-xs text-muted-foreground">{format(new Date(c.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}</p>
+                {unreadConvs.has(c.id) && (
+                  <span className="absolute top-3 right-3 h-2.5 w-2.5 rounded-full bg-primary animate-pulse" />
+                )}
+              </button>
+            ))}
+          </div>
+        </Card>
+      )}
 
-            <div className="p-3 border-t border-border flex gap-2">
-              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
-              <Button variant="ghost" size="icon" onClick={() => fileInputRef.current?.click()} className="shrink-0">
-                <ImageIcon className="h-4 w-4" />
-              </Button>
-              <Input
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Digite sua mensagem..."
-                onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
-              />
-              <Button onClick={sendMessage} disabled={loading || (!input.trim() && !imageFile)} size="icon">
-                <Send className="h-4 w-4" />
+      {/* Chat area */}
+      {showChatView && (
+        <Card className="flex-1 flex flex-col overflow-hidden">
+          {!activeConv ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground gap-3">
+              <MessageCircle className="h-12 w-12 opacity-30" />
+              <p className="text-sm">Selecione ou crie uma conversa</p>
+              <Button onClick={createConversation} size="sm">
+                <Plus className="h-4 w-4 mr-2" /> Nova conversa
               </Button>
             </div>
-          </>
-        )}
-      </Card>
+          ) : (
+            <>
+              <div className="p-3 border-b border-border flex items-center gap-2">
+                {isMobile && (
+                  <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setActiveConv(null)}>
+                    <ArrowLeft className="h-4 w-4" />
+                  </Button>
+                )}
+                <h3 className="font-semibold text-sm text-foreground">Suporte Nox</h3>
+              </div>
+              <div className="flex-1 overflow-auto p-4 space-y-4">
+                {messages.map((m) => {
+                  const isMe = m.sender_id === user?.id;
+                  return (
+                    <div key={m.id} className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}>
+                      <div className={`flex items-center gap-1.5 mb-1 ${isMe ? "flex-row-reverse" : ""}`}>
+                        <span className="text-xs font-medium text-foreground">{isMe ? myProfile : "Suporte"}</span>
+                        <span className="text-[10px] text-muted-foreground">
+                          {format(new Date(m.created_at), "HH:mm", { locale: ptBR })}
+                        </span>
+                      </div>
+                      <div className={`max-w-[85%] md:max-w-[70%] px-4 py-2 rounded-2xl text-sm ${isMe ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}>
+                        {m.image_url && (
+                          <img src={m.image_url} alt="Anexo" className="rounded-lg mb-2 max-h-48 w-auto cursor-pointer" onClick={() => window.open(m.image_url!, "_blank")} />
+                        )}
+                        {m.content && m.content !== "📷 Imagem" && <p>{m.content}</p>}
+                      </div>
+                    </div>
+                  );
+                })}
+                <div ref={bottomRef} />
+              </div>
+
+              {imagePreview && (
+                <div className="px-3 pt-2 flex items-center gap-2">
+                  <div className="relative">
+                    <img src={imagePreview} alt="Preview" className="h-16 rounded-lg border border-border" />
+                    <button onClick={clearImage} className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="p-3 border-t border-border flex gap-2">
+                <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
+                <Button variant="ghost" size="icon" onClick={() => fileInputRef.current?.click()} className="shrink-0">
+                  <ImageIcon className="h-4 w-4" />
+                </Button>
+                <Input
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder="Digite sua mensagem..."
+                  onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
+                />
+                <Button onClick={sendMessage} disabled={loading || (!input.trim() && !imageFile)} size="icon">
+                  <Send className="h-4 w-4" />
+                </Button>
+              </div>
+            </>
+          )}
+        </Card>
+      )}
     </div>
   );
 }
