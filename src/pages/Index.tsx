@@ -4,7 +4,7 @@ import heroImage from "@/assets/hero-woman.jpg";
 import {
   MessageSquare, Mic, Camera, Brain, CreditCard, Target, Wallet,
   Users, FileText, Bell, TrendingUp, ChevronRight, Star, Shield,
-  Menu, X, CheckCircle2, Phone, ArrowRight
+  Menu, X, CheckCircle2, Phone, ArrowRight, BarChart3, AlertTriangle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -218,10 +218,30 @@ function WhatIs() {
 
 /* ─── COMO FUNCIONA ─── */
 const steps = [
-  { icon: MessageSquare, title: "Mande um zap", desc: "Envie seus gastos por texto, áudio ou foto de comprovante." },
-  { icon: Brain, title: "A IA registra tudo", desc: "O Nylo categoriza, organiza e salva automaticamente." },
-  { icon: FileText, title: "Veja seus relatórios", desc: "Relatórios organizados por categoria, semana e mês." },
-  { icon: Bell, title: "Receba alertas", desc: "Alertas inteligentes antes de estourar o orçamento." },
+  {
+    icon: MessageSquare,
+    title: "Mande um zap",
+    desc: 'Digite "gastei 45 no mercado", mande um áudio ou foto do recibo. O Nylo entende tudo.',
+    chip: { text: '"Gastei 89 de uber hoje"', variant: "pink" as const },
+  },
+  {
+    icon: Brain,
+    title: "A IA faz o resto",
+    desc: "Registra, categoriza e analisa seus padrões de gasto automaticamente.",
+    chip: { text: "✓ Registrado em Transporte", variant: "outline" as const },
+  },
+  {
+    icon: BarChart3,
+    title: "Você vê tudo organizado",
+    desc: "Acesse relatórios, gráficos e saiba exatamente para onde seu dinheiro está indo.",
+    chip: { text: "Transporte: R$450 este mês", variant: "pink" as const },
+  },
+  {
+    icon: Bell,
+    title: "Receba alertas inteligentes",
+    desc: "O Nylo avisa quando você está gastando demais ou quando uma conta vai vencer.",
+    chip: { text: "⚠ Você já gastou 80% do limite", variant: "warning" as const },
+  },
 ];
 
 function HowItWorks() {
@@ -230,23 +250,49 @@ function HowItWorks() {
   const bgY = useTransform(scrollYProgress, [0, 1], [-30, 30]);
 
   return (
-    <section id="como-funciona" className="py-16 md:py-24 relative overflow-hidden" ref={ref}>
+    <section id="como-funciona" className="py-16 md:py-24 relative overflow-hidden bg-gradient-to-b from-primary/[0.03] to-transparent" ref={ref}>
       <motion.div className="absolute inset-0 bg-gradient-to-b from-transparent via-accent/5 to-transparent pointer-events-none" style={{ y: bgY }} />
       <div className="container mx-auto px-4 relative">
-        <motion.h2 initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-80px" }} variants={fadeUp} className="text-3xl md:text-4xl font-bold text-center text-foreground">
-          Como Funciona o Controle Financeiro pelo WhatsApp
+        {/* Badge */}
+        <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-80px" }} variants={fadeUp} className="text-center">
+          <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/5 px-4 py-1.5 text-sm font-medium text-primary">
+            Como funciona
+          </span>
+        </motion.div>
+
+        <motion.h2 initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-80px" }} variants={fadeUp} className="mt-4 text-3xl md:text-4xl font-bold text-center text-foreground">
+          Simples como <span className="text-primary">1, 2, 3</span>
         </motion.h2>
+        <motion.p initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-80px" }} variants={fadeUp} className="mt-3 text-center text-muted-foreground">
+          Comece a controlar suas finanças em minutos
+        </motion.p>
+
         <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-60px" }} variants={stagger} className="mt-12 grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {steps.map((s, i) => (
-            <motion.div key={i} variants={fadeScale}>
-              <Card className="h-full border-border bg-card hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-1 transition-all duration-300">
+            <motion.div key={i} variants={fadeScale} className="relative">
+              {/* Step number badge */}
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
+                <span className="inline-flex items-center justify-center h-7 min-w-[2rem] rounded-full bg-primary text-primary-foreground text-xs font-bold px-2">
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+              </div>
+              <Card className="h-full border-border bg-card hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-1 transition-all duration-300 pt-4">
                 <CardContent className="p-6 flex flex-col items-center text-center gap-4">
-                  <div className="flex items-center justify-center h-14 w-14 rounded-2xl bg-accent text-accent-foreground">
+                  <div className="flex items-center justify-center h-14 w-14 rounded-2xl bg-primary/10 text-primary">
                     <s.icon className="h-6 w-6" />
                   </div>
-                  <span className="text-xs font-bold text-primary">Passo {i + 1}</span>
                   <h3 className="text-lg font-semibold text-foreground">{s.title}</h3>
-                  <p className="text-sm text-muted-foreground">{s.desc}</p>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{s.desc}</p>
+                  {/* Chip */}
+                  <span className={`inline-block text-xs font-medium rounded-full px-3 py-1.5 mt-auto ${
+                    s.chip.variant === "pink"
+                      ? "bg-primary/10 text-primary"
+                      : s.chip.variant === "warning"
+                        ? "bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400"
+                        : "border border-border text-muted-foreground"
+                  }`}>
+                    {s.chip.text}
+                  </span>
                 </CardContent>
               </Card>
             </motion.div>
