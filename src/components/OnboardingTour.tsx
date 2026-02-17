@@ -279,10 +279,21 @@ export function OnboardingTour({ onComplete }: OnboardingTourProps) {
         <div className="flex items-center justify-between px-6 pb-6 gap-3">
           <Button
             variant="ghost"
-            onClick={onComplete}
+            onClick={() => {
+              if (mainStep === 0 && setupIndex > 0) {
+                setSetupIndex(setupIndex - 1);
+              } else if (mainStep > 0) {
+                setMainStep((c) => c - 1);
+                if (mainStep === 1) {
+                  setSetupIndex(setupSteps.length - 1);
+                }
+              } else {
+                onComplete();
+              }
+            }}
             className="text-muted-foreground hover:text-foreground"
           >
-            Pular Tour
+            {mainStep === 0 && setupIndex === 0 ? "Pular Tour" : "Voltar"}
           </Button>
           <Button
             onClick={() => {
