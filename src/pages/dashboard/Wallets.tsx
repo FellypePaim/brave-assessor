@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
+import { AddWalletDialog } from "@/components/AddWalletDialog";
+import { AddTransactionDialog } from "@/components/AddTransactionDialog";
 
 type Tab = "overview" | "transactions" | "accounts";
 type Period = "today" | "week" | "month";
@@ -169,9 +171,7 @@ export default function Wallets() {
                     </div>
                   </div>
                 ))}
-                <button className="rounded-xl border-2 border-dashed border-border hover:border-primary/40 text-muted-foreground hover:text-foreground p-4 min-w-[160px] flex items-center justify-center gap-2 transition-colors">
-                  <Plus className="h-4 w-4" /> Nova Conta
-                </button>
+                <AddWalletDialog />
               </div>
             </CardContent>
           </Card>
@@ -227,9 +227,11 @@ export default function Wallets() {
               <Button variant="outline" size="sm" className="rounded-full gap-2">
                 <Download className="h-3.5 w-3.5" /> Exportar
               </Button>
-              <Button size="sm" className="rounded-full gap-2">
-                <Plus className="h-3.5 w-3.5" /> Nova Transação
-              </Button>
+              <AddTransactionDialog trigger={
+                <Button size="sm" className="rounded-full gap-2">
+                  <Plus className="h-3.5 w-3.5" /> Nova Transação
+                </Button>
+              } />
             </div>
           </div>
 
@@ -372,9 +374,7 @@ export default function Wallets() {
                   </div>
                 </div>
               ))}
-              <button className="rounded-xl border-2 border-dashed border-border hover:border-primary/40 text-muted-foreground hover:text-foreground p-4 min-w-[160px] flex items-center justify-center gap-2 transition-colors">
-                <Plus className="h-4 w-4" /> Nova Conta
-              </button>
+              <AddWalletDialog />
             </div>
           </CardContent>
         </Card>

@@ -2,8 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Plus, CreditCard } from "lucide-react";
+import { CreditCard } from "lucide-react";
+import { AddCardDialog } from "@/components/AddCardDialog";
 
 export default function Cards() {
   const { user } = useAuth();
@@ -29,10 +29,7 @@ export default function Cards() {
           <h1 className="text-2xl font-bold text-foreground">Cartões de Crédito</h1>
           <p className="text-muted-foreground text-sm">Gerencie seus cartões de crédito e controle de fatura</p>
         </div>
-        <Button className="rounded-full bg-primary hover:bg-primary/90 text-primary-foreground gap-1.5">
-          <Plus className="h-4 w-4" />
-          Novo Cartão
-        </Button>
+        <AddCardDialog />
       </div>
 
       <Card className="p-6">
