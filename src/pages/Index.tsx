@@ -115,7 +115,7 @@ function Header({ onOpenAuth }: { onOpenAuth: () => void }) {
 }
 
 /* ─── HERO ─── */
-function Hero() {
+function Hero({ onOpenAuth }: { onOpenAuth: () => void }) {
   const heroRef = useRef(null);
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] });
   const heroY = useTransform(scrollYProgress, [0, 1], [0, 80]);
@@ -147,9 +147,15 @@ function Hero() {
           </motion.p>
 
           <motion.div variants={fadeUp} className="mt-8">
-            <WhatsAppCTA size="lg">
-              Quero organizar minhas finanças →
-            </WhatsAppCTA>
+            <Button
+              size="lg"
+              onClick={onOpenAuth}
+              className="rounded-full bg-primary text-primary-foreground hover:brightness-110 hover:shadow-lg hover:shadow-primary/25 transition-all duration-200"
+            >
+              <span className="flex items-center gap-2">
+                <MessageSquare className="h-4 w-4" /> Quero organizar minhas finanças →
+              </span>
+            </Button>
           </motion.div>
 
           {/* Checklist */}
@@ -795,7 +801,7 @@ const Index = () => {
     <main className="overflow-x-hidden">
       <Header onOpenAuth={() => setAuthOpen(true)} />
       <AuthModal open={authOpen} onOpenChange={setAuthOpen} />
-      <Hero />
+      <Hero onOpenAuth={() => setAuthOpen(true)} />
       <MarqueeCarousel />
       <WhatIs />
       <HowItWorks />
