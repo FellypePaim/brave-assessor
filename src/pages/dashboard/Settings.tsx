@@ -249,7 +249,7 @@ export default function Settings() {
           </Badge>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
           <div className="border border-border rounded-lg p-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
               <CreditCard className="h-3 w-3" /> Valor
@@ -278,7 +278,7 @@ export default function Settings() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Button variant="outline">
             <ExternalLink className="h-4 w-4 mr-2" />
             Gerenciar Assinatura
