@@ -5,8 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Send, MessageCircle, User } from "lucide-react";
+import { Send, MessageCircle, User, ImageIcon, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 interface Conversation {
   id: string;
@@ -22,6 +24,7 @@ interface Message {
   conversation_id: string;
   sender_id: string;
   content: string;
+  image_url: string | null;
   created_at: string;
 }
 
@@ -34,50 +37,77 @@ export default function AdminSupport() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [profiles, setProfiles] = useState<Record<string, string>>({});
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [unreadConvs, setUnreadConvs] = useState<Set<string>>(new Set());
   const bottomRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch all conversations
-  useEffect(() => {
-    const fetchConvs = async () => {
-      const { data } = await supabase
-        .from("support_conversations")
-        .select("*")
-        .order("updated_at", { ascending: false });
-      if (data) {
-        setConversations(data);
-        // Fetch profile names
-        const userIds = [...new Set(data.map((c) => c.user_id))];
-        if (userIds.length) {
-          const { data: profs } = await supabase
-            .from("profiles")
-            .select("id, display_name")
-            .in("id", userIds);
-          if (profs) {
-            const map: Record<string, string> = {};
-            profs.forEach((p) => { map[p.id] = p.display_name || "Usuário"; });
-            setProfiles(map);
-          }
+  // Fetch all conversations + profiles
+  const fetchConvs = async () => {
+    const { data } = await supabase
+      .from("support_conversations")
+      .select("*")
+      .order("updated_at", { ascending: false });
+    if (data) {
+      setConversations(data);
+      const userIds = [...new Set(data.map((c) => c.user_id))];
+      if (userIds.length) {
+        const { data: profs } = await supabase
+          .from("profiles")
+          .select("id, display_name")
+          .in("id", userIds);
+        if (profs) {
+          const map: Record<string, string> = {};
+          profs.forEach((p) => { map[p.id] = p.display_name || "Usuário"; });
+          setProfiles(map);
         }
       }
-    };
+    }
+  };
+
+  useEffect(() => {
     fetchConvs();
 
-    // Realtime for new conversations
     const channel = supabase
       .channel("admin-support-convs")
-      .on("postgres_changes", {
-        event: "INSERT",
-        schema: "public",
-        table: "support_conversations",
-      }, () => { fetchConvs(); })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "support_conversations" }, () => {
+        fetchConvs();
+        toast({ title: "Novo atendimento", description: "Um usuário abriu uma nova conversa de suporte." });
+      })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, []);
 
+  // Global realtime for notifications
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase
+      .channel("admin-notifications")
+      .on("postgres_changes", {
+        event: "INSERT",
+        schema: "public",
+        table: "support_messages",
+      }, (payload) => {
+        const msg = payload.new as Message;
+        if (msg.sender_id !== user.id && msg.conversation_id !== activeConv) {
+          setUnreadConvs((prev) => new Set(prev).add(msg.conversation_id));
+          const senderName = profiles[msg.sender_id] || "Usuário";
+          toast({ title: `Nova mensagem de ${senderName}`, description: msg.content.slice(0, 60) });
+        }
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [user, activeConv, profiles, toast]);
+
   // Fetch messages for active conversation
   useEffect(() => {
     if (!activeConv) { setMessages([]); return; }
+
+    setUnreadConvs((prev) => { const n = new Set(prev); n.delete(activeConv); return n; });
+
     const fetchMessages = async () => {
       const { data } = await supabase
         .from("support_messages")
@@ -109,12 +139,51 @@ export default function AdminSupport() {
 
   const activeConvData = conversations.find((c) => c.id === activeConv);
 
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  };
+
+  const clearImage = () => {
+    setImageFile(null);
+    setImagePreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const uploadImage = async (file: File): Promise<string | null> => {
+    const ext = file.name.split(".").pop();
+    const path = `admin/${Date.now()}.${ext}`;
+    const { error } = await supabase.storage.from("support-attachments").upload(path, file);
+    if (error) { toast({ title: "Erro ao enviar imagem", description: error.message, variant: "destructive" }); return null; }
+    const { data } = supabase.storage.from("support-attachments").getPublicUrl(path);
+    return data.publicUrl;
+  };
+
+  const getSenderName = (senderId: string) => {
+    if (senderId === user?.id) return "Suporte";
+    return profiles[senderId] || "Usuário";
+  };
+
   const sendMessage = async () => {
-    if (!input.trim() || !activeConv || !user) return;
+    if ((!input.trim() && !imageFile) || !activeConv || !user) return;
     setLoading(true);
+
+    let imageUrl: string | null = null;
+    if (imageFile) {
+      imageUrl = await uploadImage(imageFile);
+      clearImage();
+    }
+
     const { error } = await supabase
       .from("support_messages")
-      .insert({ conversation_id: activeConv, sender_id: user.id, content: input.trim() });
+      .insert({
+        conversation_id: activeConv,
+        sender_id: user.id,
+        content: input.trim() || (imageUrl ? "📷 Imagem" : ""),
+        image_url: imageUrl,
+      });
     if (error) toast({ title: "Erro", description: error.message, variant: "destructive" });
     else setInput("");
     setLoading(false);
@@ -133,24 +202,29 @@ export default function AdminSupport() {
             <button
               key={c.id}
               onClick={() => setActiveConv(c.id)}
-              className={`w-full text-left px-4 py-3 border-b border-border hover:bg-muted/50 transition-colors ${activeConv === c.id ? "bg-accent" : ""}`}
+              className={`w-full text-left px-4 py-3 border-b border-border hover:bg-muted/50 transition-colors relative ${activeConv === c.id ? "bg-accent" : ""}`}
             >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 min-w-0">
-                  <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                    <User className="h-3.5 w-3.5 text-primary" />
-                  </div>
-                  <div className="min-w-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                  <User className="h-3.5 w-3.5 text-primary" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between">
                     <p className="text-sm font-medium text-foreground truncate">
                       {profiles[c.user_id] || "Usuário"}
                     </p>
-                    <p className="text-xs text-muted-foreground">{c.subject}</p>
+                    <Badge variant={c.status === "open" ? "default" : "secondary"} className="text-[10px] shrink-0 ml-2">
+                      {c.status === "open" ? "Aberto" : "Fechado"}
+                    </Badge>
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    {format(new Date(c.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+                  </p>
                 </div>
-                <Badge variant={c.status === "open" ? "default" : "secondary"} className="text-[10px] shrink-0">
-                  {c.status === "open" ? "Aberto" : "Fechado"}
-                </Badge>
               </div>
+              {unreadConvs.has(c.id) && (
+                <span className="absolute top-3 right-3 h-2.5 w-2.5 rounded-full bg-primary animate-pulse" />
+              )}
             </button>
           ))}
         </div>
@@ -165,7 +239,10 @@ export default function AdminSupport() {
           </div>
         ) : (
           <>
-            <div className="p-3 border-b border-border flex items-center justify-between">
+            <div className="p-3 border-b border-border flex items-center gap-3">
+              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                <User className="h-4 w-4 text-primary" />
+              </div>
               <div>
                 <h3 className="font-semibold text-sm text-foreground">
                   {profiles[activeConvData?.user_id || ""] || "Usuário"}
@@ -173,27 +250,58 @@ export default function AdminSupport() {
                 <p className="text-xs text-muted-foreground">{activeConvData?.subject}</p>
               </div>
             </div>
-            <div className="flex-1 overflow-auto p-4 space-y-3">
+            <div className="flex-1 overflow-auto p-4 space-y-4">
               {messages.map((m) => {
                 const isAdmin = m.sender_id === user?.id;
                 return (
-                  <div key={m.id} className={`flex ${isAdmin ? "justify-end" : "justify-start"}`}>
+                  <div key={m.id} className={`flex flex-col ${isAdmin ? "items-end" : "items-start"}`}>
+                    <div className={`flex items-center gap-1.5 mb-1 ${isAdmin ? "flex-row-reverse" : ""}`}>
+                      <span className="text-xs font-medium text-foreground">{getSenderName(m.sender_id)}</span>
+                      <span className="text-[10px] text-muted-foreground">
+                        {format(new Date(m.created_at), "HH:mm", { locale: ptBR })}
+                      </span>
+                    </div>
                     <div className={`max-w-[70%] px-4 py-2 rounded-2xl text-sm ${isAdmin ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}>
-                      {m.content}
+                      {m.image_url && (
+                        <img
+                          src={m.image_url}
+                          alt="Anexo"
+                          className="rounded-lg mb-2 max-h-48 w-auto cursor-pointer"
+                          onClick={() => window.open(m.image_url!, "_blank")}
+                        />
+                      )}
+                      {m.content && m.content !== "📷 Imagem" && <p>{m.content}</p>}
                     </div>
                   </div>
                 );
               })}
               <div ref={bottomRef} />
             </div>
+
+            {/* Image preview */}
+            {imagePreview && (
+              <div className="px-3 pt-2 flex items-center gap-2">
+                <div className="relative">
+                  <img src={imagePreview} alt="Preview" className="h-16 rounded-lg border border-border" />
+                  <button onClick={clearImage} className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center">
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="p-3 border-t border-border flex gap-2">
+              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
+              <Button variant="ghost" size="icon" onClick={() => fileInputRef.current?.click()} className="shrink-0">
+                <ImageIcon className="h-4 w-4" />
+              </Button>
               <Input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Responder..."
                 onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
               />
-              <Button onClick={sendMessage} disabled={loading || !input.trim()} size="icon">
+              <Button onClick={sendMessage} disabled={loading || (!input.trim() && !imageFile)} size="icon">
                 <Send className="h-4 w-4" />
               </Button>
             </div>
