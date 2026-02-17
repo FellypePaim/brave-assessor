@@ -6,11 +6,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   Plus, ChevronLeft, ChevronRight, FileText,
-  CheckCircle2, AlertTriangle, CalendarClock, DollarSign,
+  CheckCircle2, AlertTriangle, CalendarClock, DollarSign, Pencil,
 } from "lucide-react";
 import { format, startOfMonth, endOfMonth, addMonths, subMonths, startOfWeek, endOfWeek } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { AddTransactionDialog } from "@/components/AddTransactionDialog";
+import { EditTransactionDialog } from "@/components/EditTransactionDialog";
 
 type Period = "today" | "week" | "month";
 
@@ -18,21 +19,16 @@ export default function Bills() {
   const { user } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [period, setPeriod] = useState<Period>("month");
+  const [editTx, setEditTx] = useState<any>(null);
 
   const monthLabel = format(currentDate, "MMMM yyyy", { locale: ptBR });
   const monthCapitalized = monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1);
 
   const getRange = () => {
-    if (period === "today") {
-      const d = format(currentDate, "yyyy-MM-dd");
-      return { start: d, end: d };
-    }
-    if (period === "week") {
-      return { start: format(startOfWeek(currentDate, { weekStartsOn: 1 }), "yyyy-MM-dd"), end: format(endOfWeek(currentDate, { weekStartsOn: 1 }), "yyyy-MM-dd") };
-    }
+    if (period === "today") { const d = format(currentDate, "yyyy-MM-dd"); return { start: d, end: d }; }
+    if (period === "week") return { start: format(startOfWeek(currentDate, { weekStartsOn: 1 }), "yyyy-MM-dd"), end: format(endOfWeek(currentDate, { weekStartsOn: 1 }), "yyyy-MM-dd") };
     return { start: format(startOfMonth(currentDate), "yyyy-MM-dd"), end: format(endOfMonth(currentDate), "yyyy-MM-dd") };
   };
-
   const range = getRange();
 
   const getDateRangeLabel = () => {
@@ -44,12 +40,7 @@ export default function Bills() {
   const { data: transactions = [] } = useQuery({
     queryKey: ["bills-transactions", user?.id, range.start, range.end],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("transactions")
-        .select("*, categories(name)")
-        .gte("date", range.start)
-        .lte("date", range.end)
-        .order("date", { ascending: false });
+      const { data } = await supabase.from("transactions").select("*, categories(name)").gte("date", range.start).lte("date", range.end).order("date", { ascending: false });
       return data || [];
     },
     enabled: !!user,
@@ -78,7 +69,6 @@ export default function Bills() {
         <AddTransactionDialog />
       </div>
 
-      {/* Period Selector */}
       <Card className="p-5">
         <div className="flex items-center justify-between">
           <Button variant="ghost" size="icon" className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 h-9 w-9" onClick={() => setCurrentDate((d) => subMonths(d, 1))}>
@@ -101,7 +91,6 @@ export default function Bills() {
         </div>
       </Card>
 
-      {/* Summary */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {summaryCards.map((item) => (
           <Card key={item.label} className="p-4 flex items-center gap-3">
@@ -116,7 +105,6 @@ export default function Bills() {
         ))}
       </div>
 
-      {/* Transaction list */}
       <Card className="p-6">
         <div className="mb-6">
           <h2 className="font-bold text-foreground">Transações do Período</h2>
@@ -133,21 +121,32 @@ export default function Bills() {
         ) : (
           <div className="space-y-3">
             {transactions.map((t) => (
-              <div key={t.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
-                <div>
-                  <p className="text-sm font-medium text-foreground">{t.description}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {new Date(t.date).toLocaleDateString("pt-BR")} • {(t as any).categories?.name || "Sem categoria"}
-                  </p>
+              <div
+                key={t.id}
+                className="flex items-center justify-between py-2 border-b border-border last:border-0 cursor-pointer hover:bg-muted/30 rounded-lg px-2 -mx-2 transition-colors group"
+                onClick={() => setEditTx(t)}
+              >
+                <div className="flex items-center gap-2">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{t.description}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(t.date).toLocaleDateString("pt-BR")} • {(t as any).categories?.name || "Sem categoria"}
+                    </p>
+                  </div>
                 </div>
-                <p className={`text-sm font-semibold ${t.type === "income" ? "text-emerald-500" : "text-destructive"}`}>
-                  {t.type === "income" ? "+" : "-"} {fmt(Number(t.amount))}
-                </p>
+                <div className="flex items-center gap-2">
+                  <p className={`text-sm font-semibold ${t.type === "income" ? "text-emerald-500" : "text-destructive"}`}>
+                    {t.type === "income" ? "+" : "-"} {fmt(Number(t.amount))}
+                  </p>
+                  <Pencil className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
               </div>
             ))}
           </div>
         )}
       </Card>
+
+      <EditTransactionDialog transaction={editTx} open={!!editTx} onOpenChange={(o) => !o && setEditTx(null)} />
     </div>
   );
 }
