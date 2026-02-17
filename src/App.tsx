@@ -44,6 +44,8 @@ const App = () => (
               <Route path="chat" element={<Placeholder />} />
               <Route path="family" element={<Placeholder />} />
               <Route path="settings" element={<Placeholder />} />
+              <Route path="investments" element={<Placeholder />} />
+              <Route path="behavior" element={<Placeholder />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
