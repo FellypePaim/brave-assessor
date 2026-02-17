@@ -59,6 +59,9 @@ export default function Dashboard() {
         .update({ has_completed_onboarding: true })
         .eq("id", user.id);
       queryClient.invalidateQueries({ queryKey: ["profile-onboarding"] });
+      queryClient.invalidateQueries({ queryKey: ["wallets"] });
+      queryClient.invalidateQueries({ queryKey: ["cards"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-transactions"] });
     }
   };
 
