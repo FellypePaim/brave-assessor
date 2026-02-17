@@ -699,6 +699,89 @@ function Benefits() {
   );
 }
 
+/* ─── COMPARISON TABLE ─── */
+import { Clock, TrendingUp as TrendingIcon, Bell as BellIcon, MessageSquare as MsgIcon, LineChart } from "lucide-react";
+
+const comparisonRows = [
+  { icon: Clock, label: "Tempo de setup", planilha: "45min+", apps: "30min", nylo: "2min", nyloHighlight: false },
+  { icon: Clock, label: "Esforço diário", planilha: "10min", apps: "5min", nylo: "30seg", nyloHighlight: false },
+  { icon: TrendingIcon, label: "Análise automática", planilha: "Manual", planilhaWarn: true, apps: "Básica", appsWarn: true, nylo: "IA Avançada", nyloHighlight: true },
+  { icon: BellIcon, label: "Alertas proativos", planilha: "✕", planilhaX: true, apps: "Limitados", appsWarn: true, nylo: "Inteligentes", nyloHighlight: true },
+  { icon: MsgIcon, label: "WhatsApp integrado", planilha: "✕", planilhaX: true, apps: "✕", appsX: true, nylo: "✓", nyloCheck: true },
+  { icon: LineChart, label: "Previsões de gastos", planilha: "✕", planilhaX: true, apps: "✕", appsX: true, nylo: "✓", nyloCheck: true },
+] as const;
+
+function Comparison() {
+  return (
+    <section className="py-16 md:py-24 bg-secondary/20">
+      <div className="container mx-auto px-4">
+        <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-80px" }} variants={stagger} className="text-center">
+          <motion.span variants={fadeUp} className="inline-flex items-center rounded-full border border-border bg-card px-4 py-1.5 text-sm font-medium text-foreground">
+            Comparação Honesta
+          </motion.span>
+          <motion.h2 variants={fadeUp} className="mt-4 text-3xl md:text-4xl font-bold text-foreground">
+            Por que não usar <span className="text-primary">planilha</span>?
+          </motion.h2>
+          <motion.p variants={fadeUp} className="mt-3 text-muted-foreground max-w-lg mx-auto">
+            Comparamos o Nylo com as alternativas mais comuns para você decidir com clareza
+          </motion.p>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-60px" }}
+          transition={{ duration: 0.6 }}
+          className="mt-12 max-w-4xl mx-auto"
+        >
+          <Card className="border-border overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left p-4 text-muted-foreground font-normal">Recurso</th>
+                    <th className="p-4 text-center">
+                      <div className="font-semibold text-foreground">Planilha</div>
+                      <div className="text-xs text-muted-foreground">Excel/Sheets</div>
+                    </th>
+                    <th className="p-4 text-center">
+                      <div className="font-semibold text-foreground">Apps Tradicionais</div>
+                      <div className="text-xs text-muted-foreground">Mobills, Guiabolso</div>
+                    </th>
+                    <th className="p-4 text-center">
+                      <div className="font-semibold text-primary">Nylo</div>
+                      <div className="text-xs text-muted-foreground">IA + WhatsApp</div>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {comparisonRows.map((row, i) => (
+                    <tr key={i} className="border-b border-border last:border-0">
+                      <td className="p-4 flex items-center gap-2 text-foreground">
+                        <row.icon className="h-4 w-4 text-muted-foreground" />
+                        {row.label}
+                      </td>
+                      <td className={`p-4 text-center ${(row as any).planilhaX ? "text-destructive" : (row as any).planilhaWarn ? "text-destructive" : "text-muted-foreground"}`}>
+                        {row.planilha}
+                      </td>
+                      <td className={`p-4 text-center ${(row as any).appsX ? "text-destructive" : (row as any).appsWarn ? "text-destructive" : "text-muted-foreground"}`}>
+                        {row.apps}
+                      </td>
+                      <td className={`p-4 text-center font-medium ${(row as any).nyloHighlight || (row as any).nyloCheck ? "text-primary" : "text-foreground"}`}>
+                        {row.nylo}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </motion.div>
+      </div>
+    </section>
+  );
+}
+
 /* ─── PAGE ─── */
 const Index = () => (
   <main className="overflow-x-hidden">
@@ -708,6 +791,7 @@ const Index = () => (
     <WhatIs />
     <HowItWorks />
     <Benefits />
+    <Comparison />
     <Features />
     <SocialProof />
     <Pricing />
