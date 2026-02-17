@@ -129,7 +129,7 @@ export default function Behavior() {
         </div>
         <Button size="sm" className="rounded-full bg-primary text-primary-foreground gap-1.5 text-xs">
           <Sparkles className="h-3.5 w-3.5" />
-          Nylo IA
+          Nox IA
         </Button>
       </Card>
 
@@ -158,7 +158,7 @@ export default function Behavior() {
         </Card>
       </div>
 
-      {/* Nylo IA Analysis */}
+      {/* Nox IA Analysis */}
       <Card className="p-5">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
@@ -166,7 +166,7 @@ export default function Behavior() {
               <Sparkles className="h-4 w-4 text-primary" />
             </div>
             <div>
-              <p className="font-bold text-foreground text-sm">Nylo IA ✨</p>
+              <p className="font-bold text-foreground text-sm">Nox IA ✨</p>
               <p className="text-xs text-muted-foreground">Análise personalizada</p>
             </div>
           </div>

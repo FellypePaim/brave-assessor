@@ -21,17 +21,17 @@ const PLAN_INFO: Record<string, { name: string; price: string; features: string[
     features: ["1 carteira", "Categorias básicas", "Relatórios limitados"],
   },
   mensal: {
-    name: "Nylo Mensal",
+    name: "Nox Mensal",
     price: "R$ 39,90",
     features: ["WhatsApp conectado", "1 cartão de crédito", "Orçamentos por categoria", "Relatórios básicos", "Previsões com IA"],
   },
   trimestral: {
-    name: "Nylo Trimestral",
+    name: "Nox Trimestral",
     price: "R$ 29,90",
     features: ["Tudo do Mensal", "Modo família (2 pessoas)", "Relatórios avançados", "Metas financeiras", "Suporte prioritário"],
   },
   anual: {
-    name: "Nylo Anual",
+    name: "Nox Anual",
     price: "R$ 19,90",
     features: ["Tudo do Trimestral", "Modo família (5 pessoas)", "Investimentos", "Análise comportamental", "Assessor IA completo"],
   },
@@ -386,7 +386,7 @@ export default function Settings() {
             </div>
             <div>
               <p className="text-sm font-medium text-foreground">Novidades e Atualizações</p>
-              <p className="text-xs text-muted-foreground">Receba novidades sobre o Nylo e novas funcionalidades</p>
+              <p className="text-xs text-muted-foreground">Receba novidades sobre o Nox e novas funcionalidades</p>
             </div>
           </div>
           <Switch

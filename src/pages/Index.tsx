@@ -15,7 +15,7 @@ import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger,
 } from "@/components/ui/accordion";
 
-const WHATSAPP_LINK = "https://wa.me/5511999999999?text=Quero%20começar%20a%20usar%20o%20Nylo%20Assessor";
+const WHATSAPP_LINK = "https://wa.me/5511999999999?text=Quero%20começar%20a%20usar%20o%20Nox%20Assessor";
 
 const easeOut = [0.22, 1, 0.36, 1] as const;
 
@@ -79,7 +79,7 @@ function Header({ onOpenAuth }: { onOpenAuth: () => void }) {
       <div className="container mx-auto flex items-center justify-between h-16 px-4">
         <a href="#" className="flex items-center gap-2 font-bold text-xl text-foreground">
           <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground text-sm font-extrabold">N</div>
-          Nylo Assessor
+          Nox Assessor
         </a>
         <nav className="hidden md:flex items-center gap-6">
           {links.map((l) => (
@@ -189,7 +189,7 @@ function Hero() {
           <div className="rounded-3xl overflow-hidden shadow-2xl shadow-primary/10">
             <img
               src={heroImage}
-              alt="Mulher usando o Nylo Assessor no celular"
+              alt="Mulher usando o Nox Assessor no celular"
               className="w-full h-auto object-cover"
               loading="eager"
             />
@@ -208,10 +208,10 @@ function WhatIs() {
     <section id="o-que-e" className="py-16 md:py-24 bg-secondary/30">
       <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={stagger} className="container mx-auto px-4 max-w-3xl text-center">
         <motion.h2 variants={fadeUp} className="text-3xl md:text-4xl font-bold text-foreground">
-          O que é o Nylo Assessor?
+          O que é o Nox Assessor?
         </motion.h2>
         <motion.p variants={fadeUp} className="mt-6 text-muted-foreground text-lg leading-relaxed">
-          O Nylo combina a praticidade do WhatsApp com inteligência artificial para transformar a maneira como você cuida do seu dinheiro. Sem planilhas complicadas, sem apps que você esquece de abrir.
+          O Nox combina a praticidade do WhatsApp com inteligência artificial para transformar a maneira como você cuida do seu dinheiro. Sem planilhas complicadas, sem apps que você esquece de abrir.
         </motion.p>
         <motion.p variants={fadeUp} className="mt-4 text-muted-foreground text-lg leading-relaxed">
           É como conversar com um amigo que entende de finanças: você manda uma mensagem e ele organiza tudo pra você, sem julgamento e com dicas práticas.
@@ -226,7 +226,7 @@ const steps = [
   {
     icon: MessageSquare,
     title: "Mande um zap",
-    desc: 'Digite "gastei 45 no mercado", mande um áudio ou foto do recibo. O Nylo entende tudo.',
+    desc: 'Digite "gastei 45 no mercado", mande um áudio ou foto do recibo. O Nox entende tudo.',
     chip: { text: '"Gastei 89 de uber hoje"', variant: "pink" as const },
   },
   {
@@ -244,7 +244,7 @@ const steps = [
   {
     icon: Bell,
     title: "Receba alertas inteligentes",
-    desc: "O Nylo avisa quando você está gastando demais ou quando uma conta vai vencer.",
+    desc: "O Nox avisa quando você está gastando demais ou quando uma conta vai vencer.",
     chip: { text: "⚠ Você já gastou 80% do limite", variant: "warning" as const },
   },
 ];
@@ -372,7 +372,7 @@ function SocialProof() {
           <Card className="border-border hover:shadow-lg transition-shadow duration-300">
             <CardContent className="p-6 text-center">
               <p className="text-muted-foreground italic leading-relaxed">
-                "Eu nunca consegui manter uma planilha. Com o Nylo, eu só mando um zap e pronto. Já economizei mais de R$ 800 em 3 meses."
+                "Eu nunca consegui manter uma planilha. Com o Nox, eu só mando um zap e pronto. Já economizei mais de R$ 800 em 3 meses."
               </p>
               <p className="mt-4 text-sm font-semibold text-foreground">— Marina S., São Paulo</p>
             </CardContent>
@@ -418,7 +418,7 @@ function Pricing() {
     <section id="planos" className="py-16 md:py-24 bg-secondary/30">
       <div className="container mx-auto px-4">
         <motion.h2 initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} className="text-3xl md:text-4xl font-bold text-center text-foreground">
-          Planos e Preços do Nylo Assessor
+          Planos e Preços do Nox Assessor
         </motion.h2>
         <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={stagger} className="mt-12 grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
           {plans.map((p, i) => (
@@ -462,8 +462,8 @@ function Pricing() {
 
 /* ─── FAQ ─── */
 const faqs = [
-  { q: "O Nylo é complicado de usar?", a: "Não! Se você sabe mandar um WhatsApp, já sabe usar o Nylo. Sem instalação, sem configuração complicada." },
-  { q: "Preciso entender de finanças?", a: "De jeito nenhum. O Nylo traduz tudo em linguagem simples e te dá dicas práticas, sem jargão financeiro." },
+  { q: "O Nox é complicado de usar?", a: "Não! Se você sabe mandar um WhatsApp, já sabe usar o Nox. Sem instalação, sem configuração complicada." },
+  { q: "Preciso entender de finanças?", a: "De jeito nenhum. O Nox traduz tudo em linguagem simples e te dá dicas práticas, sem jargão financeiro." },
   { q: "Meus dados estão seguros?", a: "Sim. Usamos criptografia de ponta a ponta e seguimos todas as normas da LGPD. Seus dados são só seus." },
   { q: "Posso registrar gastos por voz?", a: "Pode sim! Basta mandar um áudio no WhatsApp e a IA transcreve e registra automaticamente." },
   { q: "Posso usar com minha família?", a: "Claro! Nos planos Trimestral e Anual, você pode adicionar membros da família para controlar as finanças juntos." },
@@ -495,13 +495,13 @@ function FAQ() {
   );
 }
 
-/* ─── WHY NYLO ─── */
-function WhyNylo() {
+/* ─── WHY NOX ─── */
+function WhyNox() {
   return (
     <section className="py-16 md:py-24 bg-secondary/30">
       <div className="container mx-auto px-4 max-w-3xl text-center">
         <motion.h2 initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} className="text-3xl md:text-4xl font-bold text-foreground">
-          Por que escolher o Nylo?
+          Por que escolher o Nox?
         </motion.h2>
         <motion.ul initial="hidden" whileInView="visible" viewport={{ once: true }} variants={stagger} className="mt-8 space-y-4 text-left max-w-md mx-auto">
           {[
@@ -530,7 +530,7 @@ function Footer() {
     <footer className="border-t border-border py-10">
       <div className="container mx-auto px-4 text-center space-y-3">
         <p className="text-sm text-muted-foreground">Hubflows Tecnologia Ltda — CNPJ: 49.084.621/0001-90</p>
-        <p className="text-sm text-muted-foreground">© 2026 Nylo Assessor. Todos os direitos reservados.</p>
+        <p className="text-sm text-muted-foreground">© 2026 Nox Assessor. Todos os direitos reservados.</p>
         <div className="flex justify-center gap-4 text-sm">
           <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">Termos de Uso</a>
           <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">Privacidade</a>
@@ -634,7 +634,7 @@ function Benefits() {
             <div className="rounded-3xl overflow-hidden shadow-2xl shadow-primary/10 relative">
               <img
                 src={benefitsImage}
-                alt="Mulher usando o Nylo no celular"
+                alt="Mulher usando o Nox no celular"
                 className="w-full h-auto object-cover"
                 loading="lazy"
               />
@@ -672,7 +672,7 @@ function Benefits() {
               Mais controle, <span className="text-primary">menos esforço</span>
             </motion.h2>
             <motion.p variants={fadeUp} className="mt-3 text-muted-foreground">
-              O que você ganha usando o Nylo todos os dias
+              O que você ganha usando o Nox todos os dias
             </motion.p>
 
             <div className="mt-8 space-y-3">
@@ -726,7 +726,7 @@ function Comparison() {
             Por que não usar <span className="text-primary">planilha</span>?
           </motion.h2>
           <motion.p variants={fadeUp} className="mt-3 text-muted-foreground max-w-lg mx-auto">
-            Comparamos o Nylo com as alternativas mais comuns para você decidir com clareza
+            Comparamos o Nox com as alternativas mais comuns para você decidir com clareza
           </motion.p>
         </motion.div>
 
@@ -752,7 +752,7 @@ function Comparison() {
                       <div className="text-[10px] md:text-xs text-muted-foreground">Mobills, Guiabolso</div>
                     </th>
                     <th className="p-3 md:p-4 text-center">
-                      <div className="font-semibold text-primary text-xs md:text-sm">Nylo</div>
+                      <div className="font-semibold text-primary text-xs md:text-sm">Nox</div>
                       <div className="text-[10px] md:text-xs text-muted-foreground">IA + WhatsApp</div>
                     </th>
                   </tr>
@@ -805,7 +805,7 @@ const Index = () => {
       <SocialProof />
       <Pricing />
       <FAQ />
-      <WhyNylo />
+      <WhyNox />
       <Footer />
     </main>
   );

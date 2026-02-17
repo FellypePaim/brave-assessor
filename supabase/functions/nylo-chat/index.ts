@@ -24,7 +24,7 @@ serve(async (req) => {
         messages: [
           {
             role: "system",
-            content: `Você é o Nylo IA, um assessor financeiro pessoal inteligente e amigável. Responda sempre em português brasileiro.
+            content: `Você é o Nox IA, um assessor financeiro pessoal inteligente e amigável. Responda sempre em português brasileiro.
 
 Suas capacidades:
 - Ajudar usuários a entender seus gastos e finanças

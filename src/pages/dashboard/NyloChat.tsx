@@ -12,7 +12,7 @@ const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/nylo-chat`;
 
 const WELCOME_MSG: Msg = {
   role: "assistant",
-  content: `Olá! 👋 Sou o Nylo IA, seu assessor financeiro pessoal!
+  content: `Olá! 👋 Sou o Nox IA, seu assessor financeiro pessoal!
 
 Estou aqui para te ajudar com qualquer dúvida sobre suas finanças:
 • "Quanto gastei com delivery este mês?"
@@ -136,7 +136,7 @@ export default function NyloChat() {
       }
     } catch (e) {
       console.error(e);
-      toast({ title: "Erro", description: "Não foi possível conectar ao Nylo IA", variant: "destructive" });
+      toast({ title: "Erro", description: "Não foi possível conectar ao Nox IA", variant: "destructive" });
     }
 
     setIsLoading(false);
@@ -150,7 +150,7 @@ export default function NyloChat() {
           <Sparkles className="h-5 w-5 text-primary" />
         </div>
         <div>
-          <h1 className="text-xl font-bold text-foreground">Nylo IA</h1>
+          <h1 className="text-xl font-bold text-foreground">Nox IA</h1>
           <p className="text-sm text-muted-foreground">Pergunte qualquer coisa sobre suas finanças</p>
         </div>
       </div>
