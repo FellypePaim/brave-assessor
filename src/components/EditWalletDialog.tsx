@@ -13,6 +13,7 @@ interface Wallet {
   type: string;
   balance: number;
   color?: string | null;
+  icon?: string | null;
 }
 
 interface Props {
@@ -47,7 +48,8 @@ export function EditWalletDialog({ wallet, open, onOpenChange }: Props) {
       setName(wallet.name);
       setBalance(String(wallet.balance));
       setBank("");
-      setSelectedIcon(0);
+      const iconIdx = wallet.icon ? walletIcons.indexOf(wallet.icon) : 0;
+      setSelectedIcon(iconIdx >= 0 ? iconIdx : 0);
       const colorIdx = wallet.color ? walletColors.indexOf(wallet.color) : 0;
       setSelectedColor(colorIdx >= 0 ? colorIdx : 0);
     }
@@ -61,6 +63,7 @@ export function EditWalletDialog({ wallet, open, onOpenChange }: Props) {
       type: wallet.type,
       balance: parseFloat(balance) || 0,
       color: walletColors[selectedColor],
+      icon: walletIcons[selectedIcon],
     }).eq("id", wallet.id);
     if (error) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
