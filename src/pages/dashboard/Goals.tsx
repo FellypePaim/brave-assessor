@@ -14,8 +14,8 @@ export default function Goals() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [showCalc, setShowCalc] = useState(false);
-  const [amount, setAmount] = useState(20000);
-  const [months, setMonths] = useState(12);
+  const [amount, setAmount] = useState(0);
+  const [months, setMonths] = useState(0);
   const [goalName, setGoalName] = useState("");
 
   const { data: goals = [] } = useQuery({
