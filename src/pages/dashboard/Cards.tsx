@@ -39,6 +39,9 @@ export default function Cards() {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
     .toISOString()
     .slice(0, 10);
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+    .toISOString()
+    .slice(0, 10);
 
   const { data: cardTransactions = [] } = useQuery({
     queryKey: ["card-transactions", user?.id, monthStart],
@@ -49,6 +52,7 @@ export default function Cards() {
         .eq("user_id", user!.id)
         .not("card_id", "is", null)
         .gte("date", monthStart)
+        .lte("date", monthEnd)
         .order("date", { ascending: false });
       if (error) throw error;
       return data;
