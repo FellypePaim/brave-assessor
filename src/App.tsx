@@ -14,6 +14,7 @@ import Placeholder from "./pages/dashboard/Placeholder";
 import Wallets from "./pages/dashboard/Wallets";
 import Categories from "./pages/dashboard/Categories";
 import Cards from "./pages/dashboard/Cards";
+import Bills from "./pages/dashboard/Bills";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -38,7 +39,7 @@ const App = () => (
               }
             >
               <Route index element={<Dashboard />} />
-              <Route path="transactions" element={<Placeholder />} />
+              <Route path="transactions" element={<Bills />} />
               <Route path="wallets" element={<Wallets />} />
               <Route path="cards" element={<Cards />} />
               <Route path="budgets" element={<Categories />} />
