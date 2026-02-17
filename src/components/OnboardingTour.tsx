@@ -11,6 +11,11 @@ import {
   ArrowRight,
   ChevronRight,
 } from "lucide-react";
+import onboarding1 from "@/assets/onboarding-1.png";
+import onboarding2 from "@/assets/onboarding-2.png";
+import onboarding3 from "@/assets/onboarding-3.png";
+import onboarding4 from "@/assets/onboarding-4.png";
+import onboarding5 from "@/assets/onboarding-5.png";
 
 const steps = [
   {
@@ -19,6 +24,7 @@ const steps = [
     description:
       "Acompanhe receitas, despesas e saldo em tempo real. Tudo organizado em um único lugar.",
     color: "bg-primary",
+    image: onboarding1,
   },
   {
     icon: Wallet,
@@ -26,6 +32,7 @@ const steps = [
     description:
       "Cadastre suas contas bancárias, carteiras digitais e cartões de crédito para controle total.",
     color: "bg-emerald-500",
+    image: onboarding2,
   },
   {
     icon: MessageSquare,
@@ -33,6 +40,7 @@ const steps = [
     description:
       'Envie uma mensagem simples como "gastei 45 no mercado" e a IA entende automaticamente.',
     color: "bg-violet-500",
+    image: onboarding3,
   },
   {
     icon: Target,
@@ -40,6 +48,7 @@ const steps = [
     description:
       "Defina objetivos como viagens, reserva de emergência e acompanhe seu progresso.",
     color: "bg-orange-500",
+    image: onboarding4,
   },
   {
     icon: BarChart3,
@@ -47,6 +56,7 @@ const steps = [
     description:
       "Visualize para onde vai seu dinheiro com gráficos e insights personalizados.",
     color: "bg-blue-500",
+    image: onboarding5,
   },
 ];
 
@@ -103,8 +113,7 @@ export function OnboardingTour({ onComplete }: OnboardingTourProps) {
           </div>
         </div>
 
-        {/* Step content */}
-        <div className="px-6 pt-6 pb-2 min-h-[280px] flex flex-col items-center justify-center">
+        <div className="px-6 pt-4 pb-2 min-h-[380px] flex flex-col items-center justify-center">
           <AnimatePresence mode="wait">
             <motion.div
               key={current}
@@ -115,14 +124,21 @@ export function OnboardingTour({ onComplete }: OnboardingTourProps) {
               className="flex flex-col items-center text-center"
             >
               <div
-                className={`h-16 w-16 rounded-2xl ${step.color} text-white flex items-center justify-center mb-5`}
+                className={`h-14 w-14 rounded-2xl ${step.color} text-white flex items-center justify-center mb-4`}
               >
-                <step.icon className="h-8 w-8" />
+                <step.icon className="h-7 w-7" />
               </div>
               <h2 className="text-xl font-bold text-foreground">{step.title}</h2>
-              <p className="mt-3 text-muted-foreground text-sm leading-relaxed max-w-xs">
+              <p className="mt-2 text-muted-foreground text-sm leading-relaxed max-w-xs">
                 {step.description}
               </p>
+              <div className="mt-4 w-48 h-48 rounded-2xl overflow-hidden bg-muted/30 flex items-center justify-center">
+                <img
+                  src={step.image}
+                  alt={step.title}
+                  className="w-full h-full object-contain"
+                />
+              </div>
             </motion.div>
           </AnimatePresence>
         </div>
