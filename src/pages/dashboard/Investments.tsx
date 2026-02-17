@@ -1,21 +1,46 @@
+import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Plus, TrendingUp, DollarSign, BarChart3, RefreshCw } from "lucide-react";
 
-const marketData = [
-  { label: "DÓLAR", value: "R$ 5,22", change: "+0.30%", positive: true },
-  { label: "EURO", value: "R$ 6,18", change: "-0.18%", positive: false },
-  { label: "LIBRA", value: "R$ 7,07", change: "-0.70%", positive: false },
-  { label: "BITCOIN", value: "R$ 375.887,98", change: "-0.84%", positive: false },
-  { label: "IBOVESPA", value: "186.464 pts", change: "-0.69%", positive: false },
-  { label: "IFIX", value: "3.853 pts", change: "+0.51%", positive: true },
-  { label: "NASDAQ", value: "22.643 pts", change: "+0.43%", positive: true },
-  { label: "DOW JONES", value: "49.617 pts", change: "+0.23%", positive: true },
-  { label: "CDI", value: "0.00%", change: null, positive: true },
-  { label: "SELIC", value: "0.00%", change: null, positive: true },
-];
+interface MarketItem {
+  label: string;
+  value: string;
+  change: string | null;
+  positive: boolean;
+}
 
 export default function Investments() {
+  const [secondsAgo, setSecondsAgo] = useState(0);
+
+  const { data, refetch, isFetching } = useQuery({
+    queryKey: ["market-data"],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("market-data");
+      if (error) throw error;
+      return data as { market: MarketItem[]; updatedAt: string };
+    },
+    refetchInterval: 30000,
+    staleTime: 25000,
+  });
+
+  // Timer for "seconds ago" display
+  useEffect(() => {
+    setSecondsAgo(0);
+    const interval = setInterval(() => setSecondsAgo((s) => s + 1), 1000);
+    return () => clearInterval(interval);
+  }, [data?.updatedAt]);
+
+  const marketData = data?.market ?? [];
+
+  const timeLabel = secondsAgo < 5
+    ? "agora mesmo"
+    : secondsAgo < 60
+      ? `há ${secondsAgo}s`
+      : `há ${Math.floor(secondsAgo / 60)}min`;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -37,10 +62,13 @@ export default function Investments() {
       <div>
         <div className="flex items-center justify-between mb-3">
           <p className="text-sm font-medium text-muted-foreground">Mercado Hoje</p>
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span>em menos de um minuto</span>
-            <RefreshCw className="h-3.5 w-3.5" />
-          </div>
+          <button
+            onClick={() => refetch()}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <span>{timeLabel}</span>
+            <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
+          </button>
         </div>
         <div className="flex gap-3 overflow-x-auto pb-2">
           {marketData.map((item) => (
@@ -57,6 +85,9 @@ export default function Investments() {
               )}
             </div>
           ))}
+          {marketData.length === 0 && !isFetching && (
+            <p className="text-sm text-muted-foreground py-4">Dados indisponíveis no momento</p>
+          )}
         </div>
       </div>
 
