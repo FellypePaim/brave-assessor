@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { motion } from "framer-motion";
+import { useState, useRef } from "react";
+import { motion, useScroll, useTransform, useInView } from "framer-motion";
 import {
   MessageSquare, Mic, Camera, Brain, CreditCard, Target, Wallet,
   Users, FileText, Bell, TrendingUp, ChevronRight, Star, Shield,
@@ -13,13 +13,20 @@ import {
 
 const WHATSAPP_LINK = "https://wa.me/5511999999999?text=Quero%20começar%20a%20usar%20o%20Nylo%20Assessor";
 
+const easeOut = [0.22, 1, 0.36, 1] as const;
+
 const fadeUp = {
-  hidden: { opacity: 0, y: 24 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.5 } },
+  hidden: { opacity: 0, y: 32 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: easeOut as unknown as [number, number, number, number] } },
+};
+
+const fadeScale = {
+  hidden: { opacity: 0, scale: 0.95, y: 20 },
+  visible: { opacity: 1, scale: 1, y: 0, transition: { duration: 0.5, ease: easeOut as unknown as [number, number, number, number] } },
 };
 
 const stagger = {
-  visible: { transition: { staggerChildren: 0.1 } },
+  visible: { transition: { staggerChildren: 0.12 } },
 };
 
 function WhatsAppCTA({ children = "Começar no WhatsApp", className = "", size = "default" }: { children?: string; className?: string; size?: "default" | "sm" | "lg" | "icon" }) {
@@ -100,10 +107,16 @@ function Header() {
 
 /* ─── HERO ─── */
 function Hero() {
+  const heroRef = useRef(null);
+  const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] });
+  const heroY = useTransform(scrollYProgress, [0, 1], [0, 80]);
+  const mockY = useTransform(scrollYProgress, [0, 1], [0, -40]);
+  const heroOpacity = useTransform(scrollYProgress, [0, 0.8], [1, 0.3]);
+
   return (
-    <section className="pt-28 pb-16 md:pt-36 md:pb-24">
+    <section ref={heroRef} className="pt-28 pb-16 md:pt-36 md:pb-24 relative overflow-hidden">
       <div className="container mx-auto px-4 grid md:grid-cols-2 gap-12 items-center">
-        <motion.div initial="hidden" animate="visible" variants={stagger}>
+        <motion.div initial="hidden" animate="visible" variants={stagger} style={{ y: heroY, opacity: heroOpacity }}>
           <motion.h1 variants={fadeUp} className="text-4xl md:text-5xl lg:text-6xl font-extrabold leading-tight text-foreground">
             Assistente Financeiro no{" "}
             <span className="text-primary">WhatsApp</span> com Inteligência Artificial
@@ -122,7 +135,7 @@ function Hero() {
         </motion.div>
 
         {/* WhatsApp chat mock */}
-        <motion.div initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3, duration: 0.6 }} className="relative mx-auto w-full max-w-sm">
+        <motion.div initial={{ opacity: 0, x: 40, scale: 0.95 }} animate={{ opacity: 1, x: 0, scale: 1 }} transition={{ delay: 0.3, duration: 0.7, ease: "easeOut" }} style={{ y: mockY }} className="relative mx-auto w-full max-w-sm">
           <div className="rounded-3xl border border-border bg-card shadow-2xl shadow-primary/5 overflow-hidden">
             <div className="bg-primary/10 px-5 py-3 flex items-center gap-3">
               <div className="h-9 w-9 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold">N</div>
@@ -183,16 +196,21 @@ const steps = [
 ];
 
 function HowItWorks() {
+  const ref = useRef(null);
+  const { scrollYProgress } = useScroll({ target: ref, offset: ["start end", "end start"] });
+  const bgY = useTransform(scrollYProgress, [0, 1], [-30, 30]);
+
   return (
-    <section id="como-funciona" className="py-16 md:py-24">
-      <div className="container mx-auto px-4">
-        <motion.h2 initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} className="text-3xl md:text-4xl font-bold text-center text-foreground">
+    <section id="como-funciona" className="py-16 md:py-24 relative overflow-hidden" ref={ref}>
+      <motion.div className="absolute inset-0 bg-gradient-to-b from-transparent via-accent/5 to-transparent pointer-events-none" style={{ y: bgY }} />
+      <div className="container mx-auto px-4 relative">
+        <motion.h2 initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-80px" }} variants={fadeUp} className="text-3xl md:text-4xl font-bold text-center text-foreground">
           Como Funciona o Controle Financeiro pelo WhatsApp
         </motion.h2>
-        <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={stagger} className="mt-12 grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-60px" }} variants={stagger} className="mt-12 grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {steps.map((s, i) => (
-            <motion.div key={i} variants={fadeUp}>
-              <Card className="h-full border-border bg-card hover:shadow-lg hover:shadow-primary/5 transition-shadow duration-300">
+            <motion.div key={i} variants={fadeScale}>
+              <Card className="h-full border-border bg-card hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-1 transition-all duration-300">
                 <CardContent className="p-6 flex flex-col items-center text-center gap-4">
                   <div className="flex items-center justify-center h-14 w-14 rounded-2xl bg-accent text-accent-foreground">
                     <s.icon className="h-6 w-6" />
@@ -225,15 +243,19 @@ const features = [
 ];
 
 function Features() {
+  const ref = useRef(null);
+  const { scrollYProgress } = useScroll({ target: ref, offset: ["start end", "end start"] });
+  const sectionY = useTransform(scrollYProgress, [0, 1], [40, -40]);
+
   return (
-    <section id="funcionalidades" className="py-16 md:py-24 bg-secondary/30">
+    <section id="funcionalidades" className="py-16 md:py-24 bg-secondary/30 relative overflow-hidden" ref={ref}>
       <div className="container mx-auto px-4">
-        <motion.h2 initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} className="text-3xl md:text-4xl font-bold text-center text-foreground">
+        <motion.h2 initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-80px" }} variants={fadeUp} className="text-3xl md:text-4xl font-bold text-center text-foreground">
           Funcionalidades do App de Finanças com IA
         </motion.h2>
-        <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={stagger} className="mt-12 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-60px" }} variants={stagger} style={{ y: sectionY }} className="mt-12 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {features.map((f, i) => (
-            <motion.div key={i} variants={fadeUp} className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 hover:shadow-md transition-shadow duration-200">
+            <motion.div key={i} variants={fadeScale} className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
               <div className="flex-shrink-0 h-10 w-10 rounded-xl bg-accent flex items-center justify-center text-accent-foreground">
                 <f.icon className="h-5 w-5" />
               </div>
@@ -257,17 +279,17 @@ function SocialProof() {
   return (
     <section className="py-16 md:py-24">
       <div className="container mx-auto px-4">
-        <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={stagger} className="flex flex-wrap justify-center gap-6">
+        <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-60px" }} variants={stagger} className="flex flex-wrap justify-center gap-6">
           {stats.map((s, i) => (
-            <motion.div key={i} variants={fadeUp} className="flex items-center gap-3 rounded-full border border-border bg-card px-6 py-3 shadow-sm">
+            <motion.div key={i} variants={fadeScale} className="flex items-center gap-3 rounded-full border border-border bg-card px-6 py-3 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
               <s.icon className="h-5 w-5 text-primary" />
               <span className="font-bold text-foreground">{s.value}</span>
               <span className="text-sm text-muted-foreground">{s.label}</span>
             </motion.div>
           ))}
         </motion.div>
-        <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} className="mt-12 max-w-lg mx-auto">
-          <Card className="border-border">
+        <motion.div initial={{ opacity: 0, y: 30, scale: 0.97 }} whileInView={{ opacity: 1, y: 0, scale: 1 }} viewport={{ once: true, margin: "-60px" }} transition={{ duration: 0.6 }} className="mt-12 max-w-lg mx-auto">
+          <Card className="border-border hover:shadow-lg transition-shadow duration-300">
             <CardContent className="p-6 text-center">
               <p className="text-muted-foreground italic leading-relaxed">
                 "Eu nunca consegui manter uma planilha. Com o Nylo, eu só mando um zap e pronto. Já economizei mais de R$ 800 em 3 meses."
