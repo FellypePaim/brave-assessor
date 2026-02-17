@@ -1,16 +1,18 @@
 import {
   LayoutDashboard, Wallet, Tag, CreditCard, CalendarCheck,
   Target, TrendingUp, Brain, FileText, HeadphonesIcon,
-  Settings, LogOut, Sparkles, User
+  Settings, LogOut, Sparkles, User, ShieldCheck
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { useNavigate } from "react-router-dom";
 import {
   Sidebar,
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -32,8 +34,13 @@ const menuItems = [
   { title: "Configurações", url: "/dashboard/settings", icon: Settings },
 ];
 
+const adminItems = [
+  { title: "Atendimentos", url: "/dashboard/admin/support", icon: HeadphonesIcon },
+];
+
 export function AppSidebar() {
   const { signOut, user } = useAuth();
+  const { isAdmin } = useIsAdmin();
   const navigate = useNavigate();
   const displayName = user?.user_metadata?.display_name || "Usuário";
 
@@ -95,6 +102,34 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {/* Admin Menu */}
+        {isAdmin && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-xs text-muted-foreground uppercase tracking-wider px-3">
+              <ShieldCheck className="h-3.5 w-3.5 inline mr-1.5" />
+              Admin
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {adminItems.map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild>
+                      <NavLink
+                        to={item.url}
+                        className="flex items-center gap-3 text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/50 transition-colors"
+                        activeClassName="text-primary font-medium bg-transparent"
+                      >
+                        <item.icon className="h-4 w-4 shrink-0" />
+                        <span>{item.title}</span>
+                      </NavLink>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
       <SidebarFooter className="border-t border-border">
