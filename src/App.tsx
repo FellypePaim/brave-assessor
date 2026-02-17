@@ -18,6 +18,7 @@ import Bills from "./pages/dashboard/Bills";
 import Goals from "./pages/dashboard/Goals";
 import Investments from "./pages/dashboard/Investments";
 import Behavior from "./pages/dashboard/Behavior";
+import Reports from "./pages/dashboard/Reports";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -47,7 +48,7 @@ const App = () => (
               <Route path="cards" element={<Cards />} />
               <Route path="budgets" element={<Categories />} />
               <Route path="goals" element={<Goals />} />
-              <Route path="reports" element={<Placeholder />} />
+              <Route path="reports" element={<Reports />} />
               <Route path="chat" element={<Placeholder />} />
               <Route path="family" element={<Placeholder />} />
               <Route path="settings" element={<Placeholder />} />
