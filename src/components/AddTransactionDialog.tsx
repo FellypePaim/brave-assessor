@@ -3,12 +3,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, TrendingDown, TrendingUp, Repeat, Wallet, CreditCard, Landmark } from "lucide-react";
+import { Plus, TrendingDown, TrendingUp, Wallet, CreditCard, Landmark } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { Switch } from "@/components/ui/switch";
 
 interface Props {
   trigger?: React.ReactNode;
@@ -105,170 +104,162 @@ export function AddTransactionDialog({ trigger }: Props) {
         )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-[420px] p-0 gap-0 rounded-2xl overflow-hidden border-0 shadow-2xl">
-        <div className="p-6 pb-4">
+        <div className="px-5 pt-5 pb-3">
           <DialogHeader className="text-left">
-            <DialogTitle className="text-lg font-bold text-foreground">Nova Transação</DialogTitle>
-            <DialogDescription className="text-sm text-muted-foreground">
-              Registre rapidamente uma receita ou despesa
+            <DialogTitle className="text-base font-bold text-foreground">Nova Transação</DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Registre uma receita ou despesa
             </DialogDescription>
           </DialogHeader>
         </div>
 
-        <div className="px-6 pb-6 space-y-5">
+        <div className="px-5 pb-5 space-y-3.5">
           {/* Type toggle */}
           <div className="grid grid-cols-2 rounded-xl border border-border overflow-hidden">
             <button
               onClick={() => setType("expense")}
-              className={`flex items-center justify-center gap-2 py-3 text-sm font-medium transition-all ${
+              className={`flex items-center justify-center gap-1.5 py-2.5 text-sm font-medium transition-all ${
                 type === "expense"
                   ? "bg-foreground text-background"
                   : "bg-card text-muted-foreground hover:bg-muted/50"
               }`}
             >
-              <TrendingDown className="h-4 w-4" />
+              <TrendingDown className="h-3.5 w-3.5" />
               Despesa
             </button>
             <button
               onClick={() => setType("income")}
-              className={`flex items-center justify-center gap-2 py-3 text-sm font-medium transition-all ${
+              className={`flex items-center justify-center gap-1.5 py-2.5 text-sm font-medium transition-all ${
                 type === "income"
                   ? "bg-foreground text-background"
                   : "bg-card text-muted-foreground hover:bg-muted/50"
               }`}
             >
-              <TrendingUp className="h-4 w-4" />
+              <TrendingUp className="h-3.5 w-3.5" />
               Receita
             </button>
           </div>
 
-          {/* Amount */}
-          <div>
-            <label className="text-sm font-semibold text-foreground mb-2 block">Valor (R$)</label>
-            <Input
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              type="number"
-              step="0.01"
-              placeholder="0,00"
-              className="h-12 rounded-xl border-border text-lg font-medium"
-            />
+          {/* Amount + Date row */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-foreground mb-1 block">Valor (R$)</label>
+              <Input
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                type="number"
+                step="0.01"
+                placeholder="0,00"
+                className="h-10 rounded-xl border-border text-base font-medium"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-foreground mb-1 block">Data</label>
+              <Input
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                type="date"
+                className="h-10 rounded-xl border-border"
+              />
+            </div>
           </div>
 
-          {/* Category */}
-          <div>
-            <label className="text-sm font-semibold text-foreground mb-2 block">Categoria</label>
-            <Select value={categoryId} onValueChange={setCategoryId}>
-              <SelectTrigger className="h-12 rounded-xl border-border">
-                <SelectValue placeholder="Selecione uma categoria" />
-              </SelectTrigger>
-              <SelectContent>
-                {categories.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          {/* Category + Description row */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-foreground mb-1 block">Categoria</label>
+              <Select value={categoryId} onValueChange={setCategoryId}>
+                <SelectTrigger className="h-10 rounded-xl border-border">
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-foreground mb-1 block">Descrição</label>
+              <Input
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Ex: Almoço"
+                className="h-10 rounded-xl border-border"
+              />
+            </div>
           </div>
 
-          {/* Payment method */}
+          {/* Payment method - compact */}
           <div>
-            <label className="text-sm font-semibold text-foreground mb-2 block">Como você vai pagar?</label>
-            <div className="grid grid-cols-2 gap-3">
+            <label className="text-xs font-semibold text-foreground mb-1.5 block">Pagamento</label>
+            <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => setPayMethod("wallet")}
-                className={`flex flex-col items-center gap-1.5 p-4 rounded-2xl border-2 transition-all ${
+                className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 transition-all ${
                   payMethod === "wallet"
-                    ? "border-primary bg-primary text-primary-foreground shadow-lg shadow-primary/20"
+                    ? "border-primary bg-primary/10 text-primary"
                     : "border-border bg-card text-muted-foreground hover:border-muted-foreground/30"
                 }`}
               >
-                <Wallet className="h-5 w-5" />
-                <span className="text-sm font-semibold">Conta Corrente</span>
-                <span className="text-[10px] opacity-80">Pix / Débito</span>
+                <Wallet className="h-4 w-4 shrink-0" />
+                <div className="text-left">
+                  <span className="text-xs font-semibold block leading-tight">Conta</span>
+                  <span className="text-[10px] opacity-70">Pix / Débito</span>
+                </div>
               </button>
               <button
                 onClick={() => setPayMethod("card")}
-                className={`flex flex-col items-center gap-1.5 p-4 rounded-2xl border-2 transition-all ${
+                className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 transition-all ${
                   payMethod === "card"
-                    ? "border-primary bg-primary text-primary-foreground shadow-lg shadow-primary/20"
+                    ? "border-primary bg-primary/10 text-primary"
                     : "border-border bg-card text-muted-foreground hover:border-muted-foreground/30"
                 }`}
               >
-                <CreditCard className="h-5 w-5" />
-                <span className="text-sm font-semibold">Cartão de Crédito</span>
-                <span className="text-[10px] opacity-80">Fatura</span>
+                <CreditCard className="h-4 w-4 shrink-0" />
+                <div className="text-left">
+                  <span className="text-xs font-semibold block leading-tight">Cartão</span>
+                  <span className="text-[10px] opacity-70">Crédito</span>
+                </div>
               </button>
             </div>
           </div>
 
-          {/* Wallet selector */}
+          {/* Wallet selector - compact */}
           {payMethod === "wallet" && (
             <div>
-              <label className="text-sm font-semibold text-foreground mb-2 flex items-center gap-1.5">
-                <Landmark className="h-3.5 w-3.5" /> De qual conta sai?
+              <label className="text-xs font-semibold text-foreground mb-1 flex items-center gap-1">
+                <Landmark className="h-3 w-3" /> Conta
               </label>
               <Select value={walletId} onValueChange={setWalletId}>
-                <SelectTrigger className="h-12 rounded-xl border-border">
+                <SelectTrigger className="h-10 rounded-xl border-border">
                   <SelectValue placeholder="Selecione a conta" />
                 </SelectTrigger>
                 <SelectContent>
                   {wallets.map((w) => (
-                    <SelectItem key={w.id} value={w.id}>
-                      <div className="flex items-center justify-between w-full">
-                        <span>{w.name}</span>
-                      </div>
-                    </SelectItem>
+                    <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               {selectedWallet && (
-                <div className="mt-2 flex items-center justify-between px-3 py-2.5 rounded-xl bg-muted/50 border border-border">
-                  <div className="flex items-center gap-2">
-                    <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <Landmark className="h-4 w-4 text-primary" />
-                    </div>
-                    <span className="text-sm font-medium text-foreground">{selectedWallet.name}</span>
+                <div className="mt-1.5 flex items-center justify-between px-2.5 py-2 rounded-lg bg-muted/50 border border-border">
+                  <div className="flex items-center gap-1.5">
+                    <Landmark className="h-3.5 w-3.5 text-primary" />
+                    <span className="text-xs font-medium text-foreground">{selectedWallet.name}</span>
                   </div>
-                  <span className="text-sm font-bold text-primary">
+                  <span className="text-xs font-bold text-primary">
                     R$ {Number(selectedWallet.balance).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
                   </span>
                 </div>
               )}
-              {selectedWallet && amount && (
-                <p className="text-[11px] text-muted-foreground mt-1.5 flex items-center gap-1">
-                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary" />
-                  O saldo será deduzido automaticamente
-                </p>
-              )}
             </div>
           )}
-
-          {/* Description */}
-          <div>
-            <label className="text-sm font-semibold text-foreground mb-2 block">Descrição (opcional)</label>
-            <Input
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Ex: Almoço no restaurante"
-              className="h-12 rounded-xl border-border"
-            />
-          </div>
-
-          {/* Date */}
-          <div>
-            <label className="text-sm font-semibold text-foreground mb-2 block">Data</label>
-            <Input
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              type="date"
-              className="h-12 rounded-xl border-border"
-            />
-          </div>
 
           {/* Save */}
           <Button
             onClick={handleSave}
             disabled={saving || !amount}
-            className="w-full h-12 rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-base shadow-lg shadow-primary/20"
+            className="w-full h-11 rounded-2xl font-semibold text-sm shadow-lg shadow-primary/20 mt-1"
           >
             {saving ? "Salvando..." : "Salvar Transação"}
           </Button>
