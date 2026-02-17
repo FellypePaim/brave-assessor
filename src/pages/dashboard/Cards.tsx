@@ -50,7 +50,7 @@ export default function Cards() {
                 <div
                   key={card.id}
                   className="rounded-2xl text-white p-5 hover:brightness-110 transition-all cursor-pointer group relative"
-                  style={{ background: `linear-gradient(135deg, ${cardColor}, ${cardColor}cc)` }}
+                  style={{ background: cardColor }}
                   onClick={() => setEditCard(card)}
                 >
                   <button className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-white/20">

@@ -75,7 +75,7 @@ export default function Wallets() {
       <div
         key={w.id}
         className="rounded-xl text-white p-4 min-w-[160px] flex items-center gap-3 cursor-pointer hover:brightness-110 transition-all group relative"
-        style={{ background: `linear-gradient(135deg, ${bgColor}, ${bgColor}dd)` }}
+        style={{ background: bgColor }}
         onClick={() => setEditWallet(w)}
       >
         <Pencil className="absolute top-2 right-2 h-3.5 w-3.5 opacity-0 group-hover:opacity-70 transition-opacity" />
