@@ -30,6 +30,7 @@ export function AddTransactionDialog({ trigger }: Props) {
   const [saving, setSaving] = useState(false);
   const [payMethod, setPayMethod] = useState<"wallet" | "card">("wallet");
   const [isRecurring, setIsRecurring] = useState(false);
+  const [installments, setInstallments] = useState(1);
 
   const { data: categories = [] } = useQuery({
     queryKey: ["categories", user?.id],
@@ -88,20 +89,34 @@ export function AddTransactionDialog({ trigger }: Props) {
       recurringId = recData.id;
     }
 
-    // Create the transaction (as a bill if recurring)
-    const { error } = await supabase.from("transactions").insert({
-      user_id: user.id,
-      description: desc,
-      amount: parsedAmount,
-      type,
-      category_id: categoryId || null,
-      wallet_id: payMethod === "wallet" ? (walletId || null) : null,
-      card_id: payMethod === "card" ? (cardId || null) : null,
-      date,
-      due_date: isRecurring ? date : null,
-      is_paid: !isRecurring,
-      recurring_id: recurringId,
-    });
+    // Handle installments for credit card
+    const numInstallments = payMethod === "card" && installments > 1 ? installments : 1;
+    const installmentAmount = Math.round((parsedAmount / numInstallments) * 100) / 100;
+
+    const transactionsToInsert = [];
+    for (let i = 0; i < numInstallments; i++) {
+      const installmentDate = new Date(date);
+      installmentDate.setMonth(installmentDate.getMonth() + i);
+      const installmentDesc = numInstallments > 1
+        ? `${desc} (${i + 1}/${numInstallments})`
+        : desc;
+
+      transactionsToInsert.push({
+        user_id: user.id,
+        description: installmentDesc,
+        amount: installmentAmount,
+        type,
+        category_id: categoryId || null,
+        wallet_id: payMethod === "wallet" ? (walletId || null) : null,
+        card_id: payMethod === "card" ? (cardId || null) : null,
+        date: installmentDate.toISOString().slice(0, 10),
+        due_date: isRecurring ? date : null,
+        is_paid: !isRecurring && i === 0 && payMethod === "wallet",
+        recurring_id: recurringId,
+      });
+    }
+
+    const { error } = await supabase.from("transactions").insert(transactionsToInsert);
 
     if (error) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
@@ -142,6 +157,7 @@ export function AddTransactionDialog({ trigger }: Props) {
     setDate(new Date().toISOString().slice(0, 10));
     setPayMethod("wallet");
     setIsRecurring(false);
+    setInstallments(1);
   };
 
   const selectedWallet = wallets.find(w => w.id === walletId);
@@ -362,6 +378,34 @@ export function AddTransactionDialog({ trigger }: Props) {
                     <span className="text-xs text-muted-foreground">
                       Limite: {Number(selectedCard.credit_limit).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                     </span>
+                  )}
+                </div>
+              )}
+              {/* Installments */}
+              {selectedCard && (
+                <div className="mt-3">
+                  <label className="text-sm font-semibold text-foreground mb-2 block">Parcelas</label>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => setInstallments(n)}
+                        className={`h-9 min-w-[2.25rem] px-2 rounded-lg text-sm font-semibold transition-all ${
+                          installments === n
+                            ? "bg-primary text-primary-foreground shadow-md shadow-primary/20 scale-105"
+                            : "bg-muted text-muted-foreground hover:bg-muted/80"
+                        }`}
+                      >
+                        {n}x
+                      </button>
+                    ))}
+                  </div>
+                  {installments > 1 && amount && (
+                    <p className="text-[11px] text-muted-foreground mt-2 flex items-center gap-1">
+                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary" />
+                      {installments}x de R$ {(Math.round((parseFloat(amount) / installments) * 100) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 })} na fatura
+                    </p>
                   )}
                 </div>
               )}
