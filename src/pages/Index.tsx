@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { AuthModal } from "@/components/AuthModal";
 import { motion, useScroll, useTransform, useInView } from "framer-motion";
 import heroImage from "@/assets/hero-woman.jpg";
 import benefitsImage from "@/assets/hero-benefits.jpg";
@@ -63,7 +64,7 @@ function WhatsAppCTA({ children = "Começar no WhatsApp", className = "", size =
 }
 
 /* ─── HEADER ─── */
-function Header() {
+function Header({ onOpenAuth }: { onOpenAuth: () => void }) {
   const [open, setOpen] = useState(false);
   const links = [
     { label: "O que é", href: "#o-que-e" },
@@ -88,7 +89,7 @@ function Header() {
           ))}
         </nav>
         <div className="hidden md:flex items-center gap-3">
-          <a href="/login" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Entrar</a>
+          <button onClick={onOpenAuth} className="text-sm text-muted-foreground hover:text-foreground transition-colors">Entrar</button>
           <Button size="sm" className="rounded-full" asChild>
             <a href="#planos">Ver Planos <ArrowRight className="h-3.5 w-3.5 ml-1" /></a>
           </Button>
@@ -104,7 +105,9 @@ function Header() {
               {l.label}
             </a>
           ))}
-          <WhatsAppCTA className="w-full mt-2" />
+          <Button onClick={() => { setOpen(false); onOpenAuth(); }} variant="outline" className="w-full mt-2">
+            Entrar
+          </Button>
         </motion.div>
       )}
     </header>
@@ -785,22 +788,27 @@ function Comparison() {
 }
 
 /* ─── PAGE ─── */
-const Index = () => (
-  <main className="overflow-x-hidden">
-    <Header />
-    <Hero />
-    <MarqueeCarousel />
-    <WhatIs />
-    <HowItWorks />
-    <Benefits />
-    <Comparison />
-    <Features />
-    <SocialProof />
-    <Pricing />
-    <FAQ />
-    <WhyNylo />
-    <Footer />
-  </main>
-);
+const Index = () => {
+  const [authOpen, setAuthOpen] = useState(false);
+
+  return (
+    <main className="overflow-x-hidden">
+      <Header onOpenAuth={() => setAuthOpen(true)} />
+      <AuthModal open={authOpen} onOpenChange={setAuthOpen} />
+      <Hero />
+      <MarqueeCarousel />
+      <WhatIs />
+      <HowItWorks />
+      <Benefits />
+      <Comparison />
+      <Features />
+      <SocialProof />
+      <Pricing />
+      <FAQ />
+      <WhyNylo />
+      <Footer />
+    </main>
+  );
+};
 
 export default Index;
