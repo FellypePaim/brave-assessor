@@ -12,6 +12,7 @@ import DashboardLayout from "./layouts/DashboardLayout";
 import Dashboard from "./pages/Dashboard";
 import Placeholder from "./pages/dashboard/Placeholder";
 import Wallets from "./pages/dashboard/Wallets";
+import Categories from "./pages/dashboard/Categories";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -39,6 +40,7 @@ const App = () => (
               <Route path="transactions" element={<Placeholder />} />
               <Route path="wallets" element={<Wallets />} />
               <Route path="cards" element={<Placeholder />} />
+              <Route path="categories" element={<Categories />} />
               <Route path="budgets" element={<Placeholder />} />
               <Route path="goals" element={<Placeholder />} />
               <Route path="reports" element={<Placeholder />} />
