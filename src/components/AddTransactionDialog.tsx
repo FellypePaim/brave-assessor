@@ -52,33 +52,64 @@ export function AddTransactionDialog({ trigger }: Props) {
     if (!user || !amount) return;
     setSaving(true);
 
+    const desc = description.trim() || (type === "expense" ? "Despesa" : "Receita");
+    const parsedAmount = parseFloat(amount);
+    const dayOfMonth = new Date(date).getDate();
+
+    // If recurring, create the recurring template first
+    let recurringId: string | null = null;
+    if (isRecurring) {
+      const { data: recData, error: recError } = await supabase.from("recurring_transactions").insert({
+        user_id: user.id,
+        description: desc,
+        amount: parsedAmount,
+        type,
+        expense_type: expenseType,
+        category_id: categoryId || null,
+        wallet_id: walletId || null,
+        day_of_month: dayOfMonth,
+      }).select("id").single();
+
+      if (recError) {
+        toast({ title: "Erro ao criar recorrência", description: recError.message, variant: "destructive" });
+        setSaving(false);
+        return;
+      }
+      recurringId = recData.id;
+    }
+
+    // Create the transaction (as a bill if recurring)
     const { error } = await supabase.from("transactions").insert({
       user_id: user.id,
-      description: description.trim() || (type === "expense" ? "Despesa" : "Receita"),
-      amount: parseFloat(amount),
+      description: desc,
+      amount: parsedAmount,
       type,
       category_id: categoryId || null,
       wallet_id: walletId || null,
       date,
+      due_date: isRecurring ? date : null,
+      is_paid: !isRecurring,
+      recurring_id: recurringId,
     });
 
     if (error) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
     } else {
-      if (walletId) {
-        const delta = type === "income" ? parseFloat(amount) : -parseFloat(amount);
+      if (walletId && !isRecurring) {
+        const delta = type === "income" ? parsedAmount : -parsedAmount;
         const wallet = wallets.find(w => w.id === walletId);
         if (wallet) {
           await supabase.from("wallets").update({ balance: Number((wallet as any).balance || 0) + delta }).eq("id", walletId);
         }
       }
-      toast({ title: "Transação adicionada!" });
+      toast({ title: isRecurring ? "Conta recorrente criada!" : "Transação adicionada!" });
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
       queryClient.invalidateQueries({ queryKey: ["wallet-transactions"] });
       queryClient.invalidateQueries({ queryKey: ["wallets"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["bills-transactions"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["recurring-transactions"] });
       setOpen(false);
       resetForm();
     }
