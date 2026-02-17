@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, TrendingUp, DollarSign, BarChart3, RefreshCw } from "lucide-react";
+import { Plus, TrendingUp, DollarSign, BarChart3, RefreshCw, Bitcoin, Landmark, BarChart2, Receipt } from "lucide-react";
 
 interface MarketItem {
   label: string;
@@ -11,6 +11,19 @@ interface MarketItem {
   change: string | null;
   positive: boolean;
 }
+
+const iconMap: Record<string, { icon: React.ElementType; bg: string; color: string }> = {
+  "DÓLAR": { icon: DollarSign, bg: "bg-emerald-100", color: "text-emerald-600" },
+  "EURO": { icon: Landmark, bg: "bg-blue-100", color: "text-blue-600" },
+  "LIBRA": { icon: Landmark, bg: "bg-indigo-100", color: "text-indigo-600" },
+  "BITCOIN": { icon: Bitcoin, bg: "bg-amber-100", color: "text-amber-600" },
+  "IBOVESPA": { icon: TrendingUp, bg: "bg-rose-100", color: "text-rose-600" },
+  "IFIX": { icon: BarChart2, bg: "bg-violet-100", color: "text-violet-600" },
+  "NASDAQ": { icon: BarChart3, bg: "bg-sky-100", color: "text-sky-600" },
+  "DOW JONES": { icon: TrendingUp, bg: "bg-slate-100", color: "text-slate-600" },
+  "CDI": { icon: Receipt, bg: "bg-cyan-100", color: "text-cyan-600" },
+  "SELIC": { icon: Receipt, bg: "bg-teal-100", color: "text-teal-600" },
+};
 
 export default function Investments() {
   const [secondsAgo, setSecondsAgo] = useState(0);
@@ -71,20 +84,29 @@ export default function Investments() {
           </button>
         </div>
         <div className="flex gap-3 overflow-x-auto pb-2">
-          {marketData.map((item) => (
-            <div
-              key={item.label}
-              className="flex-shrink-0 bg-card border border-border rounded-xl px-4 py-3 min-w-[130px]"
-            >
-              <p className="text-xs font-semibold text-muted-foreground mb-1">{item.label}</p>
-              <p className="font-bold text-foreground text-sm">{item.value}</p>
-              {item.change && (
-                <p className={`text-xs mt-0.5 ${item.positive ? "text-emerald-500" : "text-rose-500"}`}>
-                  {item.positive ? "↗" : "↘"} {item.change}
-                </p>
-              )}
-            </div>
-          ))}
+          {marketData.map((item) => {
+            const style = iconMap[item.label] || { icon: DollarSign, bg: "bg-muted", color: "text-muted-foreground" };
+            const IconComp = style.icon;
+            return (
+              <div
+                key={item.label}
+                className="flex-shrink-0 bg-card border border-border rounded-xl px-4 py-3 min-w-[140px]"
+              >
+                <div className="flex items-center gap-1.5 mb-1">
+                  <div className={`h-5 w-5 rounded ${style.bg} flex items-center justify-center`}>
+                    <IconComp className={`h-3 w-3 ${style.color}`} />
+                  </div>
+                  <p className="text-xs font-semibold text-muted-foreground">{item.label}</p>
+                </div>
+                <p className="font-bold text-foreground text-sm">{item.value}</p>
+                {item.change && (
+                  <p className={`text-xs mt-0.5 ${item.positive ? "text-emerald-500" : "text-rose-500"}`}>
+                    {item.positive ? "↗" : "↘"} {item.change}
+                  </p>
+                )}
+              </div>
+            );
+          })}
           {marketData.length === 0 && !isFetching && (
             <p className="text-sm text-muted-foreground py-4">Dados indisponíveis no momento</p>
           )}
