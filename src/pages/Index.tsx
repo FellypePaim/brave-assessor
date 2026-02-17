@@ -461,11 +461,80 @@ function Footer() {
   );
 }
 
+/* ─── MARQUEE CAROUSEL ─── */
+const marqueeRow1 = [
+  { label: "Registros pelo WhatsApp", color: "bg-primary" },
+  { label: "IA que entende você", color: "bg-blue-500" },
+  { label: "Veja para onde vai seu dinheiro", color: "bg-amber-500" },
+  { label: "Receba alertas automáticos", color: "bg-rose-500" },
+  { label: "Defina e alcance metas", color: "bg-violet-500" },
+  { label: "Mande foto do recibo", color: "bg-emerald-500" },
+  { label: "Fale seus gastos por áudio", color: "bg-orange-500" },
+  { label: "Controle seus cartões", color: "bg-cyan-500" },
+];
+
+const marqueeRow2 = [
+  { label: "Relatórios automáticos", color: "bg-rose-500" },
+  { label: "Monte orçamentos inteligentes", color: "bg-amber-500" },
+  { label: "Acompanhe investimentos", color: "bg-blue-500" },
+  { label: "Compartilhe com a família", color: "bg-violet-500" },
+  { label: "Controle seus cartões", color: "bg-emerald-500" },
+  { label: "Fale seus gastos por áudio", color: "bg-orange-500" },
+  { label: "Mande foto do recibo", color: "bg-cyan-500" },
+];
+
+function MarqueeChip({ label, color }: { label: string; color: string }) {
+  return (
+    <div className="flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2.5 shadow-sm whitespace-nowrap flex-shrink-0">
+      <div className={`h-3 w-3 rounded-full ${color}`} />
+      <span className="text-sm font-medium text-foreground">{label}</span>
+    </div>
+  );
+}
+
+function MarqueeCarousel() {
+  return (
+    <section className="py-8 md:py-12 overflow-hidden">
+      <div className="space-y-4">
+        {/* Row 1 - scroll left */}
+        <div className="relative">
+          <div className="absolute left-0 top-0 bottom-0 w-24 bg-gradient-to-r from-background to-transparent z-10 pointer-events-none" />
+          <div className="absolute right-0 top-0 bottom-0 w-24 bg-gradient-to-l from-background to-transparent z-10 pointer-events-none" />
+          <motion.div
+            className="flex gap-4"
+            animate={{ x: ["0%", "-50%"] }}
+            transition={{ duration: 30, ease: "linear", repeat: Infinity }}
+          >
+            {[...marqueeRow1, ...marqueeRow1].map((item, i) => (
+              <MarqueeChip key={i} label={item.label} color={item.color} />
+            ))}
+          </motion.div>
+        </div>
+        {/* Row 2 - scroll right */}
+        <div className="relative">
+          <div className="absolute left-0 top-0 bottom-0 w-24 bg-gradient-to-r from-background to-transparent z-10 pointer-events-none" />
+          <div className="absolute right-0 top-0 bottom-0 w-24 bg-gradient-to-l from-background to-transparent z-10 pointer-events-none" />
+          <motion.div
+            className="flex gap-4"
+            animate={{ x: ["-50%", "0%"] }}
+            transition={{ duration: 35, ease: "linear", repeat: Infinity }}
+          >
+            {[...marqueeRow2, ...marqueeRow2].map((item, i) => (
+              <MarqueeChip key={i} label={item.label} color={item.color} />
+            ))}
+          </motion.div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /* ─── PAGE ─── */
 const Index = () => (
   <main className="overflow-x-hidden">
     <Header />
     <Hero />
+    <MarqueeCarousel />
     <WhatIs />
     <HowItWorks />
     <Features />
