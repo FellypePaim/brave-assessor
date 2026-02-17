@@ -19,6 +19,8 @@ import Goals from "./pages/dashboard/Goals";
 import Investments from "./pages/dashboard/Investments";
 import Behavior from "./pages/dashboard/Behavior";
 import Reports from "./pages/dashboard/Reports";
+import SupportChat from "./pages/dashboard/SupportChat";
+import AdminSupport from "./pages/dashboard/AdminSupport";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -49,11 +51,12 @@ const App = () => (
               <Route path="budgets" element={<Categories />} />
               <Route path="goals" element={<Goals />} />
               <Route path="reports" element={<Reports />} />
-              <Route path="chat" element={<Placeholder />} />
+              <Route path="chat" element={<SupportChat />} />
               <Route path="family" element={<Placeholder />} />
               <Route path="settings" element={<Placeholder />} />
               <Route path="investments" element={<Investments />} />
               <Route path="behavior" element={<Behavior />} />
+              <Route path="admin/support" element={<AdminSupport />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
