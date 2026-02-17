@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Lock, UtensilsCrossed, ShoppingCart, GraduationCap, Gamepad2, Home, Package, DollarSign, Heart, Car } from "lucide-react";
+import { Plus, Lock, UtensilsCrossed, ShoppingCart, GraduationCap, Gamepad2, Home, Package, DollarSign, Heart, Car, BookOpen, Shirt, MoreHorizontal } from "lucide-react";
 
 const iconMap: Record<string, React.ElementType> = {
   utensils: UtensilsCrossed,
@@ -15,18 +15,21 @@ const iconMap: Record<string, React.ElementType> = {
   dollar: DollarSign,
   heart: Heart,
   car: Car,
+  book: BookOpen,
+  shirt: Shirt,
+  "more-horizontal": MoreHorizontal,
 };
 
 const styleMap: Record<string, { dot: string; bg: string; text: string }> = {
-  red:     { dot: "bg-rose-500",    bg: "bg-gradient-to-br from-rose-100 to-red-200",     text: "text-rose-600" },
-  orange:  { dot: "bg-orange-500",  bg: "bg-gradient-to-br from-orange-100 to-amber-200", text: "text-orange-600" },
-  pink:    { dot: "bg-pink-500",    bg: "bg-gradient-to-br from-pink-100 to-fuchsia-200",  text: "text-pink-600" },
-  green:   { dot: "bg-emerald-500", bg: "bg-gradient-to-br from-emerald-100 to-green-200", text: "text-emerald-600" },
-  blue:    { dot: "bg-blue-500",    bg: "bg-gradient-to-br from-blue-100 to-sky-200",      text: "text-blue-600" },
-  cyan:    { dot: "bg-cyan-500",    bg: "bg-gradient-to-br from-cyan-100 to-teal-200",     text: "text-cyan-600" },
-  gray:    { dot: "bg-slate-500",   bg: "bg-gradient-to-br from-slate-100 to-gray-200",    text: "text-slate-600" },
-  yellow:  { dot: "bg-amber-500",   bg: "bg-gradient-to-br from-amber-100 to-yellow-200",  text: "text-amber-600" },
-  emerald: { dot: "bg-emerald-500", bg: "bg-gradient-to-br from-emerald-100 to-green-200", text: "text-emerald-600" },
+  "#ef4444": { dot: "bg-rose-500",    bg: "bg-gradient-to-br from-rose-100 to-red-200",     text: "text-rose-600" },
+  "#f97316": { dot: "bg-orange-500",  bg: "bg-gradient-to-br from-orange-100 to-amber-200", text: "text-orange-600" },
+  "#ec4899": { dot: "bg-pink-500",    bg: "bg-gradient-to-br from-pink-100 to-fuchsia-200", text: "text-pink-600" },
+  "#10b981": { dot: "bg-emerald-500", bg: "bg-gradient-to-br from-emerald-100 to-green-200", text: "text-emerald-600" },
+  "#3b82f6": { dot: "bg-blue-500",    bg: "bg-gradient-to-br from-blue-100 to-sky-200",      text: "text-blue-600" },
+  "#06b6d4": { dot: "bg-cyan-500",    bg: "bg-gradient-to-br from-cyan-100 to-teal-200",     text: "text-cyan-600" },
+  "#6b7280": { dot: "bg-slate-500",   bg: "bg-gradient-to-br from-slate-100 to-gray-200",    text: "text-slate-600" },
+  "#f59e0b": { dot: "bg-amber-500",   bg: "bg-gradient-to-br from-amber-100 to-yellow-200",  text: "text-amber-600" },
+  "#8b5cf6": { dot: "bg-violet-500",  bg: "bg-gradient-to-br from-violet-100 to-purple-200", text: "text-violet-600" },
 };
 
 export default function Categories() {
