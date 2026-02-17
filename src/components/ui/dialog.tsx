@@ -36,18 +36,24 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed inset-x-3 bottom-3 top-auto z-50 mx-auto grid w-auto max-w-lg gap-4 border bg-background p-6 shadow-lg rounded-2xl max-h-[80vh] overflow-y-auto sm:inset-auto sm:left-[50%] sm:top-[50%] sm:translate-x-[-50%] sm:translate-y-[-50%] sm:w-full sm:bottom-auto sm:rounded-lg sm:max-h-[85vh]",
+        // Mobile: bottom sheet style, safe area aware
+        "fixed z-50 grid gap-4 border bg-background shadow-lg overflow-y-auto",
+        "inset-x-0 bottom-0 top-auto mx-auto w-full max-w-lg rounded-t-2xl p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] max-h-[85vh]",
+        // Desktop: centered modal
+        "sm:inset-auto sm:left-[50%] sm:top-[50%] sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-xl sm:p-6 sm:max-h-[85vh] sm:bottom-auto sm:pb-6",
         className,
       )}
       asChild
       {...props}
     >
       <motion.div
-        initial={{ opacity: 0, scale: 0.92, y: 12 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: 8 }}
-        transition={{ type: "spring", duration: 0.45, bounce: 0.2 }}
+        initial={{ opacity: 0, y: 40 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 20 }}
+        transition={{ type: "spring", duration: 0.4, bounce: 0.15 }}
       >
+        {/* Drag handle indicator on mobile */}
+        <div className="mx-auto w-10 h-1 rounded-full bg-muted-foreground/20 mb-2 sm:hidden" />
         {children}
         <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity data-[state=open]:bg-accent data-[state=open]:text-muted-foreground hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
           <X className="h-4 w-4" />

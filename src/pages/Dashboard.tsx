@@ -134,6 +134,38 @@ export default function Dashboard() {
     enabled: !!user,
   });
 
+  const { data: overdueBills = [] } = useQuery({
+    queryKey: ["overdue-bills", user?.id],
+    queryFn: async () => {
+      const today = new Date().toISOString().slice(0, 10);
+      const { data } = await supabase
+        .from("transactions")
+        .select("*, categories(name)")
+        .eq("is_paid", false)
+        .lt("due_date", today)
+        .order("due_date", { ascending: true });
+      return data || [];
+    },
+    enabled: !!user,
+  });
+
+  const { data: upcomingBills = [] } = useQuery({
+    queryKey: ["upcoming-bills", user?.id],
+    queryFn: async () => {
+      const today = new Date().toISOString().slice(0, 10);
+      const next7 = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+      const { data } = await supabase
+        .from("transactions")
+        .select("*, categories(name)")
+        .eq("is_paid", false)
+        .gte("due_date", today)
+        .lte("due_date", next7)
+        .order("due_date", { ascending: true });
+      return data || [];
+    },
+    enabled: !!user,
+  });
+
   const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
   const paidExpenses = transactions.filter(t => t.type === "expense").reduce((s, t) => s + Number(t.amount), 0);
@@ -361,11 +393,45 @@ export default function Dashboard() {
             <div className="h-8 w-8 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center"><AlertTriangle className="h-4 w-4 text-orange-500" /></div>
             <h3 className="font-semibold text-foreground">Alertas Inteligentes</h3>
           </div>
-          {catEntries.some(([_, v]) => {
-            const cat = categories.find(c => c.name === _);
+
+          {(overdueBills.length > 0 || upcomingBills.length > 0 || catEntries.some(([catName, v]) => {
+            const cat = categories.find(c => c.name === catName);
             return cat?.budget_limit && v > Number(cat.budget_limit);
-          }) ? (
+          })) ? (
             <div className="mt-4 space-y-2">
+              {/* Overdue bills */}
+              {overdueBills.map((bill: any) => (
+                <div key={bill.id} className="flex items-center gap-3 p-3 bg-destructive/10 rounded-lg cursor-pointer hover:bg-destructive/15 transition-colors" onClick={() => navigate("/dashboard/transactions")}>
+                  <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">
+                      <strong>{bill.description}</strong> está vencida!
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Venceu em {new Date(bill.due_date).toLocaleDateString("pt-BR")} • {fmt(Number(bill.amount))}
+                    </p>
+                  </div>
+                  <ArrowRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                </div>
+              ))}
+
+              {/* Upcoming bills (next 7 days) */}
+              {upcomingBills.map((bill: any) => (
+                <div key={bill.id} className="flex items-center gap-3 p-3 bg-amber-500/10 rounded-lg cursor-pointer hover:bg-amber-500/15 transition-colors" onClick={() => navigate("/dashboard/transactions")}>
+                  <Clock className="h-4 w-4 text-amber-500 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">
+                      <strong>{bill.description}</strong> vence em breve
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Vence em {new Date(bill.due_date).toLocaleDateString("pt-BR")} • {fmt(Number(bill.amount))}
+                    </p>
+                  </div>
+                  <ArrowRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                </div>
+              ))}
+
+              {/* Budget alerts */}
               {catEntries.filter(([catName, v]) => {
                 const cat = categories.find(c => c.name === catName);
                 return cat?.budget_limit && v > Number(cat.budget_limit);
