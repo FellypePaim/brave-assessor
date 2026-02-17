@@ -1,10 +1,12 @@
 import { useState, useRef } from "react";
 import { motion, useScroll, useTransform, useInView } from "framer-motion";
 import heroImage from "@/assets/hero-woman.jpg";
+import benefitsImage from "@/assets/hero-benefits.jpg";
 import {
   MessageSquare, Mic, Camera, Brain, CreditCard, Target, Wallet,
   Users, FileText, Bell, TrendingUp, ChevronRight, Star, Shield,
-  Menu, X, CheckCircle2, Phone, ArrowRight, BarChart3, AlertTriangle
+  Menu, X, CheckCircle2, Phone, ArrowRight, BarChart3, AlertTriangle,
+  Eye, CalendarDays, Heart, TrendingUp as TrendingUpIcon, Check
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -604,6 +606,99 @@ function MarqueeCarousel() {
   );
 }
 
+/* ─── BENEFITS ─── */
+const benefits = [
+  { icon: Eye, text: "Saiba exatamente para onde seu dinheiro está indo" },
+  { icon: CalendarDays, text: "Pare de ser surpreendido no final do mês" },
+  { icon: Brain, text: "Tome decisões financeiras mais inteligentes" },
+  { icon: TrendingUpIcon, text: "Crie consciência financeira sem esforço" },
+  { icon: Heart, text: "Tenha clareza, não ansiedade" },
+];
+
+function Benefits() {
+  return (
+    <section className="py-16 md:py-24 bg-secondary/20">
+      <div className="container mx-auto px-4">
+        <div className="grid md:grid-cols-2 gap-12 items-center">
+          {/* Image with overlay */}
+          <motion.div
+            initial={{ opacity: 0, x: -30 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true, margin: "-80px" }}
+            transition={{ duration: 0.6 }}
+            className="relative mx-auto w-full max-w-md"
+          >
+            <div className="rounded-3xl overflow-hidden shadow-2xl shadow-primary/10 relative">
+              <img
+                src={benefitsImage}
+                alt="Mulher usando o Nylo no celular"
+                className="w-full h-auto object-cover"
+                loading="lazy"
+              />
+              {/* "Gaste com consciência" badge */}
+              <div className="absolute top-4 left-1/2 -translate-x-1/2">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-foreground/80 backdrop-blur-sm text-background text-xs font-medium px-4 py-2">
+                  ✨ Gaste com consciência
+                </span>
+              </div>
+              {/* Budget overlay */}
+              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-foreground/90 to-foreground/60 backdrop-blur-sm p-4 rounded-b-3xl">
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="text-background/80">Orçamento do mês</span>
+                  <span className="text-primary font-medium">Disponível</span>
+                </div>
+                <div className="flex justify-between text-lg font-bold mb-2">
+                  <span className="text-background">R$ 1.250,00</span>
+                  <span className="text-primary">R$ 420,00</span>
+                </div>
+                <div className="w-full h-1.5 rounded-full bg-background/20">
+                  <div className="h-full rounded-full bg-primary" style={{ width: "66%" }} />
+                </div>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Right side - title + benefit rows */}
+          <motion.div
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: "-80px" }}
+            variants={stagger}
+          >
+            <motion.h2 variants={fadeUp} className="text-3xl md:text-4xl font-bold text-foreground">
+              Mais controle, <span className="text-primary">menos esforço</span>
+            </motion.h2>
+            <motion.p variants={fadeUp} className="mt-3 text-muted-foreground">
+              O que você ganha usando o Nylo todos os dias
+            </motion.p>
+
+            <div className="mt-8 space-y-3">
+              {benefits.map((b, i) => (
+                <motion.div
+                  key={i}
+                  variants={fadeUp}
+                  className="flex items-center gap-4 rounded-xl border border-border bg-card p-4 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
+                >
+                  <div className="flex-shrink-0 h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                    <b.icon className="h-5 w-5" />
+                  </div>
+                  <span className="text-sm font-medium text-foreground">{b.text}</span>
+                </motion.div>
+              ))}
+            </div>
+
+            <motion.div variants={fadeUp} className="mt-6">
+              <span className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-5 py-2.5 text-sm font-medium text-primary">
+                <Check className="h-4 w-4" /> E muito mais…
+              </span>
+            </motion.div>
+          </motion.div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /* ─── PAGE ─── */
 const Index = () => (
   <main className="overflow-x-hidden">
@@ -612,6 +707,7 @@ const Index = () => (
     <MarqueeCarousel />
     <WhatIs />
     <HowItWorks />
+    <Benefits />
     <Features />
     <SocialProof />
     <Pricing />
