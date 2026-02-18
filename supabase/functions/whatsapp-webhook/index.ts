@@ -33,20 +33,24 @@ async function downloadMediaFromUazapi(messageId: string, mediaType?: string): P
 
   // UAZAPI V2 - The full messageId from webhook is "instancePhone:messageHash"
   const shortId = messageId.includes(":") ? messageId.split(":")[1] : messageId;
+  const fullId = messageId; // e.g. "553799385148:AC6B99D741D02E57F78F92C4252C238B"
 
-  // Try GET (405 on POST means endpoint exists but wrong method) and POST variants
+  // 405 on POST = endpoint exists but wrong method → try GET with path param
+  // 404 on GET with query string → try path parameter style
   const endpoints = [
-    // GET variants - 405 on POST suggests GET might work
-    { method: "GET", path: `/message/getMedia?messageid=${shortId}`, body: null },
-    { method: "GET", path: `/message/getMedia?messageid=${messageId}`, body: null },
-    { method: "GET", path: `/message/getLink?messageid=${shortId}`, body: null },
-    { method: "GET", path: `/message/getLink?messageid=${messageId}`, body: null },
-    { method: "GET", path: `/message/get-media?messageid=${shortId}`, body: null },
-    // GET with id param
-    { method: "GET", path: `/message/getMedia?id=${shortId}`, body: null },
-    { method: "GET", path: `/message/getMedia?messageId=${shortId}`, body: null },
-    // POST variants (keep as fallback)
+    // GET with path parameter (most common REST pattern)
+    { method: "GET",  path: `/message/getMedia/${shortId}`, body: null },
+    { method: "GET",  path: `/message/getMedia/${fullId}`, body: null },
+    { method: "GET",  path: `/message/getLink/${shortId}`, body: null },
+    { method: "GET",  path: `/message/getLink/${fullId}`, body: null },
+    { method: "GET",  path: `/message/${shortId}/getMedia`, body: null },
+    { method: "GET",  path: `/message/${shortId}/download`, body: null },
+    // Query string variants
+    { method: "GET",  path: `/message/getMedia?messageid=${shortId}`, body: null },
+    { method: "GET",  path: `/message/getMedia?id=${shortId}`, body: null },
+    // POST variants (405 = endpoint exists)
     { method: "POST", path: "/message/getMedia", body: { messageid: shortId } },
+    { method: "POST", path: "/message/getMedia", body: { id: shortId } },
     { method: "POST", path: "/message/getLink",  body: { messageid: shortId } },
   ];
 
