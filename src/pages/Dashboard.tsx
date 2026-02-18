@@ -45,6 +45,20 @@ export default function Dashboard() {
     enabled: !!user,
   });
 
+  const { data: whatsappLink } = useQuery({
+    queryKey: ["whatsapp-link-dashboard", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("whatsapp_links")
+        .select("verified")
+        .eq("user_id", user!.id)
+        .eq("verified", true)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!user,
+  });
+
   useEffect(() => {
     if (profile && !profile.has_completed_onboarding) {
       setShowTour(true);
@@ -205,7 +219,7 @@ export default function Dashboard() {
       {showTour && <OnboardingTour onComplete={handleTourComplete} />}
     </AnimatePresence>
     <div className="max-w-6xl mx-auto space-y-6">
-      {showWelcome && (
+      {showWelcome && !whatsappLink && (
         <Card className="border-emerald-200 bg-emerald-50/80 dark:bg-emerald-950/20 dark:border-emerald-800/40 relative overflow-hidden">
           <button onClick={() => setShowWelcome(false)} className="absolute top-3 right-3 text-muted-foreground hover:text-foreground">
             <X className="h-4 w-4" />
