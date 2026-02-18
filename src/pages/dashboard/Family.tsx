@@ -8,8 +8,13 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Users, Plus, Crown, UserCheck, UserX, TrendingDown,
-  TrendingUp, PieChart, ChevronRight, Loader2, Lock, Sparkles, Wallet,
+  TrendingUp, PieChart, ChevronRight, Loader2, Lock, Sparkles, Wallet, Trash2,
 } from "lucide-react";
 
 const fmt = (v: number) =>
@@ -23,6 +28,7 @@ export default function Family() {
   const [groupName, setGroupName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [creatingGroup, setCreatingGroup] = useState(false);
+  const [confirmDeleteGroup, setConfirmDeleteGroup] = useState(false);
 
   // Fetch user profile to check subscription plan
   const { data: profile } = useQuery({
@@ -181,6 +187,22 @@ export default function Family() {
     onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
   });
 
+  const deleteGroup = useMutation({
+    mutationFn: async () => {
+      // Delete all memberships first, then the group
+      await supabase.from("family_memberships").delete().eq("family_group_id", myGroup!.id);
+      const { error } = await supabase.from("family_groups").delete().eq("id", myGroup!.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["family-group"] });
+      queryClient.invalidateQueries({ queryKey: ["family-members"] });
+      setConfirmDeleteGroup(false);
+      toast({ title: "Grupo excluído com sucesso." });
+    },
+    onError: (e: any) => toast({ title: "Erro ao excluir grupo", description: e.message, variant: "destructive" }),
+  });
+
   const totalExpense = consolidatedTx.filter(t => t.type === "expense").reduce((s, t) => s + Number(t.amount), 0);
   const totalIncome = consolidatedTx.filter(t => t.type === "income").reduce((s, t) => s + Number(t.amount), 0);
 
@@ -335,18 +357,30 @@ export default function Family() {
           </h1>
           <p className="text-muted-foreground text-sm">Visão consolidada do grupo familiar</p>
         </div>
-        {myGroup && (
-          <div className="flex items-center gap-2 bg-muted rounded-xl px-3 py-1.5">
-            <span className="text-xs text-muted-foreground">ID do grupo:</span>
-            <span className="text-xs font-mono font-bold text-foreground">{myGroup.id.substring(0, 8)}...</span>
-            <button
-              className="text-xs text-primary underline"
-              onClick={() => { navigator.clipboard.writeText(myGroup.id); toast({ title: "ID copiado!" }); }}
+        <div className="flex items-center gap-2">
+          {myGroup && (
+            <div className="flex items-center gap-2 bg-muted rounded-xl px-3 py-1.5">
+              <span className="text-xs text-muted-foreground">ID do grupo:</span>
+              <span className="text-xs font-mono font-bold text-foreground">{myGroup.id.substring(0, 8)}...</span>
+              <button
+                className="text-xs text-primary underline"
+                onClick={() => { navigator.clipboard.writeText(myGroup.id); toast({ title: "ID copiado!" }); }}
+              >
+                copiar
+              </button>
+            </div>
+          )}
+          {myGroup && myGroup.owner_id === user?.id && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setConfirmDeleteGroup(true)}
+              className="text-destructive hover:text-destructive hover:bg-destructive/10 rounded-xl"
             >
-              copiar
-            </button>
-          </div>
-        )}
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Summary cards */}
@@ -504,6 +538,25 @@ export default function Family() {
           </div>
         )}
       </Card>
+      <AlertDialog open={confirmDeleteGroup} onOpenChange={setConfirmDeleteGroup}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir grupo familiar?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Todos os membros serão removidos e o grupo será excluído permanentemente. Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteGroup.mutate()}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteGroup.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Excluir grupo"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
