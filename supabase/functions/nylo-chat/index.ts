@@ -31,7 +31,6 @@ async function getUserFinancialData(supabase: any) {
     supabase.from("cards").select("name, brand, last_4_digits, credit_limit, due_day"),
   ]);
 
-  // Summarize transactions by category
   const summarizeByCategory = (txs: any[]) => {
     const map: Record<string, { total: number; count: number }> = {};
     let totalIncome = 0, totalExpense = 0;
@@ -48,7 +47,6 @@ async function getUserFinancialData(supabase: any) {
 
   const thisMonth = summarizeByCategory(thisMonthTx);
   const lastMonth = summarizeByCategory(lastMonthTx);
-
   const totalBalance = (wallets || []).reduce((s: number, w: any) => s + Number(w.balance), 0);
 
   return `
@@ -91,11 +89,12 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { messages } = await req.json();
+    const body = await req.json();
+    const { messages, imageBase64, imageMimeType } = body;
+
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    // Create authenticated Supabase client
     const authHeader = req.headers.get("Authorization");
     let financialContext = "";
 
@@ -114,28 +113,59 @@ serve(async (req) => {
       }
     }
 
-    const systemPrompt = `Você é o Nox IA, um assessor financeiro pessoal inteligente e amigável. Responda sempre em português brasileiro.
+    const systemPrompt = `Você é o Nox IA 🤖, um assessor financeiro pessoal inteligente e acolhedor. Responda sempre em português brasileiro.
 
-Suas capacidades:
-- Ajudar usuários a entender seus gastos e finanças
-- Dar dicas de economia e planejamento financeiro
-- Analisar padrões de gastos
-- Sugerir melhorias no orçamento
-- Responder dúvidas sobre investimentos de forma educativa
-- Comparar gastos entre meses
-- Calcular quanto o usuário pode gastar por dia
+📋 REGRAS DE FORMATAÇÃO (MUITO IMPORTANTE):
+- Use emojis relevantes e expressivos em TODAS as respostas
+- Separe informações em parágrafos curtos com quebras de linha entre eles
+- Use emojis no início de cada parágrafo ou tópico principal
+- Seja caloroso, motivador e pessoal — use o nome do usuário quando disponível
+- Formate com markdown (negrito, listas) quando ajudar na leitura
 
-Regras:
-- Seja conciso e direto, mas acolhedor
-- Use emojis moderadamente para tornar a conversa mais leve
-- Nunca dê conselhos de investimento específicos (ações, criptomoedas etc)
-- Sempre sugira que o usuário consulte um profissional para decisões importantes
-- Formate respostas com markdown quando apropriado (listas, negrito, etc)
-- Use os dados reais do usuário para dar respostas personalizadas e precisas
-- Quando o usuário perguntar sobre gastos, USE os dados abaixo para responder com valores reais
-- Se não houver dados suficientes, informe e sugira que o usuário cadastre suas transações
+💡 Capacidades:
+- Analisar gastos e finanças com os dados reais do usuário
+- Identificar padrões de gastos e sugerir melhorias
+- Calcular quanto pode gastar por dia/semana
+- Comparar meses e categorias
+- Dar dicas práticas de economia
+- Analisar comprovantes e recibos enviados como imagem
+- Responder dúvidas sobre finanças pessoais de forma educativa
+
+⚠️ Regras:
+- Nunca dê conselhos de investimento específicos (ações, cripto, etc.)
+- Sempre sugira consultar um profissional para decisões importantes
+- Se não houver dados suficientes, informe e sugira cadastrar transações
+- Use SEMPRE os dados reais do usuário para respostas personalizadas e precisas
+
+🧾 Se receber imagem de comprovante:
+- Extraia valor, descrição, categoria e forma de pagamento
+- Confirme os dados de forma amigável e pergunte se o usuário quer registrar a transação
 
 ${financialContext}`;
+
+    // Build messages with optional image in the last user message
+    const processedMessages = [...messages];
+    if (imageBase64 && imageMimeType && processedMessages.length > 0) {
+      const lastMsg = processedMessages[processedMessages.length - 1];
+      if (lastMsg.role === "user") {
+        processedMessages[processedMessages.length - 1] = {
+          role: "user",
+          content: [
+            {
+              type: "image_url",
+              image_url: { url: `data:${imageMimeType};base64,${imageBase64}` },
+            },
+            {
+              type: "text",
+              text: lastMsg.content || "Analise este comprovante e extraia os dados da transação.",
+            },
+          ],
+        };
+      }
+    }
+
+    // Use vision model when image is present, otherwise fast model
+    const model = imageBase64 ? "google/gemini-2.5-flash" : "google/gemini-3-flash-preview";
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -144,10 +174,10 @@ ${financialContext}`;
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model,
         messages: [
           { role: "system", content: systemPrompt },
-          ...messages,
+          ...processedMessages,
         ],
         stream: true,
       }),
