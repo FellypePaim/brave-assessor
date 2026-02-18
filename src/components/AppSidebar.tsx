@@ -42,7 +42,7 @@ export function AppSidebar() {
   const { signOut, user } = useAuth();
   const { isAdmin } = useIsAdmin();
   const navigate = useNavigate();
-  const displayName = user?.user_metadata?.display_name || "Usuário";
+  const displayName = user?.user_metadata?.display_name || user?.email?.split("@")[0] || "Usuário";
 
   const handleSignOut = async () => {
     await signOut();
