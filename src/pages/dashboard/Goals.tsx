@@ -151,29 +151,64 @@ export default function Goals() {
             <p className="text-sm mt-1">Crie sua primeira meta para começar</p>
           </div>
         ) : (
-          <div className="space-y-4">
+                <div className="space-y-4">
             {goals.map((goal) => {
               const pct = goal.target_amount > 0 ? Math.min((Number(goal.current_amount) / Number(goal.target_amount)) * 100, 100) : 0;
               const goalColor = (goal as any).color || undefined;
+              const remaining = Number(goal.target_amount) - Number(goal.current_amount);
               return (
                 <Card key={goal.id} className="p-5 hover:shadow-md transition-shadow cursor-pointer group relative" onClick={() => setEditGoal(goal)}>
                   <button className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-muted">
                     <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
                   </button>
-                  <div className="flex items-center justify-between mb-2">
+
+                  {/* Header */}
+                  <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       {goalColor && <div className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: goalColor }} />}
                       <p className="font-semibold text-foreground">{goal.name}</p>
                     </div>
-                    <span className="text-xs text-muted-foreground">{pct.toFixed(0)}%</span>
+                    <span
+                      className="text-sm font-bold px-2 py-0.5 rounded-full"
+                      style={{
+                        backgroundColor: goalColor ? `${goalColor}20` : 'hsl(var(--primary) / 0.12)',
+                        color: goalColor || 'hsl(var(--primary))',
+                      }}
+                    >
+                      {pct.toFixed(0)}%
+                    </span>
                   </div>
-                  <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-                    <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: goalColor || 'hsl(var(--primary))' }} />
+
+                  {/* Progress bar */}
+                  <div className="w-full h-3 bg-muted rounded-full overflow-hidden mb-2">
+                    <div
+                      className="h-full rounded-full transition-all duration-700"
+                      style={{ width: `${pct}%`, backgroundColor: goalColor || 'hsl(var(--primary))' }}
+                    />
                   </div>
-                  <div className="flex justify-between mt-2 text-xs text-muted-foreground">
-                    <span>R$ {Number(goal.current_amount).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                    <span>R$ {Number(goal.target_amount).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+
+                  {/* Values row */}
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>
+                      <span className="font-semibold text-foreground">
+                        R$ {Number(goal.current_amount).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                      </span>
+                      {" "}/ R$ {Number(goal.target_amount).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                    </span>
+                    {remaining > 0 && (
+                      <span>Faltam R$ {remaining.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                    )}
+                    {remaining <= 0 && (
+                      <span className="text-emerald-600 font-semibold">✓ Meta atingida!</span>
+                    )}
                   </div>
+
+                  {/* Deadline */}
+                  {goal.deadline && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Prazo: {new Date(goal.deadline).toLocaleDateString("pt-BR")}
+                    </p>
+                  )}
                 </Card>
               );
             })}
