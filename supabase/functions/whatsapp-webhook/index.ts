@@ -25,16 +25,43 @@ async function sendWhatsAppMessage(phone: string, message: string) {
   return resp.json();
 }
 
-async function downloadMediaAsBase64(mediaUrl: string): Promise<string> {
-  const resp = await fetch(mediaUrl);
-  if (!resp.ok) throw new Error(`Failed to download media: ${resp.status}`);
-  const buffer = await resp.arrayBuffer();
-  const bytes = new Uint8Array(buffer);
-  let binary = "";
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
+// Download media via UAZAPI download endpoint (since URL is not in the webhook payload)
+async function downloadMediaFromUazapi(messageId: string): Promise<{ base64: string; mimetype: string } | null> {
+  const UAZAPI_URL = Deno.env.get("UAZAPI_URL");
+  const UAZAPI_TOKEN = Deno.env.get("UAZAPI_TOKEN");
+  if (!UAZAPI_URL || !UAZAPI_TOKEN) return null;
+
+  const resp = await fetch(`${UAZAPI_URL}/message/download-media`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", token: UAZAPI_TOKEN },
+    body: JSON.stringify({ messageId }),
+  });
+
+  if (!resp.ok) {
+    console.error("UAZAPI download-media error:", resp.status, await resp.text());
+    return null;
   }
-  return btoa(binary);
+
+  const data = await resp.json();
+  console.log("download-media response keys:", Object.keys(data).join(", "));
+
+  if (data.base64) {
+    return { base64: data.base64, mimetype: data.mimetype || "application/octet-stream" };
+  }
+
+  // Fallback: URL returned
+  const url = data.url || data.mediaUrl || data.fileUrl;
+  if (url) {
+    const mediaResp = await fetch(url);
+    if (!mediaResp.ok) return null;
+    const buffer = await mediaResp.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+    return { base64: btoa(binary), mimetype: data.mimetype || "application/octet-stream" };
+  }
+
+  return null;
 }
 
 async function processImageWithAI(imageBase64: string, mimeType: string, financialContext: string, userCaption?: string) {
@@ -62,20 +89,9 @@ Analise a imagem e extraia:
 Responda SOMENTE com JSON quando identificar uma transação:
 {"action":"add_transaction","amount":50.00,"description":"Supermercado Extra","category":"Alimentação","type":"expense","payment_method":"PIX"}
 
-Se não conseguir identificar os dados, responda em texto explicando o que viu e pedindo mais informações.
+Se não conseguir identificar os dados, responda em texto explicando o que viu.
 
 ${financialContext}`;
-
-  const userContent: any[] = [
-    {
-      type: "image_url",
-      image_url: { url: `data:${mimeType};base64,${imageBase64}` },
-    },
-    {
-      type: "text",
-      text: userCaption || "Analise este comprovante e extraia os dados da transação.",
-    },
-  ];
 
   const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
@@ -87,7 +103,13 @@ ${financialContext}`;
       model: "google/gemini-2.5-flash",
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: userContent },
+        {
+          role: "user",
+          content: [
+            { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}` } },
+            { type: "text", text: userCaption || "Analise este comprovante e extraia os dados da transação." },
+          ],
+        },
       ],
     }),
   });
@@ -106,24 +128,27 @@ async function processAudioWithAI(audioBase64: string, mimeType: string, financi
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-  const systemPrompt = `Você é o Nox IA 🤖, assessor financeiro pessoal via WhatsApp.
+  // Gemini supports audio via inline data
+  const systemPrompt = `Você é o Nox IA 🤖, assessor financeiro pessoal via WhatsApp. Responda SEMPRE em português brasileiro.
 
 📋 REGRAS DE FORMATAÇÃO:
 - Use emojis relevantes em TODAS as respostas
-- Separe informações em parágrafos curtos com quebras de linha
+- Separe informações em parágrafos curtos
 - Use emojis no início de cada parágrafo
 - Máximo 800 caracteres
 - Seja caloroso e pessoal
 
 🎙️ ÁUDIO RECEBIDO:
-O usuário enviou um áudio. Transcreva e interprete o que foi dito.
+Transcreva o áudio e interprete o que foi dito.
 
 Se for um comando de transação (ex: "gastei 50 reais no almoço"), responda SOMENTE com JSON:
 {"action":"add_transaction","amount":50,"description":"Almoço","category":"Alimentação","type":"expense"}
 
-Se for uma pergunta, responda em texto formatado com emojis e parágrafos.
+Para perguntas normais, responda em texto formatado com emojis e parágrafos.
 
 ${financialContext}`;
+
+  const audioFormat = mimeType.includes("ogg") ? "audio/ogg" : mimeType.includes("mp4") ? "audio/mp4" : "audio/mpeg";
 
   const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
@@ -139,10 +164,10 @@ ${financialContext}`;
           role: "user",
           content: [
             {
-              type: "input_audio",
-              input_audio: { data: audioBase64, format: mimeType.includes("ogg") ? "ogg" : "mp3" },
+              type: "image_url",
+              image_url: { url: `data:${audioFormat};base64,${audioBase64}` },
             },
-            { type: "text", text: "Transcreva e interprete este áudio." },
+            { type: "text", text: "Transcreva e interprete este áudio financeiro." },
           ],
         },
       ],
@@ -183,15 +208,6 @@ async function processWithNoxIA(userMessage: string, financialContext: string) {
 
 Para perguntas normais, responda em texto formatado com emojis e parágrafos.
 
-Exemplo de resposta bem formatada:
-"💰 Oi, João! Vamos ver como estão suas finanças!
-
-📊 Este mês você gastou R$ 1.200,00 no total, sendo R$ 450 com alimentação e R$ 300 com transporte.
-
-✅ Você ainda tem R$ 800 disponíveis no seu orçamento. Tá indo bem! 💪
-
-💡 Dica: tente reduzir os gastos com delivery pra economizar mais!"
-
 ${financialContext}`;
 
   const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -219,15 +235,23 @@ ${financialContext}`;
   return data.choices?.[0]?.message?.content || "Desculpe, não consegui processar sua mensagem.";
 }
 
-function getMediaInfo(message: any) {
-  // UAZAPI media fields
-  const hasImage = message.isMedia && (message.mimetype?.startsWith("image/") || message.type === "image");
-  const hasAudio = message.isMedia && (message.mimetype?.startsWith("audio/") || message.type === "ptt" || message.type === "audio");
-  const mediaUrl = message.mediaUrl || message.media?.url || message.deprecatedMms3Url;
-  const mimetype = message.mimetype || "application/octet-stream";
-  const caption = message.caption || message.body || "";
+function isMediaMessage(message: any): boolean {
+  // UAZAPI uses type "media" for all media, or specific types like ptt/audio/image
+  const mediaTypes = ["media", "ptt", "audio", "image", "document", "video", "sticker"];
+  return message.isMedia === true || mediaTypes.includes(message.type);
+}
 
-  return { hasImage, hasAudio, mediaUrl, mimetype, caption };
+function isAudioMessage(message: any): boolean {
+  return message.type === "ptt" ||
+    message.type === "audio" ||
+    (message.type === "media" && (message.mimetype?.startsWith("audio/") || message.mimetype?.includes("ogg"))) ||
+    message.mimetype?.startsWith("audio/");
+}
+
+function isImageMessage(message: any): boolean {
+  return message.type === "image" ||
+    (message.type === "media" && message.mimetype?.startsWith("image/")) ||
+    message.mimetype?.startsWith("image/");
 }
 
 serve(async (req) => {
@@ -236,16 +260,18 @@ serve(async (req) => {
   try {
     const body = await req.json();
 
-    // Log key fields for debugging
-    console.log("Webhook keys:", JSON.stringify({
+    // Detailed log for debugging media messages
+    console.log("Webhook payload:", JSON.stringify({
       EventType: body.EventType,
       chatPhone: body.chat?.phone,
-      msgBody: body.message?.body,
       msgFromMe: body.message?.fromMe,
-      isMedia: body.message?.isMedia,
       msgType: body.message?.type,
-      mimetype: body.message?.mimetype,
+      msgIsMedia: body.message?.isMedia,
+      msgMimetype: body.message?.mimetype,
+      msgId: body.message?.id,
+      msgBody: body.message?.body,
       hasMediaUrl: !!(body.message?.mediaUrl || body.message?.media?.url),
+      allMsgKeys: body.message ? Object.keys(body.message) : [],
     }));
 
     const message = body.message || {};
@@ -254,6 +280,7 @@ serve(async (req) => {
     const phone = chat.number || chat.phone || message.number || message.phone || message.from || message.sender || body.number || body.from;
     const text = message.body || message.text || message.message || body.body || body.text;
     const isFromMe = message.fromMe || body.fromMe || false;
+    const messageId = message.id || message.messageId;
 
     if (isFromMe) {
       return new Response(JSON.stringify({ ok: true, ignored: true }), {
@@ -261,12 +288,11 @@ serve(async (req) => {
       });
     }
 
-    // Check for media
-    const { hasImage, hasAudio, mediaUrl, mimetype, caption } = getMediaInfo(message);
-    const hasMedia = hasImage || hasAudio;
+    const isMedia = isMediaMessage(message);
+    const hasText = !!(text && text.trim());
 
-    if (!phone || (!text && !hasMedia)) {
-      console.log("Missing phone or content, skipping. phone:", phone, "text:", text, "hasMedia:", hasMedia);
+    if (!phone || (!hasText && !isMedia)) {
+      console.log("Missing phone or content, skipping. phone:", phone, "text:", text, "isMedia:", isMedia);
       return new Response(JSON.stringify({ ok: true, skipped: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -274,50 +300,54 @@ serve(async (req) => {
 
     const cleanPhone = phone.replace(/@.*$/, "").replace(/\D/g, "");
     const messageText = (text || "").trim();
+    const isAudio = isAudioMessage(message);
+    const isImage = isImageMessage(message);
 
-    console.log(`Message from ${cleanPhone}: ${hasMedia ? `[${hasImage ? "IMAGE" : "AUDIO"}] ` : ""}${messageText}`);
+    console.log(`Message from ${cleanPhone}: type=${message.type} isMedia=${isMedia} isAudio=${isAudio} isImage=${isImage} text="${messageText}"`);
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Check verification code
-    const codeMatch = messageText.match(/^NOX-(\d{6})$/i);
-    if (codeMatch) {
-      const code = `NOX-${codeMatch[1]}`;
-      const { data: link } = await supabaseAdmin
-        .from("whatsapp_links")
-        .select("*")
-        .eq("verification_code", code)
-        .eq("verified", false)
-        .gt("expires_at", new Date().toISOString())
-        .maybeSingle();
+    // Check verification code (text only)
+    if (hasText) {
+      const codeMatch = messageText.match(/^NOX-(\d{6})$/i);
+      if (codeMatch) {
+        const code = `NOX-${codeMatch[1]}`;
+        const { data: link } = await supabaseAdmin
+          .from("whatsapp_links")
+          .select("*")
+          .eq("verification_code", code)
+          .eq("verified", false)
+          .gt("expires_at", new Date().toISOString())
+          .maybeSingle();
 
-      if (!link) {
-        await sendWhatsAppMessage(cleanPhone, "❌ Código inválido ou expirado. Gere um novo código no app Nox.");
-        return new Response(JSON.stringify({ ok: true }), {
+        if (!link) {
+          await sendWhatsAppMessage(cleanPhone, "❌ Código inválido ou expirado. Gere um novo código no app Nox.");
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        await supabaseAdmin
+          .from("whatsapp_links")
+          .update({ phone_number: cleanPhone, verified: true })
+          .eq("id", link.id);
+
+        await sendWhatsAppMessage(cleanPhone,
+          "✅ WhatsApp vinculado com sucesso!\n\n" +
+          "Agora você pode:\n" +
+          '• Registrar gastos: "Gastei 50 com almoço"\n' +
+          "• 📸 Enviar foto do comprovante\n" +
+          "• 🎙️ Enviar áudio com seus gastos\n" +
+          '• Ver saldo: "Qual meu saldo?"\n\n' +
+          "Experimente agora! 💰"
+        );
+
+        return new Response(JSON.stringify({ ok: true, linked: true }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-
-      await supabaseAdmin
-        .from("whatsapp_links")
-        .update({ phone_number: cleanPhone, verified: true })
-        .eq("id", link.id);
-
-      await sendWhatsAppMessage(cleanPhone,
-        "✅ WhatsApp vinculado com sucesso!\n\n" +
-        "Agora você pode:\n" +
-        '• Registrar gastos: "Gastei 50 com almoço"\n' +
-        "• 📸 Enviar foto do comprovante\n" +
-        "• 🎙️ Enviar áudio com seus gastos\n" +
-        '• Ver saldo: "Qual meu saldo?"\n\n' +
-        "Experimente agora! 💰"
-      );
-
-      return new Response(JSON.stringify({ ok: true, linked: true }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
     }
 
     // Check if phone is linked
@@ -369,29 +399,35 @@ Categorias: ${(categories || []).map((c: any) => `${c.name} (id:${c.id})`).join(
     // Process based on message type
     let aiResponse: string;
 
-    if (hasImage && mediaUrl) {
+    if (isMedia && messageId) {
+      // Send acknowledgment while processing
+      const mediaLabel = isAudio ? "🎙️ Processando seu áudio..." : "📸 Analisando o comprovante...";
+      await sendWhatsAppMessage(cleanPhone, mediaLabel);
+
       try {
-        console.log("Downloading image from:", mediaUrl);
-        const imageBase64 = await downloadMediaAsBase64(mediaUrl);
-        aiResponse = await processImageWithAI(imageBase64, mimetype, financialContext, caption);
+        const mediaData = await downloadMediaFromUazapi(messageId);
+
+        if (!mediaData) {
+          aiResponse = "😕 Não consegui baixar a mídia. Tente enviar novamente ou descreva por texto!";
+        } else if (isAudio) {
+          console.log("Processing audio, mimetype:", mediaData.mimetype);
+          aiResponse = await processAudioWithAI(mediaData.base64, mediaData.mimetype, financialContext);
+        } else if (isImage) {
+          console.log("Processing image, mimetype:", mediaData.mimetype);
+          const caption = message.caption || "";
+          aiResponse = await processImageWithAI(mediaData.base64, mediaData.mimetype, financialContext, caption);
+        } else {
+          aiResponse = "📎 Recebi seu arquivo, mas só consigo processar áudios e imagens por enquanto!";
+        }
       } catch (e) {
-        console.error("Image processing error:", e);
-        aiResponse = "😕 Não consegui processar a imagem. Tente enviar novamente ou me diga os dados da transação por texto!";
-      }
-    } else if (hasAudio && mediaUrl) {
-      try {
-        console.log("Downloading audio from:", mediaUrl);
-        const audioBase64 = await downloadMediaAsBase64(mediaUrl);
-        aiResponse = await processAudioWithAI(audioBase64, mimetype, financialContext);
-      } catch (e) {
-        console.error("Audio processing error:", e);
-        aiResponse = "😕 Não consegui processar o áudio. Tente enviar novamente ou me diga por texto!";
+        console.error("Media processing error:", e);
+        aiResponse = "😕 Não consegui processar a mídia. Tente novamente ou escreva por texto!";
       }
     } else {
       aiResponse = await processWithNoxIA(messageText, financialContext);
     }
 
-    // Check if AI wants to create a transaction
+    // Check if AI returned a transaction action
     let replyText = aiResponse;
     try {
       const jsonMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"add_transaction"[\s\S]*\}/);
