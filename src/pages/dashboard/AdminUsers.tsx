@@ -40,6 +40,8 @@ const ROLE_LABELS: Record<string, { label: string; icon: typeof Shield }> = {
   user:  { label: "Usuário", icon: UserCircle2 },
 };
 
+const PAGE_SIZE = 15;
+
 export default function AdminUsers() {
   const { toast } = useToast();
   const { isAdmin: currentUserIsAdmin } = useIsAdmin();
@@ -49,6 +51,7 @@ export default function AdminUsers() {
   const [search, setSearch] = useState("");
   const [filterPlan, setFilterPlan] = useState("all");
   const [filterRole, setFilterRole] = useState("all");
+  const [page, setPage] = useState(1);
 
   // Edit modal
   const [editUser, setEditUser] = useState<UserRow | null>(null);
@@ -113,7 +116,7 @@ export default function AdminUsers() {
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
-  // Filter logic
+  // Filter logic — reset page on filter change
   useEffect(() => {
     let list = users;
     if (search.trim()) {
@@ -127,6 +130,7 @@ export default function AdminUsers() {
     if (filterPlan !== "all") list = list.filter(u => u.subscription_plan === filterPlan);
     if (filterRole !== "all") list = list.filter(u => u.role === filterRole);
     setFiltered(list);
+    setPage(1);
   }, [search, filterPlan, filterRole, users]);
 
   const openEdit = async (u: UserRow) => {
@@ -350,13 +354,12 @@ export default function AdminUsers() {
                 <tr><td colSpan={7} className="text-center py-12 text-muted-foreground">Carregando...</td></tr>
               ) : filtered.length === 0 ? (
                 <tr><td colSpan={7} className="text-center py-12 text-muted-foreground">Nenhum usuário encontrado.</td></tr>
-              ) : filtered.map((u, i) => {
+              ) : filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((u, i) => {
                 const RoleIcon = ROLE_LABELS[u.role]?.icon ?? UserCircle2;
                 const ps = planStyle(u.subscription_plan);
                 const expired = isExpired(u);
                 return (
                   <tr key={u.id} className={`border-b border-border transition-colors hover:bg-muted/30 ${i % 2 === 0 ? "" : "bg-muted/10"}`}>
-                    {/* Name */}
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-sm font-bold shrink-0">
@@ -368,7 +371,6 @@ export default function AdminUsers() {
                         </div>
                       </div>
                     </td>
-                    {/* Phone */}
                     <td className="px-4 py-3">
                       {u.phone_number ? (
                         <div className="flex items-center gap-1.5">
@@ -379,7 +381,6 @@ export default function AdminUsers() {
                         <span className="text-muted-foreground text-xs">—</span>
                       )}
                     </td>
-                    {/* Role */}
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
                         <RoleIcon className={`h-3.5 w-3.5 shrink-0 ${u.role === "admin" ? "text-primary" : "text-muted-foreground"}`} />
@@ -388,7 +389,6 @@ export default function AdminUsers() {
                         </span>
                       </div>
                     </td>
-                    {/* Plan */}
                     <td className="px-4 py-3">
                       <Badge className={`text-xs border ${ps.color}`}>
                         {u.subscription_plan === "anual" && <Star className="h-3 w-3 mr-1" />}
@@ -396,7 +396,6 @@ export default function AdminUsers() {
                         {ps.label}
                       </Badge>
                     </td>
-                    {/* Expiry */}
                     <td className="px-4 py-3">
                       {u.subscription_expires_at ? (
                         <div className="flex items-center gap-1.5">
@@ -410,11 +409,9 @@ export default function AdminUsers() {
                         <span className="text-muted-foreground text-xs">—</span>
                       )}
                     </td>
-                    {/* Created */}
                     <td className="px-4 py-3 text-xs text-muted-foreground">
                       {format(new Date(u.created_at), "dd/MM/yyyy", { locale: ptBR })}
                     </td>
-                    {/* Actions */}
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <Button variant="ghost" size="sm" onClick={() => openEdit(u)} className="h-8 px-2">
@@ -439,6 +436,39 @@ export default function AdminUsers() {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination */}
+        {filtered.length > PAGE_SIZE && (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+            <p className="text-xs text-muted-foreground">
+              {Math.min((page - 1) * PAGE_SIZE + 1, filtered.length)}–{Math.min(page * PAGE_SIZE, filtered.length)} de {filtered.length} usuários
+            </p>
+            <div className="flex items-center gap-1">
+              <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="h-8 px-3 text-xs">
+                ← Anterior
+              </Button>
+              {Array.from({ length: Math.ceil(filtered.length / PAGE_SIZE) }, (_, i) => i + 1)
+                .filter(n => n === 1 || n === Math.ceil(filtered.length / PAGE_SIZE) || Math.abs(n - page) <= 1)
+                .reduce<(number | "...")[]>((acc, n, idx, arr) => {
+                  if (idx > 0 && n - (arr[idx - 1] as number) > 1) acc.push("...");
+                  acc.push(n);
+                  return acc;
+                }, [])
+                .map((n, idx) =>
+                  n === "..." ? (
+                    <span key={`el-${idx}`} className="text-xs px-1 text-muted-foreground">…</span>
+                  ) : (
+                    <Button key={n} variant={page === n ? "default" : "outline"} size="sm" onClick={() => setPage(n as number)} className="h-8 w-8 p-0 text-xs">
+                      {n}
+                    </Button>
+                  )
+                )}
+              <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(Math.ceil(filtered.length / PAGE_SIZE), p + 1))} disabled={page === Math.ceil(filtered.length / PAGE_SIZE)} className="h-8 px-3 text-xs">
+                Próximo →
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* Edit Modal */}
