@@ -12,7 +12,7 @@ import WhatsAppLinkCard from "@/components/WhatsAppLinkCard";
 import {
   User, Camera, MessageSquare, Crown, HeadphonesIcon,
   Bell, Mail, Sparkles,
-  FileText, Sun, Moon, CheckCircle2, Zap, Star, Lock,
+  FileText, Sun, Moon, CheckCircle2, Zap, Star, Lock, Eye, EyeOff,
 } from "lucide-react";
 
 const NOX_PHONE = "5537999385148";
@@ -97,6 +97,15 @@ export default function Settings() {
   const [notifyEmailUpdates, setNotifyEmailUpdates] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  // Security: change email / password
+  const [newEmail, setNewEmail] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrentPw, setShowCurrentPw] = useState(false);
+  const [showNewPw, setShowNewPw] = useState(false);
+  const [savingSecurity, setSavingSecurity] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -184,6 +193,56 @@ export default function Settings() {
   const saveNotifications = async (field: string, value: boolean) => {
     if (!user) return;
     await supabase.from("profiles").update({ [field]: value }).eq("id", user.id);
+  };
+
+  const saveSecurityChanges = async () => {
+    if (!user) return;
+
+    const hasEmailChange = newEmail.trim() !== "" && newEmail.trim() !== email;
+    const hasPasswordChange = newPassword.length >= 6;
+
+    if (!hasEmailChange && !hasPasswordChange) {
+      toast({ title: "Nada a alterar", description: "Preencha um novo e-mail ou senha.", variant: "destructive" });
+      return;
+    }
+
+    if (hasPasswordChange && newPassword !== confirmPassword) {
+      toast({ title: "Senhas não conferem", description: "A confirmação deve ser igual à nova senha.", variant: "destructive" });
+      return;
+    }
+
+    setSavingSecurity(true);
+
+    // Re-authenticate before sensitive changes
+    if (currentPassword) {
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password: currentPassword });
+      if (signInError) {
+        toast({ title: "Senha atual incorreta", description: "Verifique sua senha e tente novamente.", variant: "destructive" });
+        setSavingSecurity(false);
+        return;
+      }
+    }
+
+    const updateData: { email?: string; password?: string } = {};
+    if (hasEmailChange) updateData.email = newEmail.trim();
+    if (hasPasswordChange) updateData.password = newPassword;
+
+    const { error } = await supabase.auth.updateUser(updateData);
+
+    if (error) {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+    } else {
+      toast({
+        title: "Credenciais atualizadas!",
+        description: hasEmailChange ? "Verifique seu novo e-mail para confirmar." : "Senha alterada com sucesso.",
+      });
+      setNewEmail("");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    }
+
+    setSavingSecurity(false);
   };
 
 
@@ -446,6 +505,106 @@ export default function Settings() {
               onCheckedChange={(v) => { setNotifyMonthlyReport(v); saveNotifications("notify_monthly_report", v); }}
             />
           </div>
+        </div>
+      </Card>
+
+      {/* Security: change email & password */}
+      <Card className="p-6">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center">
+            <Lock className="h-4 w-4 text-primary" />
+          </div>
+          <div>
+            <h2 className="font-semibold text-foreground">Segurança</h2>
+            <p className="text-xs text-muted-foreground">Altere seu e-mail ou senha de acesso</p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          {/* New email */}
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Novo e-mail</label>
+            <div className="relative mt-1">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                type="email"
+                value={newEmail}
+                onChange={e => setNewEmail(e.target.value)}
+                className="pl-9"
+                placeholder={email}
+                maxLength={255}
+              />
+            </div>
+          </div>
+
+          {/* Current password (re-auth) */}
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Senha atual <span className="font-normal">(necessária para confirmar alterações)</span></label>
+            <div className="relative mt-1">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                type={showCurrentPw ? "text" : "password"}
+                value={currentPassword}
+                onChange={e => setCurrentPassword(e.target.value)}
+                className="pl-9 pr-9"
+                placeholder="Sua senha atual"
+                maxLength={128}
+              />
+              <button
+                type="button"
+                onClick={() => setShowCurrentPw(v => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {showCurrentPw ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+              </button>
+            </div>
+          </div>
+
+          {/* New password */}
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Nova senha <span className="font-normal">(deixe vazio para não alterar)</span></label>
+            <div className="relative mt-1">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                type={showNewPw ? "text" : "password"}
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+                className="pl-9 pr-9"
+                placeholder="Mínimo 6 caracteres"
+                maxLength={128}
+              />
+              <button
+                type="button"
+                onClick={() => setShowNewPw(v => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {showNewPw ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+              </button>
+            </div>
+          </div>
+
+          {/* Confirm password */}
+          {newPassword && (
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Confirmar nova senha</label>
+              <Input
+                type="password"
+                value={confirmPassword}
+                onChange={e => setConfirmPassword(e.target.value)}
+                className="mt-1"
+                placeholder="Repita a nova senha"
+                maxLength={128}
+              />
+              {confirmPassword && newPassword !== confirmPassword && (
+                <p className="text-[11px] text-destructive mt-1">As senhas não conferem.</p>
+              )}
+            </div>
+          )}
+
+          <Button onClick={saveSecurityChanges} disabled={savingSecurity} className="w-full">
+            <Lock className="h-4 w-4 mr-2" />
+            {savingSecurity ? "Salvando..." : "Salvar alterações de segurança"}
+          </Button>
         </div>
       </Card>
 
