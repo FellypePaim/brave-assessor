@@ -106,13 +106,30 @@ export default function Settings() {
   const saveProfile = async () => {
     if (!user) return;
     setSaving(true);
+
+    // Update profile table
     const { error } = await supabase.from("profiles").update({
       display_name: displayName,
       monthly_income: parseFloat(monthlyIncome) || 0,
     }).eq("id", user.id);
 
-    if (error) toast({ title: "Erro", description: error.message, variant: "destructive" });
-    else toast({ title: "Alterações salvas!" });
+    if (error) {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+      setSaving(false);
+      return;
+    }
+
+    // Sync display_name to auth user metadata so greeting updates everywhere
+    const { error: metaError } = await supabase.auth.updateUser({
+      data: { display_name: displayName },
+    });
+
+    if (metaError) {
+      toast({ title: "Perfil salvo, mas falha ao sincronizar nome", description: metaError.message, variant: "destructive" });
+    } else {
+      toast({ title: "Alterações salvas!", description: "Seu nome foi atualizado em todo o sistema." });
+    }
+
     setSaving(false);
   };
 

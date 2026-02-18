@@ -14,27 +14,63 @@ serve(async (req) => {
     const market: any[] = [];
 
     // Use open.er-api.com for exchange rates (free, no key, reliable)
+    // Use CoinGecko for EUR/USD and 24h change on fiat pairs
     try {
-      const [usdRes, eurRes, gbpRes] = await Promise.all([
+      const [usdRes, eurRes, gbpRes, fiatChangeRes] = await Promise.all([
         fetch("https://open.er-api.com/v6/latest/USD"),
         fetch("https://open.er-api.com/v6/latest/EUR"),
         fetch("https://open.er-api.com/v6/latest/GBP"),
+        // CoinGecko: get USD, EUR, GBP vs BRL prices with 24h change
+        fetch("https://api.coingecko.com/api/v3/simple/price?ids=usd,eur,gbp&vs_currencies=brl&include_24hr_change=true"),
       ]);
 
-      const [usdData, eurData, gbpData] = await Promise.all([
+      const [usdData, eurData, gbpData, fiatChange] = await Promise.all([
         usdRes.json(),
         eurRes.json(),
         gbpRes.json(),
+        fiatChangeRes.json(),
       ]);
 
       if (usdData.rates?.BRL) {
-        market.push({ label: "DÓLAR", value: `R$ ${usdData.rates.BRL.toFixed(2)}`, change: null, positive: true });
+        const change24h = fiatChange?.usd?.brl_24h_change ?? null;
+        market.push({
+          label: "DÓLAR",
+          value: `R$ ${usdData.rates.BRL.toFixed(2)}`,
+          change: change24h !== null ? `${change24h >= 0 ? "+" : ""}${change24h.toFixed(2)}%` : null,
+          positive: change24h === null ? true : change24h >= 0,
+        });
       }
       if (eurData.rates?.BRL) {
-        market.push({ label: "EURO", value: `R$ ${eurData.rates.BRL.toFixed(2)}`, change: null, positive: true });
+        const change24h = fiatChange?.eur?.brl_24h_change ?? null;
+        market.push({
+          label: "EURO",
+          value: `R$ ${eurData.rates.BRL.toFixed(2)}`,
+          change: change24h !== null ? `${change24h >= 0 ? "+" : ""}${change24h.toFixed(2)}%` : null,
+          positive: change24h === null ? true : change24h >= 0,
+        });
       }
       if (gbpData.rates?.BRL) {
-        market.push({ label: "LIBRA (GBP)", value: `R$ ${gbpData.rates.BRL.toFixed(2)}`, change: null, positive: true });
+        const change24h = fiatChange?.gbp?.brl_24h_change ?? null;
+        market.push({
+          label: "LIBRA (GBP)",
+          value: `R$ ${gbpData.rates.BRL.toFixed(2)}`,
+          change: change24h !== null ? `${change24h >= 0 ? "+" : ""}${change24h.toFixed(2)}%` : null,
+          positive: change24h === null ? true : change24h >= 0,
+        });
+      }
+
+      // EUR/USD cross rate
+      if (usdData.rates?.EUR) {
+        const eurUsd = (1 / usdData.rates.EUR).toFixed(4);
+        const eurusdChange = fiatChange?.eur?.brl_24h_change !== undefined && fiatChange?.usd?.brl_24h_change !== undefined
+          ? fiatChange.eur.brl_24h_change - fiatChange.usd.brl_24h_change
+          : null;
+        market.push({
+          label: "EUR/USD",
+          value: `$ ${eurUsd}`,
+          change: eurusdChange !== null ? `${eurusdChange >= 0 ? "+" : ""}${eurusdChange.toFixed(2)}%` : null,
+          positive: eurusdChange === null ? true : eurusdChange >= 0,
+        });
       }
     } catch (e) {
       console.error("Exchange rate error:", e.message);

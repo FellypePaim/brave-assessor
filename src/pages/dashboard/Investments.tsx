@@ -16,6 +16,7 @@ const iconMap: Record<string, { icon: React.ElementType; bg: string; color: stri
   "DÓLAR": { icon: DollarSign, bg: "bg-emerald-100", color: "text-emerald-600" },
   "EURO": { icon: Landmark, bg: "bg-blue-100", color: "text-blue-600" },
   "LIBRA (GBP)": { icon: Landmark, bg: "bg-indigo-100", color: "text-indigo-600" },
+  "EUR/USD": { icon: DollarSign, bg: "bg-violet-100", color: "text-violet-600" },
   "BITCOIN": { icon: Bitcoin, bg: "bg-amber-100", color: "text-amber-600" },
   "IBOVESPA": { icon: TrendingUp, bg: "bg-rose-100", color: "text-rose-600" },
   "IFIX": { icon: BarChart2, bg: "bg-violet-100", color: "text-violet-600" },
