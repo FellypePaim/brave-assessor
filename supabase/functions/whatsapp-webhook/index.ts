@@ -25,35 +25,44 @@ async function sendWhatsAppMessage(phone: string, message: string) {
   return resp.json();
 }
 
-// Download media via UAZAPI - tries multiple known endpoints
+// Download media via UAZAPI - tries multiple known endpoints for V2
 async function downloadMediaFromUazapi(messageId: string, mediaType?: string): Promise<{ base64: string; mimetype: string } | null> {
   const UAZAPI_URL = Deno.env.get("UAZAPI_URL");
   const UAZAPI_TOKEN = Deno.env.get("UAZAPI_TOKEN");
   if (!UAZAPI_URL || !UAZAPI_TOKEN) return null;
 
-  // UAZAPI known endpoints for downloading media (try in order)
+  // UAZAPI V2 known endpoints - ordered by likelihood of success
+  // The full messageId from webhook is "instancePhone:messageHash", try both formats
+  const shortId = messageId.includes(":") ? messageId.split(":")[1] : messageId;
+
   const endpoints = [
-    { method: "POST", path: "/message/download", body: { messageId } },
-    { method: "POST", path: "/message/download-media", body: { messageId } },
-    { method: "GET", path: `/message/${messageId}/download`, body: null },
-    { method: "POST", path: "/chat/download-media", body: { messageId } },
+    // V2 correct endpoints (from UAZAPI docs)
+    { method: "POST", path: "/message/getMedia", body: { messageid: messageId } },
+    { method: "POST", path: "/message/getMedia", body: { messageid: shortId } },
+    { method: "POST", path: "/message/getLink",  body: { messageid: messageId } },
+    { method: "POST", path: "/message/getLink",  body: { messageid: shortId } },
+    { method: "POST", path: "/message/get-media", body: { messageid: messageId } },
+    { method: "POST", path: "/message/get-media", body: { messageid: shortId } },
+    // Fallback with alternate field names
+    { method: "POST", path: "/message/getMedia", body: { messageId: messageId } },
+    { method: "POST", path: "/message/getMedia", body: { id: messageId } },
+    { method: "POST", path: "/message/getMedia", body: { id: shortId } },
   ];
 
   for (const ep of endpoints) {
     try {
-      const opts: RequestInit = {
+      const resp = await fetch(`${UAZAPI_URL}${ep.path}`, {
         method: ep.method,
         headers: { "Content-Type": "application/json", token: UAZAPI_TOKEN },
-      };
-      if (ep.body) opts.body = JSON.stringify(ep.body);
-
-      const resp = await fetch(`${UAZAPI_URL}${ep.path}`, opts);
-      console.log(`UAZAPI ${ep.method} ${ep.path} -> ${resp.status}`);
+        body: JSON.stringify(ep.body),
+      });
+      console.log(`UAZAPI ${ep.method} ${ep.path} body=${JSON.stringify(ep.body)} -> ${resp.status}`);
 
       if (!resp.ok) continue;
 
       const data = await resp.json();
       console.log("Media download response keys:", Object.keys(data).join(", "));
+      console.log("Media download response:", JSON.stringify(data).substring(0, 300));
 
       // Direct base64 in response
       if (data.base64) {
@@ -62,8 +71,9 @@ async function downloadMediaFromUazapi(messageId: string, mediaType?: string): P
       }
 
       // URL to download separately
-      const url = data.url || data.mediaUrl || data.fileUrl || data.downloadUrl;
+      const url = data.url || data.mediaUrl || data.fileUrl || data.downloadUrl || data.link;
       if (url) {
+        console.log("Downloading from URL:", url.substring(0, 100));
         const mediaResp = await fetch(url);
         if (!mediaResp.ok) continue;
         const ct = mediaResp.headers.get("content-type") || guessMimeType(mediaType);
@@ -268,15 +278,18 @@ function isMediaMessage(message: any): boolean {
 }
 
 function isAudioMessage(message: any): boolean {
-  return message.type === "ptt" ||
-    message.type === "audio" ||
-    (message.type === "media" && (message.mimetype?.startsWith("audio/") || message.mimetype?.includes("ogg"))) ||
-    message.mimetype?.startsWith("audio/");
+  const mt = (message.mediaType || message.type || "").toLowerCase();
+  return mt === "ptt" ||
+    mt === "audio" ||
+    mt.includes("audio") ||
+    message.mimetype?.startsWith("audio/") ||
+    message.mimetype?.includes("ogg");
 }
 
 function isImageMessage(message: any): boolean {
-  return message.type === "image" ||
-    (message.type === "media" && message.mimetype?.startsWith("image/")) ||
+  const mt = (message.mediaType || message.type || "").toLowerCase();
+  return mt === "image" ||
+    mt.includes("image") ||
     message.mimetype?.startsWith("image/");
 }
 
