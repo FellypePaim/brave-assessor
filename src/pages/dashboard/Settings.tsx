@@ -11,27 +11,56 @@ import { useNavigate } from "react-router-dom";
 import WhatsAppLinkCard from "@/components/WhatsAppLinkCard";
 import {
   User, Camera, MessageSquare, Crown, HeadphonesIcon,
-  Bell, Mail, Sparkles, Calendar, CreditCard, Tag,
-  FileText, Brain, ExternalLink, Rocket, Sun, Moon, CheckCircle2
+  Bell, Mail, Sparkles, Calendar, CreditCard,
+  FileText, ExternalLink, Sun, Moon, CheckCircle2, Zap, Star, Users, Lock,
 } from "lucide-react";
 
-const PLAN_INFO: Record<string, { name: string; price: string; features: string[] }> = {
-  free: {
-    name: "Gratuito",
-    price: "R$ 0",
-    features: ["1 carteira", "Categorias básicas", "Relatórios limitados"],
-  },
-  mensal: {
+const NOX_PHONE = "5537999385148";
+const NOX_PHONE_DISPLAY = "(37) 9 9938-5148";
+
+const PLANS = [
+  {
+    key: "mensal",
     name: "Nox Mensal",
     price: "R$ 19,90",
-    features: ["WhatsApp conectado", "Cartões de crédito", "Orçamentos por categoria", "Relatórios", "Previsões com IA"],
+    period: "/mês",
+    description: "Ideal para começar",
+    icon: Zap,
+    color: "text-blue-500",
+    bg: "bg-blue-500/10",
+    border: "border-blue-500/30",
+    features: [
+      { label: "WhatsApp conectado", included: true },
+      { label: "Cartões de crédito", included: true },
+      { label: "Orçamentos por categoria", included: true },
+      { label: "Relatórios detalhados", included: true },
+      { label: "Previsões com IA", included: true },
+      { label: "Modo Família (5 pessoas)", included: false },
+      { label: "Análise comportamental", included: false },
+    ],
   },
-  anual: {
+  {
+    key: "anual",
     name: "Nox Anual",
-    price: "R$ 14,90/mês",
-    features: ["Tudo do Mensal", "Modo família (5 pessoas)", "Investimentos", "Análise comportamental", "Assessor IA completo"],
+    price: "R$ 14,90",
+    period: "/mês · 12x",
+    description: "Melhor custo-benefício",
+    icon: Star,
+    color: "text-amber-500",
+    bg: "bg-amber-500/10",
+    border: "border-amber-500/30",
+    badge: "Mais Popular",
+    features: [
+      { label: "WhatsApp conectado", included: true },
+      { label: "Cartões de crédito", included: true },
+      { label: "Orçamentos por categoria", included: true },
+      { label: "Relatórios detalhados", included: true },
+      { label: "Previsões com IA", included: true },
+      { label: "Modo Família (5 pessoas)", included: true },
+      { label: "Análise comportamental", included: true },
+    ],
   },
-};
+];
 
 export default function Settings() {
   const { user } = useAuth();
@@ -138,7 +167,7 @@ export default function Settings() {
     await supabase.from("profiles").update({ [field]: value }).eq("id", user.id);
   };
 
-  const planData = PLAN_INFO[plan] || PLAN_INFO.free;
+  const currentPlan = PLANS.find(p => p.key === plan);
   const initials = displayName ? displayName.charAt(0).toUpperCase() : "U";
 
   return (
@@ -219,62 +248,92 @@ export default function Settings() {
 
       {/* Plan Card */}
       <Card className="p-6">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-full bg-amber-500/10 flex items-center justify-center">
-              <Crown className="h-4 w-4 text-amber-500" />
-            </div>
-            <div>
-              <h2 className="font-semibold text-foreground">Meu Plano</h2>
-              <p className="text-xs text-muted-foreground">{planData.name}</p>
-            </div>
+        <div className="flex items-center gap-3 mb-6">
+          <div className="h-9 w-9 rounded-full bg-amber-500/10 flex items-center justify-center">
+            <Crown className="h-4 w-4 text-amber-500" />
           </div>
-          <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
-            <CheckCircle2 className="h-3 w-3 mr-1" /> Ativo
-          </Badge>
+          <div>
+            <h2 className="font-semibold text-foreground">Planos e Assinatura</h2>
+            <p className="text-xs text-muted-foreground">
+              {currentPlan ? `Plano atual: ${currentPlan.name}` : "Escolha o melhor plano para você"}
+            </p>
+          </div>
+          {currentPlan && (
+            <Badge className="ml-auto bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
+              <CheckCircle2 className="h-3 w-3 mr-1" /> Ativo
+            </Badge>
+          )}
         </div>
 
+        {/* Plan comparison grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-          <div className="border border-border rounded-lg p-4">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-              <CreditCard className="h-3 w-3" /> Valor
-            </p>
-            <p className="text-lg font-bold text-foreground mt-1">
-              {planData.price}<span className="text-xs font-normal text-muted-foreground">/mês</span>
-            </p>
-          </div>
-          <div className="border border-border rounded-lg p-4">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-              <Calendar className="h-3 w-3" /> Próxima cobrança
-            </p>
-            <p className="text-lg font-bold text-foreground mt-1">16 mar</p>
-          </div>
-        </div>
-
-        <div className="mb-6">
-          <p className="text-xs text-muted-foreground uppercase tracking-wide mb-3">Recursos inclusos</p>
-          <div className="space-y-2">
-            {planData.features.map((f, i) => (
-              <div key={i} className="flex items-center gap-2 text-sm text-foreground">
-                <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
-                {f}
+          {PLANS.map((p) => {
+            const isActive = plan === p.key;
+            const PlanIcon = p.icon;
+            return (
+              <div
+                key={p.key}
+                className={`relative rounded-xl border-2 p-5 transition-all ${
+                  isActive
+                    ? `${p.border} bg-gradient-to-b from-background to-${p.bg.replace("bg-", "")}`
+                    : "border-border bg-muted/30"
+                }`}
+              >
+                {p.badge && (
+                  <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 text-xs font-bold bg-amber-500 text-white px-3 py-0.5 rounded-full">
+                    {p.badge}
+                  </span>
+                )}
+                {isActive && (
+                  <span className="absolute top-3 right-3">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                  </span>
+                )}
+                <div className={`h-9 w-9 rounded-xl ${p.bg} flex items-center justify-center mb-3`}>
+                  <PlanIcon className={`h-4 w-4 ${p.color}`} />
+                </div>
+                <p className="font-bold text-foreground">{p.name}</p>
+                <p className="text-xs text-muted-foreground mb-3">{p.description}</p>
+                <div className="flex items-baseline gap-1 mb-4">
+                  <span className="text-2xl font-extrabold text-foreground">{p.price}</span>
+                  <span className="text-xs text-muted-foreground">{p.period}</span>
+                </div>
+                <div className="space-y-2">
+                  {p.features.map((f, i) => (
+                    <div key={i} className="flex items-center gap-2 text-xs">
+                      {f.included ? (
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                      ) : (
+                        <Lock className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+                      )}
+                      <span className={f.included ? "text-foreground" : "text-muted-foreground/60 line-through"}>
+                        {f.label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                {isActive ? (
+                  <div className="mt-4 text-xs text-center text-muted-foreground font-medium">
+                    ✓ Plano atual
+                  </div>
+                ) : (
+                  <Button size="sm" className="w-full mt-4 rounded-xl" variant="outline">
+                    <Sparkles className="h-3.5 w-3.5 mr-1.5" /> Selecionar plano
+                  </Button>
+                )}
               </div>
-            ))}
-          </div>
+            );
+          })}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Button variant="outline">
+        <div className="flex gap-3">
+          <Button variant="outline" className="flex-1">
             <ExternalLink className="h-4 w-4 mr-2" />
             Gerenciar Assinatura
           </Button>
-          <Button className="bg-primary hover:bg-primary/90">
-            <Crown className="h-4 w-4 mr-2" />
-            Upgrade para Família
-          </Button>
         </div>
         <p className="text-xs text-muted-foreground text-center mt-3">
-          Gerencie pagamento, cancele ou atualize seu plano pelo portal seguro do Stripe
+          Gerencie pagamento, cancele ou atualize seu plano pelo portal seguro
         </p>
       </Card>
 
@@ -289,10 +348,19 @@ export default function Settings() {
             <p className="text-xs text-muted-foreground">Nossa equipe está pronta para te ajudar</p>
           </div>
         </div>
-        <Button variant="outline" className="w-full" onClick={() => navigate("/dashboard/chat")}>
-          <HeadphonesIcon className="h-4 w-4 mr-2" />
-          Abrir Central de Suporte
-        </Button>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Button variant="outline" className="w-full" onClick={() => navigate("/dashboard/chat")}>
+            <HeadphonesIcon className="h-4 w-4 mr-2" />
+            Central de Suporte
+          </Button>
+          <Button
+            className="w-full gap-2 bg-[#25D366] hover:bg-[#1ebe5d] text-white"
+            onClick={() => window.open(`https://wa.me/${NOX_PHONE}`, "_blank")}
+          >
+            <MessageSquare className="h-4 w-4" />
+            WhatsApp · {NOX_PHONE_DISPLAY}
+          </Button>
+        </div>
       </Card>
 
       {/* WhatsApp Notifications */}
