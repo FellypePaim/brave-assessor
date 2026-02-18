@@ -127,16 +127,25 @@ export default function Wallets() {
           </CardContent></Card>
 
           <Card><CardContent className="p-5">
-            <div className="flex items-center justify-between"><div className="flex items-center gap-2"><CalendarDays className="h-5 w-5 text-muted-foreground" /><h3 className="font-semibold text-foreground">Últimas Transações</h3></div></div>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2"><CalendarDays className="h-5 w-5 text-muted-foreground" /><h3 className="font-semibold text-foreground">Últimas Transações</h3></div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1"><TrendingUp className="h-3.5 w-3.5 text-emerald-500" /> Receitas</span>
+                <span className="flex items-center gap-1"><TrendingDown className="h-3.5 w-3.5 text-destructive" /> Despesas</span>
+              </div>
+            </div>
             {transactions.length === 0 ? (
-              <div className="mt-8 flex flex-col items-center text-center pb-4"><div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center"><CalendarDays className="h-6 w-6 text-muted-foreground/50" /></div><p className="mt-3 text-sm font-medium text-muted-foreground">Nenhuma transação encontrada</p></div>
+              <div className="flex flex-col items-center text-center pb-4"><div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center"><CalendarDays className="h-6 w-6 text-muted-foreground/50" /></div><p className="mt-3 text-sm font-medium text-muted-foreground">Nenhuma transação encontrada</p></div>
             ) : (
-              <div className="mt-4 space-y-3">
-                {transactions.slice(0, 5).map((t) => (
-                  <div key={t.id} className="flex items-center justify-between py-2 border-b border-border last:border-0 cursor-pointer hover:bg-muted/30 rounded-lg px-2 -mx-2 transition-colors group" onClick={() => setEditTx(t)}>
-                    <div><p className="text-sm font-medium text-foreground">{t.description}</p><p className="text-xs text-muted-foreground">{new Date(t.date).toLocaleDateString("pt-BR")}</p></div>
+              <div className="space-y-1">
+                {transactions.slice(0, 8).map((t) => (
+                  <div key={t.id} className="flex items-center gap-3 py-2 border-b border-border last:border-0 cursor-pointer hover:bg-muted/30 rounded-lg px-2 -mx-2 transition-colors group" onClick={() => setEditTx(t)}>
+                    <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${t.type === "income" ? "bg-emerald-500/10" : "bg-destructive/10"}`}>
+                      {t.type === "income" ? <TrendingUp className="h-4 w-4 text-emerald-500" /> : <TrendingDown className="h-4 w-4 text-destructive" />}
+                    </div>
+                    <div className="flex-1 min-w-0"><p className="text-sm font-medium text-foreground truncate">{t.description}</p><p className="text-xs text-muted-foreground">{new Date(t.date).toLocaleDateString("pt-BR")}</p></div>
                     <div className="flex items-center gap-2">
-                      <p className={`text-sm font-semibold ${t.type === "income" ? "text-emerald-500" : "text-destructive"}`}>{t.type === "income" ? "+" : "-"} {fmt(Number(t.amount))}</p>
+                      <p className={`text-sm font-semibold ${t.type === "income" ? "text-emerald-500" : "text-destructive"}`}>{t.type === "income" ? "+" : "-"}{fmt(Number(t.amount))}</p>
                       <Pencil className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
                   </div>
