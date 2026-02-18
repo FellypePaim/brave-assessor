@@ -13,6 +13,7 @@ import {
   User, Camera, MessageSquare, Crown, HeadphonesIcon,
   Bell, Mail, Sparkles,
   FileText, Sun, Moon, CheckCircle2, Zap, Star, Lock, Eye, EyeOff,
+  CreditCard, CalendarDays, ExternalLink, Loader2,
 } from "lucide-react";
 
 const NOX_PHONE = "5537999385148";
@@ -97,6 +98,7 @@ export default function Settings() {
   const [notifyEmailUpdates, setNotifyEmailUpdates] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [loadingPortal, setLoadingPortal] = useState(false);
 
   // Security: change email / password
   const [newEmail, setNewEmail] = useState("");
@@ -245,6 +247,18 @@ export default function Settings() {
     setSavingSecurity(false);
   };
 
+  const handlePortal = async () => {
+    setLoadingPortal(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("customer-portal");
+      if (error || !data?.url) throw new Error(error?.message || "Erro ao abrir portal");
+      window.open(data.url, "_blank");
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    } finally {
+      setLoadingPortal(false);
+    }
+  };
 
   const currentPlan = PLANS.find(p => p.key === plan);
   const initials = displayName ? displayName.charAt(0).toUpperCase() : "U";
@@ -333,16 +347,73 @@ export default function Settings() {
           </div>
           <div>
             <h2 className="font-semibold text-foreground">Planos e Assinatura</h2>
-            <p className="text-xs text-muted-foreground">
-              {currentPlan ? `Plano atual: ${currentPlan.name}` : "Escolha o melhor plano para você"}
-            </p>
+            <p className="text-xs text-muted-foreground">Gerencie sua assinatura Nox</p>
           </div>
-          {currentPlan && (
+          {currentPlan && plan !== "free" && (
             <Badge className="ml-auto bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
               <CheckCircle2 className="h-3 w-3 mr-1" /> Ativo
             </Badge>
           )}
         </div>
+
+        {/* Status atual em destaque */}
+        {currentPlan && plan !== "free" ? (
+          <div className={`rounded-xl border-2 p-5 mb-6 ${currentPlan.border} bg-gradient-to-r from-background to-muted/30`}>
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className={`h-11 w-11 rounded-xl ${currentPlan.bg} flex items-center justify-center`}>
+                  <currentPlan.icon className={`h-5 w-5 ${currentPlan.color}`} />
+                </div>
+                <div>
+                  <p className="font-bold text-foreground text-base">{currentPlan.name}</p>
+                  <p className="text-xs text-muted-foreground">{currentPlan.description}</p>
+                </div>
+              </div>
+              <div className="text-right shrink-0">
+                <p className="text-xl font-extrabold text-foreground">{currentPlan.price}</p>
+                <p className="text-xs text-muted-foreground">{currentPlan.period}</p>
+              </div>
+            </div>
+            {subscriptionExpiresAt && (
+              <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground bg-muted/40 rounded-lg px-3 py-2">
+                <CalendarDays className="h-3.5 w-3.5 shrink-0" />
+                <span>
+                  Renova automaticamente em{" "}
+                  <span className="font-semibold text-foreground">
+                    {new Date(subscriptionExpiresAt).toLocaleDateString("pt-BR", {
+                      day: "2-digit",
+                      month: "long",
+                      year: "numeric",
+                    })}
+                  </span>
+                </span>
+              </div>
+            )}
+            <div className="mt-4 flex gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 gap-2"
+                onClick={handlePortal}
+                disabled={loadingPortal}
+              >
+                {loadingPortal ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <CreditCard className="h-3.5 w-3.5" />
+                )}
+                Gerenciar assinatura
+                <ExternalLink className="h-3 w-3 ml-auto" />
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-border bg-muted/30 p-5 mb-6 text-center">
+            <Crown className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+            <p className="text-sm font-medium text-foreground">Você está no plano gratuito</p>
+            <p className="text-xs text-muted-foreground mt-1">Assine um plano para desbloquear todos os recursos</p>
+          </div>
+        )}
 
         {/* Plan comparison grid */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
@@ -354,7 +425,7 @@ export default function Settings() {
                 key={p.key}
                 className={`relative rounded-xl border-2 p-5 transition-all ${
                   isActive
-                    ? `${p.border} bg-gradient-to-b from-background to-${p.bg.replace("bg-", "")}`
+                    ? `${p.border} bg-gradient-to-b from-background to-muted/20`
                     : "border-border bg-muted/30"
                 }`}
               >
@@ -394,11 +465,6 @@ export default function Settings() {
                 {isActive ? (
                   <div className="mt-4 text-center">
                     <p className="text-xs font-medium text-emerald-600">✓ Plano atual</p>
-                    {subscriptionExpiresAt && (
-                      <p className="text-[10px] text-muted-foreground mt-1">
-                        Renova em {new Date(subscriptionExpiresAt).toLocaleDateString("pt-BR")}
-                      </p>
-                    )}
                   </div>
                 ) : (
                   <div className="mt-4 text-center">
