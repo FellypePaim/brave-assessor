@@ -25,93 +25,140 @@ async function sendWhatsAppMessage(phone: string, message: string) {
   return resp.json();
 }
 
-// Extract media from webhook payload inline data (base64 or URL in content field)
-function extractMediaFromPayload(message: any, mediaType?: string): { base64: string; mimetype: string } | null {
-  // UAZAPI may send media inline in the webhook payload
+// Decrypt WhatsApp encrypted media using mediaKey
+async function decryptWhatsAppMedia(
+  encryptedBuffer: ArrayBuffer,
+  mediaKeyBase64: string,
+  mediaType: string
+): Promise<ArrayBuffer> {
+  // WhatsApp media decryption:
+  // 1. Derive keys using HKDF from mediaKey
+  // 2. Decrypt with AES-CBC using derived key and IV
+  const mediaKey = Uint8Array.from(atob(mediaKeyBase64), c => c.charCodeAt(0));
+
+  // Media type info strings for HKDF
+  const mediaTypeInfo: Record<string, string> = {
+    "audio": "WhatsApp Audio Keys",
+    "ptt":   "WhatsApp Audio Keys",
+    "image": "WhatsApp Image Keys",
+    "video": "WhatsApp Video Keys",
+    "document": "WhatsApp Document Keys",
+  };
+  const infoString = mediaTypeInfo[mediaType] || "WhatsApp Audio Keys";
+
+  // HKDF expand
+  const baseKey = await crypto.subtle.importKey("raw", mediaKey, "HKDF", false, ["deriveBits"]);
+  const derived = await crypto.subtle.deriveBits(
+    { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(32), info: new TextEncoder().encode(infoString) },
+    baseKey,
+    112 * 8 // 112 bytes = IV(16) + AES key(32) + mac key(32) + ... 
+  );
+  const derivedBytes = new Uint8Array(derived);
+  const iv = derivedBytes.slice(0, 16);
+  const aesKey = derivedBytes.slice(16, 48);
+
+  // Import AES-CBC key
+  const cryptoKey = await crypto.subtle.importKey("raw", aesKey, { name: "AES-CBC" }, false, ["decrypt"]);
+
+  // Encrypted file = IV(10) + ciphertext + mac(10) - skip first 0 bytes, strip last 10 (MAC)
+  const encBytes = new Uint8Array(encryptedBuffer);
+  // The file from CDN: first 0 bytes are empty, last 10 bytes are HMAC
+  const ciphertext = encBytes.slice(0, encBytes.length - 10);
+
+  const decrypted = await crypto.subtle.decrypt({ name: "AES-CBC", iv }, cryptoKey, ciphertext);
+  return decrypted;
+}
+
+// Extract media from webhook payload inline data
+function extractMediaFromPayload(message: any, mediaType?: string): { encUrl?: string; base64?: string; mimetype: string; mediaKey?: string } | null {
   const content = message.content;
   console.log("Checking inline media in payload. content type:", typeof content, "keys:", content && typeof content === "object" ? Object.keys(content).join(", ") : String(content)?.substring(0, 100));
 
   if (content && typeof content === "object") {
-    // base64 inline
+    const mime = content.mimetype || content.mimeType || guessMimeType(mediaType);
+    
+    // base64 inline (already decoded)
     if (content.base64) {
-      const mime = content.mimetype || content.mimeType || guessMimeType(mediaType);
-      console.log("Found base64 in content, mimetype:", mime);
       return { base64: content.base64, mimetype: mime };
     }
-    // URL in content
-    const url = content.url || content.mediaUrl || content.fileUrl || content.downloadUrl || content.link;
+    
+    // Encrypted WhatsApp CDN URL + mediaKey
+    const url = content.URL || content.url || content.mediaUrl || content.fileUrl || content.downloadUrl || content.link;
     if (url) {
-      console.log("Found media URL in content:", url.substring(0, 100));
-      // Return the URL for async download - handled below
-      return { base64: `URL:${url}`, mimetype: content.mimetype || guessMimeType(mediaType) };
+      console.log("Found media URL in content:", url.substring(0, 100), "mediaKey:", content.mediaKey ? "present" : "absent");
+      return { encUrl: url, mimetype: mime, mediaKey: content.mediaKey };
     }
   }
 
-  // Sometimes content is a string URL directly
+  // String URL directly
   if (typeof content === "string" && (content.startsWith("http://") || content.startsWith("https://"))) {
-    console.log("Found media URL string in content:", content.substring(0, 100));
-    return { base64: `URL:${content}`, mimetype: guessMimeType(mediaType) };
+    return { encUrl: content, mimetype: guessMimeType(mediaType) };
   }
 
-  // Check other fields that might contain media
+  // Other message fields
   const mediaUrl = message.mediaUrl || message.media?.url || message.fileUrl || message.url;
   if (mediaUrl) {
-    console.log("Found media URL in message fields:", mediaUrl.substring(0, 100));
-    return { base64: `URL:${mediaUrl}`, mimetype: message.mimetype || guessMimeType(mediaType) };
+    return { encUrl: mediaUrl, mimetype: message.mimetype || guessMimeType(mediaType) };
   }
 
   return null;
 }
 
-// Download media - first try inline payload, then UAZAPI API endpoints
+// Download and decrypt WhatsApp media
 async function downloadMediaFromUazapi(messageId: string, mediaType?: string, message?: any): Promise<{ base64: string; mimetype: string } | null> {
-  const UAZAPI_URL = Deno.env.get("UAZAPI_URL");
-  const UAZAPI_TOKEN = Deno.env.get("UAZAPI_TOKEN");
-
-  // 1. Try to extract from webhook payload first (no extra API call needed)
+  // 1. Try inline payload first
   if (message) {
     const inline = extractMediaFromPayload(message, mediaType);
     if (inline) {
-      // If it's a URL reference, download it
-      if (inline.base64.startsWith("URL:")) {
-        const url = inline.base64.slice(4);
+      if (inline.base64) {
+        return { base64: inline.base64, mimetype: inline.mimetype };
+      }
+      if (inline.encUrl) {
         try {
-          console.log("Downloading media from URL:", url.substring(0, 100));
-          const mediaResp = await fetch(url);
-          if (mediaResp.ok) {
-            const ct = mediaResp.headers.get("content-type") || inline.mimetype;
-            const buffer = await mediaResp.arrayBuffer();
-            const bytes = new Uint8Array(buffer);
+          console.log("Downloading encrypted media from WhatsApp CDN...");
+          const resp = await fetch(inline.encUrl);
+          if (resp.ok) {
+            const encBuffer = await resp.arrayBuffer();
+            console.log("Downloaded encrypted buffer size:", encBuffer.byteLength);
+
+            let finalBuffer: ArrayBuffer;
+            if (inline.mediaKey) {
+              // Decrypt WhatsApp encrypted media
+              const mt = (mediaType || "audio").toLowerCase();
+              finalBuffer = await decryptWhatsAppMedia(encBuffer, inline.mediaKey, mt === "ptt" ? "audio" : mt);
+              console.log("Decrypted buffer size:", finalBuffer.byteLength);
+            } else {
+              finalBuffer = encBuffer;
+            }
+
+            const bytes = new Uint8Array(finalBuffer);
             let binary = "";
             for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
-            return { base64: btoa(binary), mimetype: ct };
+            const mime = inline.mimetype.split(";")[0].trim(); // "audio/ogg; codecs=opus" -> "audio/ogg"
+            return { base64: btoa(binary), mimetype: mime };
           }
         } catch (e) {
-          console.error("Error downloading from URL:", e);
+          console.error("Error downloading/decrypting WhatsApp media:", e);
         }
-      } else {
-        return inline;
       }
     }
   }
 
+  const UAZAPI_URL = Deno.env.get("UAZAPI_URL");
+  const UAZAPI_TOKEN = Deno.env.get("UAZAPI_TOKEN");
   if (!UAZAPI_URL || !UAZAPI_TOKEN) {
     console.error("UAZAPI credentials not configured");
     return null;
   }
 
-  // 2. Try UAZAPI API endpoints
+  // 2. Try UAZAPI API endpoints as fallback
   const shortId = messageId.includes(":") ? messageId.split(":")[1] : messageId;
-  const fullId = messageId;
 
   const endpoints = [
     { method: "GET",  path: `/message/getMedia/${shortId}`, body: null },
-    { method: "GET",  path: `/message/getMedia/${fullId}`, body: null },
     { method: "GET",  path: `/message/getLink/${shortId}`, body: null },
-    { method: "GET",  path: `/message/${shortId}/getMedia`, body: null },
     { method: "GET",  path: `/message/${shortId}/download`, body: null },
     { method: "GET",  path: `/message/getMedia?messageid=${shortId}`, body: null },
-    { method: "GET",  path: `/message/getMedia?id=${shortId}`, body: null },
     { method: "POST", path: "/message/getMedia", body: { messageid: shortId } },
     { method: "POST", path: "/message/getLink",  body: { messageid: shortId } },
   ];
@@ -125,16 +172,13 @@ async function downloadMediaFromUazapi(messageId: string, mediaType?: string, me
       if (ep.body) fetchOpts.body = JSON.stringify(ep.body);
 
       const resp = await fetch(`${UAZAPI_URL}${ep.path}`, fetchOpts);
-      const respText = await resp.clone().text();
-      console.log(`UAZAPI ${ep.method} ${ep.path} -> ${resp.status} | body: ${respText.substring(0, 200)}`);
-
       if (!resp.ok) continue;
 
       const data = await resp.json();
       if (data.base64) {
         return { base64: data.base64, mimetype: data.mimetype || guessMimeType(mediaType) };
       }
-      const url = data.url || data.mediaUrl || data.fileUrl || data.downloadUrl || data.link;
+      const url = data.url || data.mediaUrl || data.URL;
       if (url) {
         const mediaResp = await fetch(url);
         if (!mediaResp.ok) continue;
