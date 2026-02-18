@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.notify-plan-change]
 verify_jwt = false
+
+[functions.check-expired-plans]
+verify_jwt = false

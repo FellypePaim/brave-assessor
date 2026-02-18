@@ -213,6 +213,7 @@ export type Database = {
           notify_monthly_report: boolean | null
           notify_morning: boolean | null
           notify_night: boolean | null
+          subscription_expires_at: string | null
           subscription_plan: Database["public"]["Enums"]["subscription_plan"]
           updated_at: string
           whatsapp_number: string | null
@@ -228,6 +229,7 @@ export type Database = {
           notify_monthly_report?: boolean | null
           notify_morning?: boolean | null
           notify_night?: boolean | null
+          subscription_expires_at?: string | null
           subscription_plan?: Database["public"]["Enums"]["subscription_plan"]
           updated_at?: string
           whatsapp_number?: string | null
@@ -243,6 +245,7 @@ export type Database = {
           notify_monthly_report?: boolean | null
           notify_morning?: boolean | null
           notify_night?: boolean | null
+          subscription_expires_at?: string | null
           subscription_plan?: Database["public"]["Enums"]["subscription_plan"]
           updated_at?: string
           whatsapp_number?: string | null

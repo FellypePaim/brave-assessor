@@ -73,6 +73,7 @@ export default function Settings() {
   const [monthlyIncome, setMonthlyIncome] = useState("");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [plan, setPlan] = useState("free");
+  const [subscriptionExpiresAt, setSubscriptionExpiresAt] = useState<string | null>(null);
   const [notifyMorning, setNotifyMorning] = useState(true);
   const [notifyNight, setNotifyNight] = useState(true);
   const [notifyMonthlyReport, setNotifyMonthlyReport] = useState(true);
@@ -95,6 +96,7 @@ export default function Settings() {
         setMonthlyIncome(data.monthly_income?.toString() || "");
         setAvatarUrl(data.avatar_url);
         setPlan(data.subscription_plan || "free");
+        setSubscriptionExpiresAt((data as any).subscription_expires_at ?? null);
         setNotifyMorning(data.notify_morning ?? true);
         setNotifyNight(data.notify_night ?? true);
         setNotifyMonthlyReport(data.notify_monthly_report ?? true);
@@ -171,10 +173,15 @@ export default function Settings() {
     if (!user || newPlanKey === plan) return;
     const oldPlan = plan;
 
-    // Update plan in DB
+    // Calculate expiry: mensal = 30 days, anual = 365 days, trimestral = 90 days
+    const daysMap: Record<string, number> = { mensal: 30, anual: 365, trimestral: 90 };
+    const days = daysMap[newPlanKey] ?? 30;
+    const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+
+    // Update plan in DB with expiry date
     const { error } = await supabase
       .from("profiles")
-      .update({ subscription_plan: newPlanKey as any })
+      .update({ subscription_plan: newPlanKey as any, subscription_expires_at: expiresAt } as any)
       .eq("id", user.id);
 
     if (error) {
@@ -183,7 +190,8 @@ export default function Settings() {
     }
 
     setPlan(newPlanKey);
-    toast({ title: "Plano atualizado!", description: `Agora você está no ${PLANS.find(p => p.key === newPlanKey)?.name}.` });
+    setSubscriptionExpiresAt(expiresAt);
+    toast({ title: "Plano atualizado!", description: `Agora você está no ${PLANS.find(p => p.key === newPlanKey)?.name}. Válido por ${days} dias.` });
 
     // Send WhatsApp notification (fire and forget)
     const { data: { session } } = await supabase.auth.getSession();
@@ -346,8 +354,13 @@ export default function Settings() {
                   ))}
                 </div>
                 {isActive ? (
-                  <div className="mt-4 text-xs text-center text-muted-foreground font-medium">
-                    ✓ Plano atual
+                  <div className="mt-4 text-center">
+                    <p className="text-xs font-medium text-emerald-600">✓ Plano atual</p>
+                    {subscriptionExpiresAt && (
+                      <p className="text-[10px] text-muted-foreground mt-1">
+                        Renova em {new Date(subscriptionExpiresAt).toLocaleDateString("pt-BR")}
+                      </p>
+                    )}
                   </div>
                 ) : (
                   <Button size="sm" className="w-full mt-4 rounded-xl" variant="outline" onClick={() => selectPlan(p.key)}>

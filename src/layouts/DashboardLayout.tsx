@@ -5,6 +5,7 @@ import { AnimatedOutlet } from "@/components/AnimatedOutlet";
 import { Moon, Sun } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import PlanExpiredModal from "@/components/PlanExpiredModal";
 
 export default function DashboardLayout() {
   const [dark, setDark] = useState(false);
@@ -43,7 +44,11 @@ export default function DashboardLayout() {
 
         {/* Mobile bottom nav */}
         <MobileBottomNav />
+
+        {/* Plan expired modal — shown globally over all dashboard pages */}
+        <PlanExpiredModal />
       </div>
     </SidebarProvider>
   );
 }
+
