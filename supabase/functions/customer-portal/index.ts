@@ -33,11 +33,17 @@ serve(async (req) => {
     });
 
     const customers = await stripe.customers.list({ email: user.email, limit: 1 });
+    let customerId: string;
     if (customers.data.length === 0) {
-      throw new Error("Nenhum cliente Stripe encontrado para este usuário");
+      // Create customer if doesn't exist yet
+      const newCustomer = await stripe.customers.create({
+        email: user.email,
+        metadata: { supabase_user_id: user.id },
+      });
+      customerId = newCustomer.id;
+    } else {
+      customerId = customers.data[0].id;
     }
-
-    const customerId = customers.data[0].id;
     const origin = req.headers.get("origin") || "https://nox-assessor.lovable.app";
 
     const portalSession = await stripe.billingPortal.sessions.create({
