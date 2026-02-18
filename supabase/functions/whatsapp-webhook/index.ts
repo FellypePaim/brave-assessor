@@ -25,7 +25,39 @@ async function sendWhatsAppMessage(phone: string, message: string) {
   return resp.json();
 }
 
-// Decrypt WhatsApp encrypted media using mediaKey
+// Send WhatsApp message with up to 3 quick-reply buttons
+async function sendWhatsAppButtons(
+  phone: string,
+  body: string,
+  buttons: { id: string; text: string }[],
+  footer?: string
+) {
+  const UAZAPI_URL = Deno.env.get("UAZAPI_URL");
+  const UAZAPI_TOKEN = Deno.env.get("UAZAPI_TOKEN");
+  if (!UAZAPI_URL || !UAZAPI_TOKEN) throw new Error("UAZAPI credentials not configured");
+
+  const resp = await fetch(`${UAZAPI_URL}/send/buttons`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", token: UAZAPI_TOKEN },
+    body: JSON.stringify({
+      number: phone,
+      title: "",
+      body,
+      footer: footer || "",
+      buttons: buttons.map((b) => ({ id: b.id, text: b.text })),
+    }),
+  });
+
+  if (!resp.ok) {
+    const t = await resp.text();
+    console.warn("UAZAPI buttons error (falling back to text):", resp.status, t);
+    // Fallback to plain text if buttons not supported
+    return sendWhatsAppMessage(phone, body + (footer ? `\n${footer}` : ""));
+  }
+  return resp.json();
+}
+
+
 async function decryptWhatsAppMedia(
   encryptedBuffer: ArrayBuffer,
   mediaKeyBase64: string,
@@ -592,17 +624,21 @@ Categorias: ${(categories || []).map((c: any) => `${c.name} (id:${c.id})`).join(
         .maybeSingle();
 
       if (pending) {
-        const confirmMatch = messageText.match(/^(sim|s|confirmar|ok|yes|confirm)$/i);
-        const cancelMatch  = messageText.match(/^(não|nao|n|cancelar|cancel|no)$/i);
+      // Also handle button click responses (UAZAPI sends buttonId or selectedButtonId)
+      const buttonId = message.buttonOrListid || message.selectedButtonId || message.buttonId || "";
+      const effectiveText = messageText || buttonId;
+
+      const confirmMatch = effectiveText.match(/^(sim|s|confirmar|ok|yes|confirm)$/i);
+      const cancelMatch  = effectiveText.match(/^(não|nao|n|cancelar|cancel|no|nao)$/i);
         // User sends just a number to change the amount, e.g. "45" or "45,50" or "45.50"
-        const amountMatch  = messageText.match(/^r?\$?\s*(\d+(?:[.,]\d{1,2})?)$/i);
+        const amountMatch  = effectiveText.match(/^r?\$?\s*(\d+(?:[.,]\d{1,2})?)$/i);
         // User sends "desc: nova descrição" to change description
-        const descMatch    = messageText.match(/^(?:desc(?:rição)?|descrição|nome|item)\s*[:\-]\s*(.+)$/i);
+        const descMatch    = effectiveText.match(/^(?:desc(?:rição)?|descrição|nome|item)\s*[:\-]\s*(.+)$/i);
         // User sends "receita" or "despesa" to change type
-        const typeMatch    = messageText.match(/^(receita|income|entrada|despesa|expense|gasto|saída|saida)$/i);
+        const typeMatch    = effectiveText.match(/^(receita|income|entrada|despesa|expense|gasto|saída|saida)$/i);
         // User sends a category name to change category
         const catMatch     = !confirmMatch && !cancelMatch && !amountMatch && !descMatch && !typeMatch
-          ? (categories || []).find((c: any) => messageText.toLowerCase() === c.name.toLowerCase())
+          ? (categories || []).find((c: any) => effectiveText.toLowerCase() === c.name.toLowerCase())
           : null;
 
         if (cancelMatch) {
@@ -620,13 +656,15 @@ Categorias: ${(categories || []).map((c: any) => `${c.name} (id:${c.id})`).join(
             .update({ amount: newAmount })
             .eq("id", pending.id);
           const emoji = pending.type === "income" ? "💰" : "💸";
-          await sendWhatsAppMessage(cleanPhone,
+          await sendWhatsAppButtons(
+            cleanPhone,
             `✏️ Valor atualizado para *R$ ${newAmount.toFixed(2)}*\n\n` +
             `${emoji} *Confirmar transação?*\n\n` +
             `📝 ${pending.description}\n` +
             `💵 R$ ${newAmount.toFixed(2)}\n` +
-            `📂 ${pending.category_name || "Sem categoria"}\n\n` +
-            `✅ *SIM* para confirmar | ❌ *NÃO* para cancelar`
+            `📂 ${pending.category_name || "Sem categoria"}`,
+            [{ id: "sim", text: "✅ Confirmar" }, { id: "nao", text: "❌ Cancelar" }],
+            "Ou corrija: valor, descrição, categoria ou tipo"
           );
           return new Response(JSON.stringify({ ok: true }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -640,13 +678,15 @@ Categorias: ${(categories || []).map((c: any) => `${c.name} (id:${c.id})`).join(
             .update({ description: newDesc })
             .eq("id", pending.id);
           const emoji = pending.type === "income" ? "💰" : "💸";
-          await sendWhatsAppMessage(cleanPhone,
+          await sendWhatsAppButtons(
+            cleanPhone,
             `✏️ Descrição atualizada para *${newDesc}*\n\n` +
             `${emoji} *Confirmar transação?*\n\n` +
             `📝 ${newDesc}\n` +
             `💵 R$ ${Number(pending.amount).toFixed(2)}\n` +
-            `📂 ${pending.category_name || "Sem categoria"}\n\n` +
-            `✅ *SIM* para confirmar | ❌ *NÃO* para cancelar`
+            `📂 ${pending.category_name || "Sem categoria"}`,
+            [{ id: "sim", text: "✅ Confirmar" }, { id: "nao", text: "❌ Cancelar" }],
+            "Ou corrija: valor, descrição, categoria ou tipo"
           );
           return new Response(JSON.stringify({ ok: true }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -662,14 +702,16 @@ Categorias: ${(categories || []).map((c: any) => `${c.name} (id:${c.id})`).join(
             .eq("id", pending.id);
           const emoji = newType === "income" ? "💰" : "💸";
           const typeLabel = newType === "income" ? "Receita" : "Despesa";
-          await sendWhatsAppMessage(cleanPhone,
+          await sendWhatsAppButtons(
+            cleanPhone,
             `✏️ Tipo alterado para *${typeLabel}*\n\n` +
             `${emoji} *Confirmar transação?*\n\n` +
             `📝 ${pending.description}\n` +
             `💵 R$ ${Number(pending.amount).toFixed(2)}\n` +
             `📂 ${pending.category_name || "Sem categoria"}\n` +
-            `🏷️ ${typeLabel}\n\n` +
-            `✅ *SIM* para confirmar | ❌ *NÃO* para cancelar`
+            `🏷️ ${typeLabel}`,
+            [{ id: "sim", text: "✅ Confirmar" }, { id: "nao", text: "❌ Cancelar" }],
+            "Ou corrija: valor, descrição, categoria ou tipo"
           );
           return new Response(JSON.stringify({ ok: true }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -682,13 +724,15 @@ Categorias: ${(categories || []).map((c: any) => `${c.name} (id:${c.id})`).join(
             .update({ category_id: (catMatch as any).id, category_name: (catMatch as any).name })
             .eq("id", pending.id);
           const emoji = pending.type === "income" ? "💰" : "💸";
-          await sendWhatsAppMessage(cleanPhone,
+          await sendWhatsAppButtons(
+            cleanPhone,
             `✏️ Categoria atualizada para *${(catMatch as any).name}*\n\n` +
             `${emoji} *Confirmar transação?*\n\n` +
             `📝 ${pending.description}\n` +
             `💵 R$ ${Number(pending.amount).toFixed(2)}\n` +
-            `📂 ${(catMatch as any).name}\n\n` +
-            `✅ *SIM* para confirmar | ❌ *NÃO* para cancelar`
+            `📂 ${(catMatch as any).name}`,
+            [{ id: "sim", text: "✅ Confirmar" }, { id: "nao", text: "❌ Cancelar" }],
+            "Ou corrija: valor, descrição, categoria ou tipo"
           );
           return new Response(JSON.stringify({ ok: true }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -762,14 +806,21 @@ Categorias: ${(categories || []).map((c: any) => `${c.name} (id:${c.id})`).join(
 
         const emoji = action.type === "income" ? "💰" : "💸";
         const paymentInfo = action.payment_method ? `\n💳 ${action.payment_method}` : "";
-        replyText =
+        const confirmBody =
           `${emoji} *Confirmar transação?*\n\n` +
           `📝 ${action.description}\n` +
           `💵 R$ ${Number(action.amount).toFixed(2)}\n` +
-          `📂 ${matchedCategory?.name || action.category || "Sem categoria"}${paymentInfo}\n\n` +
-          `✅ Responda *SIM* para confirmar\n` +
-          `❌ Responda *NÃO* para cancelar\n` +
-          `✏️ Ou corrija os dados e envie novamente`;
+          `📂 ${matchedCategory?.name || action.category || "Sem categoria"}${paymentInfo}`;
+
+        await sendWhatsAppButtons(
+          cleanPhone,
+          confirmBody,
+          [{ id: "sim", text: "✅ Confirmar" }, { id: "nao", text: "❌ Cancelar" }],
+          "Ou corrija: valor, descrição, categoria ou tipo"
+        );
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
     } catch (parseErr) {
       console.log("Response is text, not action");
