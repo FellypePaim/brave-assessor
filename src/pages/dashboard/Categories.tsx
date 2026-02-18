@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Target, Pencil, UtensilsCrossed, ShoppingCart, GraduationCap, Gamepad2, Home, Package, DollarSign, Heart, Car, BookOpen, Shirt, MoreHorizontal } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { Plus, Target, Pencil, UtensilsCrossed, ShoppingCart, GraduationCap, Gamepad2, Home, Package, DollarSign, Heart, Car, BookOpen, Shirt, MoreHorizontal, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { EditCategoryDialog } from "@/components/EditCategoryDialog";
 
 const iconMap: Record<string, React.ElementType> = {
@@ -13,22 +14,28 @@ const iconMap: Record<string, React.ElementType> = {
   shirt: Shirt, "more-horizontal": MoreHorizontal,
 };
 
-const styleMap: Record<string, { dot: string; bg: string; text: string }> = {
-  "#ef4444": { dot: "bg-rose-500", bg: "bg-gradient-to-br from-rose-100 to-red-200", text: "text-rose-600" },
-  "#f97316": { dot: "bg-orange-500", bg: "bg-gradient-to-br from-orange-100 to-amber-200", text: "text-orange-600" },
-  "#ec4899": { dot: "bg-pink-500", bg: "bg-gradient-to-br from-pink-100 to-fuchsia-200", text: "text-pink-600" },
-  "#10b981": { dot: "bg-emerald-500", bg: "bg-gradient-to-br from-emerald-100 to-green-200", text: "text-emerald-600" },
-  "#3b82f6": { dot: "bg-blue-500", bg: "bg-gradient-to-br from-blue-100 to-sky-200", text: "text-blue-600" },
-  "#06b6d4": { dot: "bg-cyan-500", bg: "bg-gradient-to-br from-cyan-100 to-teal-200", text: "text-cyan-600" },
-  "#6b7280": { dot: "bg-slate-500", bg: "bg-gradient-to-br from-slate-100 to-gray-200", text: "text-slate-600" },
-  "#f59e0b": { dot: "bg-amber-500", bg: "bg-gradient-to-br from-amber-100 to-yellow-200", text: "text-amber-600" },
-  "#8b5cf6": { dot: "bg-violet-500", bg: "bg-gradient-to-br from-violet-100 to-purple-200", text: "text-violet-600" },
+const styleMap: Record<string, { dot: string; bg: string; text: string; bar: string }> = {
+  "#ef4444": { dot: "bg-rose-500", bg: "bg-gradient-to-br from-rose-100 to-red-200", text: "text-rose-600", bar: "bg-rose-500" },
+  "#f97316": { dot: "bg-orange-500", bg: "bg-gradient-to-br from-orange-100 to-amber-200", text: "text-orange-600", bar: "bg-orange-500" },
+  "#ec4899": { dot: "bg-pink-500", bg: "bg-gradient-to-br from-pink-100 to-fuchsia-200", text: "text-pink-600", bar: "bg-pink-500" },
+  "#10b981": { dot: "bg-emerald-500", bg: "bg-gradient-to-br from-emerald-100 to-green-200", text: "text-emerald-600", bar: "bg-emerald-500" },
+  "#3b82f6": { dot: "bg-blue-500", bg: "bg-gradient-to-br from-blue-100 to-sky-200", text: "text-blue-600", bar: "bg-blue-500" },
+  "#06b6d4": { dot: "bg-cyan-500", bg: "bg-gradient-to-br from-cyan-100 to-teal-200", text: "text-cyan-600", bar: "bg-cyan-500" },
+  "#6b7280": { dot: "bg-slate-500", bg: "bg-gradient-to-br from-slate-100 to-gray-200", text: "text-slate-600", bar: "bg-slate-500" },
+  "#f59e0b": { dot: "bg-amber-500", bg: "bg-gradient-to-br from-amber-100 to-yellow-200", text: "text-amber-600", bar: "bg-amber-500" },
+  "#8b5cf6": { dot: "bg-violet-500", bg: "bg-gradient-to-br from-violet-100 to-purple-200", text: "text-violet-600", bar: "bg-violet-500" },
 };
+
+const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 export default function Categories() {
   const { user } = useAuth();
   const [editCategory, setEditCategory] = useState<any>(null);
   const [showNew, setShowNew] = useState(false);
+
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
 
   const { data: categories = [] } = useQuery({
     queryKey: ["categories", user?.id],
@@ -40,41 +47,114 @@ export default function Categories() {
     enabled: !!user,
   });
 
+  const { data: monthTransactions = [] } = useQuery({
+    queryKey: ["categories-month-tx", user?.id, monthStart],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("transactions")
+        .select("amount, category_id, type")
+        .eq("type", "expense")
+        .gte("date", monthStart)
+        .lte("date", monthEnd);
+      return data || [];
+    },
+    enabled: !!user,
+  });
+
+  // Map: category_id -> spent amount this month
+  const spentByCategory = useMemo(() => {
+    const map: Record<string, number> = {};
+    monthTransactions.forEach(t => {
+      if (t.category_id) {
+        map[t.category_id] = (map[t.category_id] || 0) + Number(t.amount);
+      }
+    });
+    return map;
+  }, [monthTransactions]);
+
+  const totalWithBudget = categories.filter(c => c.budget_limit).length;
+  const exceeded = categories.filter(c => c.budget_limit && (spentByCategory[c.id] || 0) >= Number(c.budget_limit)).length;
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Categorias</h1>
-          <p className="text-muted-foreground text-sm">Organize suas transações</p>
+          <p className="text-muted-foreground text-sm">Orçamentos e gastos do mês atual</p>
         </div>
         <Button className="rounded-full bg-primary hover:bg-primary/90 text-primary-foreground gap-1.5" onClick={() => setShowNew(true)}>
           <Plus className="h-4 w-4" /> Nova Categoria
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Summary */}
+      {totalWithBudget > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <Card className="p-4 flex items-center gap-3">
+            <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+              <Target className="h-4 w-4 text-primary" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Com orçamento</p>
+              <p className="font-bold text-foreground">{totalWithBudget} categorias</p>
+            </div>
+          </Card>
+          <Card className={`p-4 flex items-center gap-3 ${exceeded > 0 ? "border-destructive/30" : ""}`}>
+            <div className={`h-9 w-9 rounded-xl flex items-center justify-center shrink-0 ${exceeded > 0 ? "bg-destructive/10" : "bg-emerald-500/10"}`}>
+              {exceeded > 0
+                ? <AlertTriangle className="h-4 w-4 text-destructive" />
+                : <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              }
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Estouradas</p>
+              <p className={`font-bold ${exceeded > 0 ? "text-destructive" : "text-emerald-600"}`}>{exceeded} {exceeded === 1 ? "categoria" : "categorias"}</p>
+            </div>
+          </Card>
+          <Card className="p-4 flex items-center gap-3 col-span-2 sm:col-span-1">
+            <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+              <DollarSign className="h-4 w-4 text-primary" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Total gasto no mês</p>
+              <p className="font-bold text-foreground">{fmt(Object.values(spentByCategory).reduce((s, v) => s + v, 0))}</p>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {categories.map((cat, i) => {
           const IconComp = iconMap[cat.icon || ""] || Package;
           const style = styleMap[cat.color || ""] || styleMap["#6b7280"];
+          const spent = spentByCategory[cat.id] || 0;
+          const limit = cat.budget_limit ? Number(cat.budget_limit) : null;
+          const pct = limit ? Math.min(100, (spent / limit) * 100) : null;
+          const isOver = limit !== null && spent > limit;
+          const isClose = limit !== null && !isOver && pct !== null && pct >= 80;
+
           return (
             <Card
               key={cat.id}
-              className="p-5 flex items-start gap-3 relative hover:shadow-lg hover:-translate-y-1 transition-all duration-300 cursor-pointer group animate-fade-in"
+              className={`p-5 relative hover:shadow-lg hover:-translate-y-1 transition-all duration-300 cursor-pointer group animate-fade-in ${isOver ? "border-destructive/40 ring-1 ring-destructive/20" : ""}`}
               style={{ animationDelay: `${i * 60}ms`, animationFillMode: "both" }}
               onClick={() => setEditCategory(cat)}
             >
+              {/* Edit icon */}
               <button className="absolute top-3 right-8 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-lg hover:bg-muted z-10">
                 <Pencil className="h-3 w-3 text-muted-foreground" />
               </button>
-              <div className={`h-12 w-12 rounded-2xl ${style.bg} flex items-center justify-center shrink-0 shadow-sm group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300`}>
-                <IconComp className={`h-6 w-6 ${style.text} drop-shadow-sm`} />
-              </div>
+
+              <div className="flex items-start gap-3 mb-3">
+                <div className={`h-12 w-12 rounded-2xl ${style.bg} flex items-center justify-center shrink-0 shadow-sm group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300`}>
+                  <IconComp className={`h-6 w-6 ${style.text} drop-shadow-sm`} />
+                </div>
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold text-foreground text-sm">{cat.name}</p>
-                  {cat.budget_limit ? (
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
-                      <span>Limite: R$ {Number(cat.budget_limit).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                    </div>
+                  {limit ? (
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {fmt(spent)} <span className="text-muted-foreground/60">de</span> {fmt(limit)}
+                    </p>
                   ) : (
                     <button
                       className="mt-1.5 flex items-center gap-1 text-[11px] font-medium text-primary/80 hover:text-primary border border-dashed border-primary/30 hover:border-primary/60 rounded-lg px-2 py-0.5 transition-all hover:bg-primary/5"
@@ -85,10 +165,41 @@ export default function Categories() {
                     </button>
                   )}
                 </div>
-              <div className={`absolute top-4 right-4 h-3.5 w-3.5 rounded-full ${style.dot} shadow-md group-hover:scale-125 transition-transform duration-300`} />
+                <div className={`absolute top-4 right-4 h-3.5 w-3.5 rounded-full ${isOver ? "bg-destructive" : style.dot} shadow-md group-hover:scale-125 transition-transform duration-300`} />
+              </div>
+
+              {/* Budget progress */}
+              {limit !== null && pct !== null && (
+                <div className="space-y-1.5">
+                  <div className="h-2 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-700 ${isOver ? "bg-destructive" : isClose ? "bg-amber-500" : style.bar}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className={`text-[10px] font-medium ${isOver ? "text-destructive" : isClose ? "text-amber-600" : "text-muted-foreground"}`}>
+                      {isOver
+                        ? `⚠ Estourou ${fmt(spent - limit)}`
+                        : isClose
+                        ? `🟡 ${pct.toFixed(0)}% usado`
+                        : `${pct.toFixed(0)}% usado`}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">{fmt(Math.max(0, limit - spent))} restam</span>
+                  </div>
+                </div>
+              )}
+
+              {/* No budget: show spent */}
+              {!limit && spent > 0 && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Gasto este mês: <span className="font-semibold text-foreground">{fmt(spent)}</span>
+                </p>
+              )}
             </Card>
           );
         })}
+
         {categories.length === 0 && (
           <div className="col-span-full text-center py-12 text-muted-foreground">
             <Package className="h-12 w-12 mx-auto mb-3 opacity-40" />
