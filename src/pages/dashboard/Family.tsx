@@ -6,9 +6,10 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
 import {
-  Users, Plus, Mail, Crown, UserCheck, UserX, TrendingDown,
-  TrendingUp, Wallet, PieChart, ChevronRight, Loader2,
+  Users, Plus, Crown, UserCheck, UserX, TrendingDown,
+  TrendingUp, PieChart, ChevronRight, Loader2, Lock, Sparkles, Wallet,
 } from "lucide-react";
 
 const fmt = (v: number) =>
@@ -18,9 +19,26 @@ export default function Family() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [groupName, setGroupName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [creatingGroup, setCreatingGroup] = useState(false);
+
+  // Fetch user profile to check subscription plan
+  const { data: profile } = useQuery({
+    queryKey: ["profile-plan", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("subscription_plan, display_name")
+        .eq("id", user!.id)
+        .single();
+      return data;
+    },
+    enabled: !!user,
+  });
+
+  const canCreateGroup = profile?.subscription_plan === "anual" || profile?.subscription_plan === "trimestral";
 
   // Fetch group where user is owner
   const { data: myGroup, isLoading: loadingGroup } = useQuery({
@@ -191,9 +209,51 @@ export default function Family() {
           <p className="text-muted-foreground text-sm">Gerencie finanças em conjunto com sua família</p>
         </div>
 
+        {/* Plan badge */}
+        {!canCreateGroup && (
+          <Card className="p-4 border-primary/30 bg-gradient-to-r from-primary/5 to-pink-500/5 flex items-center gap-4">
+            <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+              <Sparkles className="h-5 w-5 text-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-foreground text-sm">Modo Família requer Plano Anual</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Seu plano atual: <span className="font-bold capitalize text-foreground">{profile?.subscription_plan || "Free"}</span>
+                {" "}· Membros convidados podem entrar sem restrição de plano
+              </p>
+            </div>
+            <Button
+              size="sm"
+              className="rounded-xl shrink-0 gap-1.5 bg-gradient-to-r from-primary to-pink-500 hover:brightness-110 text-primary-foreground"
+              onClick={() => navigate("/dashboard/settings")}
+            >
+              <Sparkles className="h-3.5 w-3.5" /> Upgrade
+            </Button>
+          </Card>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {/* Create group */}
-          <Card className="p-6 space-y-4">
+          <Card className={`p-6 space-y-4 relative overflow-hidden ${!canCreateGroup ? "border-primary/30" : ""}`}>
+            {/* Upgrade overlay for locked plans */}
+            {!canCreateGroup && (
+              <div className="absolute inset-0 bg-background/80 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center gap-3 rounded-lg p-6">
+                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Lock className="h-5 w-5 text-primary" />
+                </div>
+                <div className="text-center">
+                  <p className="font-bold text-foreground text-sm">Recurso do Plano Anual</p>
+                  <p className="text-xs text-muted-foreground mt-1">Faça upgrade para criar e gerenciar grupos familiares</p>
+                </div>
+                <Button
+                  size="sm"
+                  className="rounded-xl gap-2 bg-gradient-to-r from-primary to-pink-500 hover:brightness-110 text-primary-foreground"
+                  onClick={() => navigate("/dashboard/settings")}
+                >
+                  <Sparkles className="h-4 w-4" /> Fazer upgrade
+                </Button>
+              </div>
+            )}
             <div className="flex items-center gap-3 mb-2">
               <div className="h-11 w-11 rounded-xl bg-primary/10 flex items-center justify-center">
                 <Crown className="h-5 w-5 text-primary" />
