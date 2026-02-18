@@ -4,10 +4,11 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
-import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { ProtectedRoute, AuthOnlyRoute } from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
+import PlanGate from "./pages/PlanGate";
 import DashboardLayout from "./layouts/DashboardLayout";
 import Dashboard from "./pages/Dashboard";
 import Placeholder from "./pages/dashboard/Placeholder";
@@ -40,6 +41,18 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
+
+            {/* Página de planos — requer login mas não plano ativo */}
+            <Route
+              path="/planos"
+              element={
+                <AuthOnlyRoute>
+                  <PlanGate />
+                </AuthOnlyRoute>
+              }
+            />
+
+            {/* Dashboard — requer login + plano ativo */}
             <Route
               path="/dashboard"
               element={
@@ -64,6 +77,7 @@ const App = () => (
               <Route path="admin/users" element={<AdminUsers />} />
               <Route path="nylo-ia" element={<NyloChat />} />
             </Route>
+
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

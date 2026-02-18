@@ -27,9 +27,9 @@ interface UserRow {
 }
 
 const PLAN_LABELS: Record<string, { label: string; color: string }> = {
-  free:       { label: "Gratuito",     color: "bg-muted text-muted-foreground" },
+  free:       { label: "Sem plano",    color: "bg-muted text-muted-foreground" },
+  teste:      { label: "Teste 10min",  color: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30" },
   mensal:     { label: "Mensal",       color: "bg-blue-500/10 text-blue-600 border-blue-500/30" },
-  trimestral: { label: "Trimestral",   color: "bg-purple-500/10 text-purple-600 border-purple-500/30" },
   anual:      { label: "Anual",        color: "bg-amber-500/10 text-amber-600 border-amber-500/30" },
 };
 
@@ -133,6 +133,18 @@ export default function AdminUsers() {
     if (!editUser) return;
     setSaving(true);
 
+    // For "teste" plan, always set expiry to 10 minutes from now (regardless of editExpiry)
+    let expiresAt: string | null = editExpiry ? new Date(editExpiry).toISOString() : null;
+    if (editPlan === "teste") {
+      expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+    } else if (editPlan === "mensal" && !editExpiry) {
+      expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    } else if (editPlan === "anual" && !editExpiry) {
+      expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+    } else if (editPlan === "free") {
+      expiresAt = null;
+    }
+
     // Update profile
     const { error: profileErr } = await supabase
       .from("profiles")
@@ -140,7 +152,7 @@ export default function AdminUsers() {
         display_name: editName,
         subscription_plan: editPlan as any,
         monthly_income: parseFloat(editIncome) || 0,
-        subscription_expires_at: editExpiry ? new Date(editExpiry).toISOString() : null,
+        subscription_expires_at: expiresAt,
       } as any)
       .eq("id", editUser.id);
 
@@ -156,7 +168,8 @@ export default function AdminUsers() {
       await supabase.from("user_roles").insert({ user_id: editUser.id, role: editRole as any });
     }
 
-    toast({ title: "Usuário atualizado!", description: `${editName} foi salvo com sucesso.` });
+    const planLabel = editPlan === "teste" ? "Plano Teste (10 min)" : editPlan;
+    toast({ title: "Usuário atualizado!", description: `${editName} — plano ${planLabel} ativado.` });
     setSaving(false);
     setEditUser(null);
     fetchUsers();
@@ -201,9 +214,9 @@ export default function AdminUsers() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos os planos</SelectItem>
-              <SelectItem value="free">Gratuito</SelectItem>
+              <SelectItem value="free">Sem plano</SelectItem>
+              <SelectItem value="teste">Teste</SelectItem>
               <SelectItem value="mensal">Mensal</SelectItem>
-              <SelectItem value="trimestral">Trimestral</SelectItem>
               <SelectItem value="anual">Anual</SelectItem>
             </SelectContent>
           </Select>
@@ -360,12 +373,21 @@ export default function AdminUsers() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="free">Gratuito</SelectItem>
-                        <SelectItem value="mensal">Mensal</SelectItem>
-                        <SelectItem value="trimestral">Trimestral</SelectItem>
-                        <SelectItem value="anual">Anual</SelectItem>
+                        <SelectItem value="free">Sem plano (bloqueado)</SelectItem>
+                        <SelectItem value="teste">⏱ Teste — 10 minutos</SelectItem>
+                        <SelectItem value="mensal">Mensal — 30 dias</SelectItem>
+                        <SelectItem value="anual">Anual — 365 dias</SelectItem>
                       </SelectContent>
                     </Select>
+                    {editPlan === "teste" && (
+                      <p className="text-[10px] text-amber-600 mt-1">⚠️ Expira automaticamente em 10 minutos ao salvar.</p>
+                    )}
+                    {editPlan === "mensal" && !editExpiry && (
+                      <p className="text-[10px] text-muted-foreground mt-1">Expiry padrão: 30 dias a partir de agora.</p>
+                    )}
+                    {editPlan === "anual" && !editExpiry && (
+                      <p className="text-[10px] text-muted-foreground mt-1">Expiry padrão: 365 dias a partir de agora.</p>
+                    )}
                   </div>
 
                   <div>

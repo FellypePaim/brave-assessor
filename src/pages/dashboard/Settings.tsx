@@ -20,6 +20,23 @@ const NOX_PHONE_DISPLAY = "(37) 9 9938-5148";
 
 const PLANS = [
   {
+    key: "teste",
+    name: "Plano Teste",
+    price: "Grátis",
+    period: "· 10 min",
+    description: "Liberado pelo administrador",
+    icon: CheckCircle2,
+    color: "text-emerald-500",
+    bg: "bg-emerald-500/10",
+    border: "border-emerald-500/30",
+    features: [
+      { label: "Acesso completo por 10 minutos", included: true },
+      { label: "Todas as funcionalidades do Mensal", included: true },
+      { label: "Modo Família (5 pessoas)", included: false },
+      { label: "Análise comportamental", included: false },
+    ],
+  },
+  {
     key: "mensal",
     name: "Nox Mensal",
     price: "R$ 19,90",
@@ -269,7 +286,7 @@ export default function Settings() {
         </div>
 
         {/* Plan comparison grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
           {PLANS.map((p) => {
             const isActive = plan === p.key;
             const PlanIcon = p.icon;
