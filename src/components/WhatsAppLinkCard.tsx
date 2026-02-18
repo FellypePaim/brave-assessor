@@ -133,6 +133,13 @@ export default function WhatsAppLinkCard({ userId }: WhatsAppLinkCardProps) {
               Envie mensagens como "Gastei 50 com almoço" para registrar transações automaticamente.
             </p>
           </div>
+          <Button
+            className="w-full gap-2 bg-[#25D366] hover:bg-[#1ebe5d] text-white"
+            onClick={() => window.open(`https://wa.me/${NOX_PHONE}`, "_blank")}
+          >
+            <MessageSquare className="h-4 w-4" />
+            Falar no WhatsApp · {NOX_PHONE_DISPLAY}
+          </Button>
           <Button variant="outline" onClick={unlinkWhatsApp} disabled={loading} className="w-full">
             <Unlink className="h-4 w-4 mr-2" />
             Desvincular WhatsApp

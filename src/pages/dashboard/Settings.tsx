@@ -11,8 +11,8 @@ import { useNavigate } from "react-router-dom";
 import WhatsAppLinkCard from "@/components/WhatsAppLinkCard";
 import {
   User, Camera, MessageSquare, Crown, HeadphonesIcon,
-  Bell, Mail, Sparkles, Calendar, CreditCard,
-  FileText, ExternalLink, Sun, Moon, CheckCircle2, Zap, Star, Users, Lock,
+  Bell, Mail, Sparkles,
+  FileText, Sun, Moon, CheckCircle2, Zap, Star, Lock,
 } from "lucide-react";
 
 const NOX_PHONE = "5537999385148";
@@ -169,44 +169,6 @@ export default function Settings() {
     await supabase.from("profiles").update({ [field]: value }).eq("id", user.id);
   };
 
-  const selectPlan = async (newPlanKey: string) => {
-    if (!user || newPlanKey === plan) return;
-    const oldPlan = plan;
-
-    // Calculate expiry: mensal = 30 days, anual = 365 days, trimestral = 90 days
-    const daysMap: Record<string, number> = { mensal: 30, anual: 365, trimestral: 90 };
-    const days = daysMap[newPlanKey] ?? 30;
-    const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
-
-    // Update plan in DB with expiry date
-    const { error } = await supabase
-      .from("profiles")
-      .update({ subscription_plan: newPlanKey as any, subscription_expires_at: expiresAt } as any)
-      .eq("id", user.id);
-
-    if (error) {
-      toast({ title: "Erro ao alterar plano", description: error.message, variant: "destructive" });
-      return;
-    }
-
-    setPlan(newPlanKey);
-    setSubscriptionExpiresAt(expiresAt);
-    toast({ title: "Plano atualizado!", description: `Agora você está no ${PLANS.find(p => p.key === newPlanKey)?.name}. Válido por ${days} dias.` });
-
-    // Send WhatsApp notification (fire and forget)
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.access_token) {
-      const supabaseProjectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
-      fetch(`https://${supabaseProjectId}.supabase.co/functions/v1/notify-plan-change`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ newPlan: newPlanKey, oldPlan }),
-      }).catch(() => {/* silent */});
-    }
-  };
 
   const currentPlan = PLANS.find(p => p.key === plan);
   const initials = displayName ? displayName.charAt(0).toUpperCase() : "U";
@@ -363,23 +325,24 @@ export default function Settings() {
                     )}
                   </div>
                 ) : (
-                  <Button size="sm" className="w-full mt-4 rounded-xl" variant="outline" onClick={() => selectPlan(p.key)}>
-                    <Sparkles className="h-3.5 w-3.5 mr-1.5" /> Selecionar plano
-                  </Button>
+                  <div className="mt-4 text-center">
+                    <p className="text-xs text-muted-foreground">Entre em contato para assinar este plano</p>
+                  </div>
                 )}
               </div>
             );
           })}
         </div>
 
-        <div className="flex gap-3">
-          <Button variant="outline" className="flex-1">
-            <ExternalLink className="h-4 w-4 mr-2" />
-            Gerenciar Assinatura
-          </Button>
-        </div>
+        <Button
+          className="w-full gap-2 bg-[#25D366] hover:bg-[#1ebe5d] text-white"
+          onClick={() => window.open(`https://wa.me/${NOX_PHONE}`, "_blank")}
+        >
+          <MessageSquare className="h-4 w-4" />
+          Assinar ou gerenciar plano via WhatsApp · {NOX_PHONE_DISPLAY}
+        </Button>
         <p className="text-xs text-muted-foreground text-center mt-3">
-          Gerencie pagamento, cancele ou atualize seu plano pelo portal seguro
+          Fale com nossa equipe para assinar, cancelar ou atualizar seu plano
         </p>
       </Card>
 
