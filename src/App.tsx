@@ -22,6 +22,7 @@ import Behavior from "./pages/dashboard/Behavior";
 import Reports from "./pages/dashboard/Reports";
 import SupportChat from "./pages/dashboard/SupportChat";
 import AdminSupport from "./pages/dashboard/AdminSupport";
+import AdminUsers from "./pages/dashboard/AdminUsers";
 import Settings from "./pages/dashboard/Settings";
 import NyloChat from "./pages/dashboard/NyloChat";
 import NotFound from "./pages/NotFound";
@@ -60,6 +61,7 @@ const App = () => (
               <Route path="investments" element={<Investments />} />
               <Route path="behavior" element={<Behavior />} />
               <Route path="admin/support" element={<AdminSupport />} />
+              <Route path="admin/users" element={<AdminUsers />} />
               <Route path="nylo-ia" element={<NyloChat />} />
             </Route>
             <Route path="*" element={<NotFound />} />
