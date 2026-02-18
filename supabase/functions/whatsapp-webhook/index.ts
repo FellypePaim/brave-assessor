@@ -31,32 +31,36 @@ async function downloadMediaFromUazapi(messageId: string, mediaType?: string): P
   const UAZAPI_TOKEN = Deno.env.get("UAZAPI_TOKEN");
   if (!UAZAPI_URL || !UAZAPI_TOKEN) return null;
 
-  // UAZAPI V2 known endpoints - ordered by likelihood of success
-  // The full messageId from webhook is "instancePhone:messageHash", try both formats
+  // UAZAPI V2 - The full messageId from webhook is "instancePhone:messageHash"
   const shortId = messageId.includes(":") ? messageId.split(":")[1] : messageId;
 
+  // Try GET (405 on POST means endpoint exists but wrong method) and POST variants
   const endpoints = [
-    // V2 correct endpoints (from UAZAPI docs)
-    { method: "POST", path: "/message/getMedia", body: { messageid: messageId } },
+    // GET variants - 405 on POST suggests GET might work
+    { method: "GET", path: `/message/getMedia?messageid=${shortId}`, body: null },
+    { method: "GET", path: `/message/getMedia?messageid=${messageId}`, body: null },
+    { method: "GET", path: `/message/getLink?messageid=${shortId}`, body: null },
+    { method: "GET", path: `/message/getLink?messageid=${messageId}`, body: null },
+    { method: "GET", path: `/message/get-media?messageid=${shortId}`, body: null },
+    // GET with id param
+    { method: "GET", path: `/message/getMedia?id=${shortId}`, body: null },
+    { method: "GET", path: `/message/getMedia?messageId=${shortId}`, body: null },
+    // POST variants (keep as fallback)
     { method: "POST", path: "/message/getMedia", body: { messageid: shortId } },
-    { method: "POST", path: "/message/getLink",  body: { messageid: messageId } },
     { method: "POST", path: "/message/getLink",  body: { messageid: shortId } },
-    { method: "POST", path: "/message/get-media", body: { messageid: messageId } },
-    { method: "POST", path: "/message/get-media", body: { messageid: shortId } },
-    // Fallback with alternate field names
-    { method: "POST", path: "/message/getMedia", body: { messageId: messageId } },
-    { method: "POST", path: "/message/getMedia", body: { id: messageId } },
-    { method: "POST", path: "/message/getMedia", body: { id: shortId } },
   ];
 
   for (const ep of endpoints) {
     try {
-      const resp = await fetch(`${UAZAPI_URL}${ep.path}`, {
+      const fetchOpts: RequestInit = {
         method: ep.method,
         headers: { "Content-Type": "application/json", token: UAZAPI_TOKEN },
-        body: JSON.stringify(ep.body),
-      });
-      console.log(`UAZAPI ${ep.method} ${ep.path} body=${JSON.stringify(ep.body)} -> ${resp.status}`);
+      };
+      if (ep.body) fetchOpts.body = JSON.stringify(ep.body);
+
+      const resp = await fetch(`${UAZAPI_URL}${ep.path}`, fetchOpts);
+      const respText = await resp.clone().text();
+      console.log(`UAZAPI ${ep.method} ${ep.path} -> ${resp.status} | body: ${respText.substring(0, 200)}`);
 
       if (!resp.ok) continue;
 
