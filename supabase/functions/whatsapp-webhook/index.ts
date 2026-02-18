@@ -252,6 +252,7 @@ async function processImageWithAI(imageBase64: string, mimeType: string, financi
 - Use emojis relevantes em TODAS as respostas
 - Separe informações em parágrafos curtos com quebras de linha
 - Use emojis no início de cada parágrafo
+- Para negrito use APENAS *texto* (um asterisco). NUNCA use **texto**.
 - Máximo 800 caracteres
 - Seja caloroso e pessoal
 
@@ -313,6 +314,7 @@ async function processAudioWithAI(audioBase64: string, mimeType: string, financi
 - Use emojis relevantes em TODAS as respostas
 - Separe informações em parágrafos curtos
 - Use emojis no início de cada parágrafo
+- Para negrito use APENAS *texto* (um asterisco). NUNCA use **texto**.
 - Máximo 800 caracteres
 - Seja caloroso e pessoal
 
@@ -372,6 +374,8 @@ async function processWithNoxIA(userMessage: string, financialContext: string) {
 - Use emojis relevantes em TODAS as respostas para deixar a conversa mais amigável e visual
 - Separe informações em parágrafos curtos com quebras de linha entre eles
 - Use emojis no início de cada parágrafo ou tópico
+- Para negrito no WhatsApp use APENAS *texto* (um asterisco de cada lado). NUNCA use **texto** (dois asteriscos).
+- Para itálico use _texto_. NUNCA use markdown com ##, ---  ou outros símbolos.
 - Limite: máximo 800 caracteres
 - Seja caloroso, motivador e pessoal (use o nome do usuário quando disponível)
 
@@ -545,7 +549,68 @@ serve(async (req) => {
       }
     }
 
-    // Check if phone is linked
+    // ── "meu plano" command — check BEFORE looking up linked user ──
+    const meuPlanoMatch = /^\s*(meu\s*plano|meu plano|meu\s+plano)\s*$/i.test(messageText);
+    if (hasText && meuPlanoMatch) {
+      // Try to find user by phone
+      const { data: linkedForPlan } = await supabaseAdmin
+        .from("whatsapp_links")
+        .select("user_id")
+        .eq("phone_number", cleanPhone)
+        .eq("verified", true)
+        .maybeSingle();
+
+      if (!linkedForPlan) {
+        await sendWhatsAppMessage(cleanPhone, "❌ Nenhuma conta vinculada a este número. Vincule pelo app Nox primeiro.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const { data: planProfile } = await supabaseAdmin
+        .from("profiles")
+        .select("display_name, subscription_plan, subscription_expires_at")
+        .eq("id", linkedForPlan.user_id)
+        .maybeSingle();
+
+      const planNames: Record<string, string> = {
+        mensal: "Nox Mensal",
+        anual: "Nox Anual",
+        trimestral: "Nox Trimestral",
+        free: "Gratuito",
+      };
+      const planBenefits: Record<string, string[]> = {
+        mensal: ["✅ WhatsApp conectado", "✅ Cartões de crédito", "✅ Orçamentos por categoria", "✅ Relatórios detalhados", "✅ Previsões com IA", "🔒 Modo Família", "🔒 Análise comportamental"],
+        anual:  ["✅ WhatsApp conectado", "✅ Cartões de crédito", "✅ Orçamentos por categoria", "✅ Relatórios detalhados", "✅ Previsões com IA", "✅ Modo Família (5 pessoas)", "✅ Análise comportamental"],
+        trimestral: ["✅ WhatsApp conectado", "✅ Cartões de crédito", "✅ Orçamentos por categoria", "✅ Relatórios detalhados", "✅ Previsões com IA"],
+        free: ["🔒 Acesso limitado", "🔒 WhatsApp desconectado"],
+      };
+
+      const currentPlan = planProfile?.subscription_plan || "free";
+      const expiresAt = planProfile?.subscription_expires_at;
+      const expiryLine = expiresAt
+        ? `📅 *Válido até:* ${new Date(expiresAt).toLocaleDateString("pt-BR")}`
+        : "";
+      const daysLeft = expiresAt
+        ? Math.ceil((new Date(expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+        : null;
+      const daysLine = daysLeft !== null
+        ? (daysLeft <= 3 ? `\n⚠️ *Atenção:* seu plano expira em ${daysLeft} dia${daysLeft !== 1 ? "s" : ""}!` : `\n✅ Faltam ${daysLeft} dias para renovação.`)
+        : "";
+      const benefits = (planBenefits[currentPlan] || []).join("\n");
+
+      const planMsg =
+        `👑 *Seu Plano Nox*\n\n` +
+        `📋 *Plano atual:* ${planNames[currentPlan] || currentPlan}\n` +
+        (expiryLine ? `${expiryLine}\n` : "") +
+        `${daysLine}\n\n` +
+        `*Benefícios ativos:*\n${benefits}\n\n` +
+        (currentPlan === "free" || daysLeft !== null && daysLeft <= 3
+          ? `💳 Para renovar: Configurações → Planos e Assinatura no app Nox.\n\n`
+          : "") +
+        `_Nox IA - Seu assessor financeiro 🤖_`;
+
+      await sendWhatsAppMessage(cleanPhone, planMsg);
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
     const { data: link } = await supabaseAdmin
       .from("whatsapp_links")
       .select("user_id")
