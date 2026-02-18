@@ -11,6 +11,7 @@ import Signup from "./pages/Signup";
 import DashboardLayout from "./layouts/DashboardLayout";
 import Dashboard from "./pages/Dashboard";
 import Placeholder from "./pages/dashboard/Placeholder";
+import Family from "./pages/dashboard/Family";
 import Wallets from "./pages/dashboard/Wallets";
 import Categories from "./pages/dashboard/Categories";
 import Cards from "./pages/dashboard/Cards";
@@ -54,7 +55,7 @@ const App = () => (
               <Route path="goals" element={<Goals />} />
               <Route path="reports" element={<Reports />} />
               <Route path="chat" element={<SupportChat />} />
-              <Route path="family" element={<Placeholder />} />
+              <Route path="family" element={<Family />} />
               <Route path="settings" element={<Settings />} />
               <Route path="investments" element={<Investments />} />
               <Route path="behavior" element={<Behavior />} />
