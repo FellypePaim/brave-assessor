@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect } from "react";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Send, Sparkles, Wallet, TrendingDown, Utensils, Truck, Car } from "lucide-react";
+import { Send, Sparkles, Wallet, TrendingDown, Utensils, Truck, Car, Bot } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import ReactMarkdown from "react-markdown";
+import { motion, AnimatePresence } from "framer-motion";
 
 type Msg = { role: "user" | "assistant"; content: string };
 
@@ -13,13 +13,13 @@ const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/nylo-chat`;
 
 const WELCOME_MSG: Msg = {
   role: "assistant",
-  content: `Olá! 👋 Sou o Nox IA, seu assessor financeiro pessoal!
+  content: `Olá! 👋 Sou o **Nox IA**, seu assessor financeiro pessoal!
 
 Estou aqui para te ajudar com qualquer dúvida sobre suas finanças:
-• "Quanto gastei com delivery este mês?"
-• "Como estão meus orçamentos?"
-• "Quanto tenho investido?"
-• "Comparar com mês passado"
+- "Quanto gastei com delivery este mês?"
+- "Como estão meus orçamentos?"
+- "Quanto tenho investido?"
+- "Comparar com mês passado"
 
 Pergunte o que quiser! 👌`,
 };
@@ -39,6 +39,7 @@ export default function NyloChat() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -55,7 +56,6 @@ export default function NyloChat() {
     let assistantSoFar = "";
 
     try {
-      // Only send non-welcome messages to API
       const apiMessages = newMessages
         .filter((_, i) => i > 0 || newMessages[0] !== WELCOME_MSG)
         .filter((m) => m !== WELCOME_MSG)
@@ -120,7 +120,6 @@ export default function NyloChat() {
         }
       }
 
-      // Final flush
       if (textBuffer.trim()) {
         for (let raw of textBuffer.split("\n")) {
           if (!raw) continue;
@@ -144,84 +143,114 @@ export default function NyloChat() {
     setIsLoading(false);
   };
 
+  const showQuickActions = messages.length <= 1;
+
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)] max-w-4xl mx-auto">
+    <div className="flex flex-col h-[calc(100vh-8rem)] max-w-3xl mx-auto">
       {/* Header */}
-      <div className="flex items-center gap-3 mb-4">
-        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-          <Sparkles className="h-5 w-5 text-primary" />
+      <div className="flex items-center gap-3 mb-4 pb-4 border-b border-border">
+        <div className="relative">
+          <div className="h-11 w-11 rounded-2xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-md">
+            <Bot className="h-5 w-5 text-primary-foreground" />
+          </div>
+          <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-accent-foreground border-2 border-background" />
         </div>
         <div>
-          <h1 className="text-xl font-bold text-foreground">Nox IA</h1>
-          <p className="text-sm text-muted-foreground">Pergunte qualquer coisa sobre suas finanças</p>
+          <h1 className="text-lg font-semibold text-foreground tracking-tight">Nox IA</h1>
+          <p className="text-xs text-muted-foreground">Seu assessor financeiro pessoal</p>
         </div>
       </div>
 
       {/* Messages */}
-      <Card className="flex-1 overflow-auto p-4 space-y-4 mb-4">
-        {messages.map((m, i) => (
-          <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"} gap-3`}>
-            {m.role === "assistant" && (
-              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-1">
-                <Sparkles className="h-4 w-4 text-primary" />
-              </div>
-            )}
-            <div className={`max-w-[80%] px-4 py-3 rounded-2xl text-sm ${
-              m.role === "user"
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-foreground"
-            }`}>
-              {m.role === "assistant" ? (
-                <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:mb-2 [&>ul]:mb-2 [&>ol]:mb-2">
-                  <ReactMarkdown>{m.content}</ReactMarkdown>
+      <div
+        ref={scrollContainerRef}
+        className="flex-1 overflow-y-auto space-y-5 pr-1 mb-4 scrollbar-hide"
+      >
+        <AnimatePresence initial={false}>
+          {messages.map((m, i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
+              className={`flex ${m.role === "user" ? "justify-end" : "justify-start"} gap-2.5`}
+            >
+              {m.role === "assistant" && (
+                <div className="h-7 w-7 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center shrink-0 mt-1">
+                  <Sparkles className="h-3.5 w-3.5 text-primary" />
                 </div>
-              ) : (
-                <p>{m.content}</p>
               )}
-            </div>
-          </div>
-        ))}
+              <div
+                className={`max-w-[85%] px-4 py-3 text-sm leading-relaxed ${
+                  m.role === "user"
+                    ? "bg-primary text-primary-foreground rounded-2xl rounded-br-md shadow-sm"
+                    : "bg-card border border-border rounded-2xl rounded-bl-md shadow-sm"
+                }`}
+              >
+                {m.role === "assistant" ? (
+                  <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:mb-1.5 [&>ul]:mb-1.5 [&>ol]:mb-1.5 [&>p:last-child]:mb-0">
+                    <ReactMarkdown>{m.content}</ReactMarkdown>
+                  </div>
+                ) : (
+                  <p>{m.content}</p>
+                )}
+              </div>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+
         {isLoading && messages[messages.length - 1]?.role === "user" && (
-          <div className="flex gap-3">
-            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-              <Sparkles className="h-4 w-4 text-primary animate-pulse" />
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex gap-2.5"
+          >
+            <div className="h-7 w-7 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center shrink-0">
+              <Sparkles className="h-3.5 w-3.5 text-primary animate-pulse" />
             </div>
-            <div className="bg-muted px-4 py-3 rounded-2xl">
-              <div className="flex gap-1">
-                <span className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:0ms]" />
-                <span className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:150ms]" />
-                <span className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:300ms]" />
+            <div className="bg-card border border-border px-4 py-3 rounded-2xl rounded-bl-md">
+              <div className="flex gap-1.5 items-center h-5">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary/50 animate-bounce [animation-delay:0ms]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-primary/50 animate-bounce [animation-delay:150ms]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-primary/50 animate-bounce [animation-delay:300ms]" />
               </div>
             </div>
-          </div>
+          </motion.div>
         )}
         <div ref={bottomRef} />
-      </Card>
-
-      {/* Quick actions */}
-      <div className="flex gap-2 overflow-x-auto pb-2 mb-2 scrollbar-hide">
-        {quickActions.map((a, i) => (
-          <button
-            key={i}
-            onClick={() => sendMessage(a.label)}
-            disabled={isLoading}
-            className="flex items-center gap-2 px-4 py-2 rounded-full border border-border bg-card text-sm text-foreground whitespace-nowrap hover:bg-muted transition-colors shrink-0 disabled:opacity-50"
-          >
-            <a.icon className="h-4 w-4 text-primary" />
-            {a.label}
-          </button>
-        ))}
       </div>
 
+      {/* Quick actions - only show initially */}
+      {showQuickActions && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="flex gap-2 overflow-x-auto pb-3 mb-2 scrollbar-hide"
+        >
+          {quickActions.map((a, i) => (
+            <button
+              key={i}
+              onClick={() => sendMessage(a.label)}
+              disabled={isLoading}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-border bg-card text-xs font-medium text-foreground whitespace-nowrap hover:border-primary/40 hover:bg-accent/50 transition-all duration-200 shrink-0 disabled:opacity-50 shadow-sm"
+            >
+              <a.icon className="h-3.5 w-3.5 text-primary" />
+              {a.label}
+            </button>
+          ))}
+        </motion.div>
+      )}
+
       {/* Input */}
-      <div className="flex gap-2">
+      <div className="flex gap-2 pt-2 border-t border-border">
         <div className="flex-1 relative">
-          <Sparkles className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary/40" />
+          <Sparkles className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/40" />
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Pergunte sobre suas finanças..."
-            className="pl-10"
+            className="pl-10 rounded-xl border-border bg-card h-11 text-sm placeholder:text-muted-foreground/50"
             onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage(input)}
             disabled={isLoading}
           />
@@ -230,7 +259,7 @@ export default function NyloChat() {
           onClick={() => sendMessage(input)}
           disabled={isLoading || !input.trim()}
           size="icon"
-          className="bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground"
+          className="h-11 w-11 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm transition-all duration-200 disabled:bg-muted disabled:text-muted-foreground"
         >
           <Send className="h-4 w-4" />
         </Button>
