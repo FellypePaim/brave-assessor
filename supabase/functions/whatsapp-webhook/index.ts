@@ -25,43 +25,69 @@ async function sendWhatsAppMessage(phone: string, message: string) {
   return resp.json();
 }
 
-// Download media via UAZAPI download endpoint (since URL is not in the webhook payload)
-async function downloadMediaFromUazapi(messageId: string): Promise<{ base64: string; mimetype: string } | null> {
+// Download media via UAZAPI - tries multiple known endpoints
+async function downloadMediaFromUazapi(messageId: string, mediaType?: string): Promise<{ base64: string; mimetype: string } | null> {
   const UAZAPI_URL = Deno.env.get("UAZAPI_URL");
   const UAZAPI_TOKEN = Deno.env.get("UAZAPI_TOKEN");
   if (!UAZAPI_URL || !UAZAPI_TOKEN) return null;
 
-  const resp = await fetch(`${UAZAPI_URL}/message/download-media`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", token: UAZAPI_TOKEN },
-    body: JSON.stringify({ messageId }),
-  });
+  // UAZAPI known endpoints for downloading media (try in order)
+  const endpoints = [
+    { method: "POST", path: "/message/download", body: { messageId } },
+    { method: "POST", path: "/message/download-media", body: { messageId } },
+    { method: "GET", path: `/message/${messageId}/download`, body: null },
+    { method: "POST", path: "/chat/download-media", body: { messageId } },
+  ];
 
-  if (!resp.ok) {
-    console.error("UAZAPI download-media error:", resp.status, await resp.text());
-    return null;
+  for (const ep of endpoints) {
+    try {
+      const opts: RequestInit = {
+        method: ep.method,
+        headers: { "Content-Type": "application/json", token: UAZAPI_TOKEN },
+      };
+      if (ep.body) opts.body = JSON.stringify(ep.body);
+
+      const resp = await fetch(`${UAZAPI_URL}${ep.path}`, opts);
+      console.log(`UAZAPI ${ep.method} ${ep.path} -> ${resp.status}`);
+
+      if (!resp.ok) continue;
+
+      const data = await resp.json();
+      console.log("Media download response keys:", Object.keys(data).join(", "));
+
+      // Direct base64 in response
+      if (data.base64) {
+        const mime = data.mimetype || data.mimeType || guessMimeType(mediaType);
+        return { base64: data.base64, mimetype: mime };
+      }
+
+      // URL to download separately
+      const url = data.url || data.mediaUrl || data.fileUrl || data.downloadUrl;
+      if (url) {
+        const mediaResp = await fetch(url);
+        if (!mediaResp.ok) continue;
+        const ct = mediaResp.headers.get("content-type") || guessMimeType(mediaType);
+        const buffer = await mediaResp.arrayBuffer();
+        const bytes = new Uint8Array(buffer);
+        let binary = "";
+        for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+        return { base64: btoa(binary), mimetype: ct };
+      }
+    } catch (e) {
+      console.error(`Error trying ${ep.path}:`, e);
+    }
   }
 
-  const data = await resp.json();
-  console.log("download-media response keys:", Object.keys(data).join(", "));
-
-  if (data.base64) {
-    return { base64: data.base64, mimetype: data.mimetype || "application/octet-stream" };
-  }
-
-  // Fallback: URL returned
-  const url = data.url || data.mediaUrl || data.fileUrl;
-  if (url) {
-    const mediaResp = await fetch(url);
-    if (!mediaResp.ok) return null;
-    const buffer = await mediaResp.arrayBuffer();
-    const bytes = new Uint8Array(buffer);
-    let binary = "";
-    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
-    return { base64: btoa(binary), mimetype: data.mimetype || "application/octet-stream" };
-  }
-
+  console.error("All media download endpoints failed for messageId:", messageId);
   return null;
+}
+
+function guessMimeType(mediaType?: string): string {
+  if (!mediaType) return "application/octet-stream";
+  if (mediaType.includes("audio") || mediaType === "ptt") return "audio/ogg";
+  if (mediaType.includes("image")) return "image/jpeg";
+  if (mediaType.includes("video")) return "video/mp4";
+  return "application/octet-stream";
 }
 
 async function processImageWithAI(imageBase64: string, mimeType: string, financialContext: string, userCaption?: string) {
@@ -280,7 +306,9 @@ serve(async (req) => {
     const phone = chat.number || chat.phone || message.number || message.phone || message.from || message.sender || body.number || body.from;
     const text = message.body || message.text || message.message || body.body || body.text;
     const isFromMe = message.fromMe || body.fromMe || false;
-    const messageId = message.id || message.messageId;
+    // UAZAPI uses "messageid" (lowercase) in the webhook payload - confirmed from logs
+    const messageId = message.messageid || message.id || message.messageId;
+    const mediaType = message.mediaType || message.type;
 
     if (isFromMe) {
       return new Response(JSON.stringify({ ok: true, ignored: true }), {
@@ -402,10 +430,11 @@ Categorias: ${(categories || []).map((c: any) => `${c.name} (id:${c.id})`).join(
     if (isMedia && messageId) {
       // Send acknowledgment while processing
       const mediaLabel = isAudio ? "🎙️ Processando seu áudio..." : "📸 Analisando o comprovante...";
+      console.log(`Downloading media: messageId=${messageId} mediaType=${mediaType}`);
       await sendWhatsAppMessage(cleanPhone, mediaLabel);
 
       try {
-        const mediaData = await downloadMediaFromUazapi(messageId);
+        const mediaData = await downloadMediaFromUazapi(messageId, mediaType);
 
         if (!mediaData) {
           aiResponse = "😕 Não consegui baixar a mídia. Tente enviar novamente ou descreva por texto!";
