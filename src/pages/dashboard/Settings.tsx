@@ -8,6 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
+import WhatsAppLinkCard from "@/components/WhatsAppLinkCard";
 import {
   User, Camera, MessageSquare, Crown, HeadphonesIcon,
   Bell, Mail, Sparkles, Calendar, CreditCard, Tag,
@@ -196,35 +197,7 @@ export default function Settings() {
         </Card>
 
         {/* WhatsApp Card */}
-        <Card className="p-6">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="h-9 w-9 rounded-full bg-emerald-500/10 flex items-center justify-center">
-              <MessageSquare className="h-4 w-4 text-emerald-500" />
-            </div>
-            <div>
-              <h2 className="font-semibold text-foreground">WhatsApp</h2>
-              <p className="text-xs text-muted-foreground">Registre transações enviando mensagens pelo WhatsApp</p>
-            </div>
-          </div>
-
-          <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-6 text-center">
-            <Rocket className="h-10 w-10 text-emerald-500 mx-auto mb-3" />
-            <h3 className="font-semibold text-foreground text-sm">Vincular é super fácil!</h3>
-            <p className="text-xs text-muted-foreground mt-1 mb-4">
-              Clique no botão abaixo e envie a mensagem que vai aparecer no WhatsApp.
-              Pronto! Seu número será vinculado automaticamente.
-            </p>
-            <Button className="w-full bg-emerald-500 hover:bg-emerald-600 text-white">
-              <MessageSquare className="h-4 w-4 mr-2" />
-              Vincular meu WhatsApp
-            </Button>
-          </div>
-
-          <div className="flex items-center gap-2 mt-4 text-xs text-muted-foreground">
-            <MessageSquare className="h-3.5 w-3.5" />
-            <span>Número oficial: (11) 94008-5873</span>
-          </div>
-        </Card>
+        <WhatsAppLinkCard userId={user?.id} />
       </div>
 
       {/* Plan Card */}
