@@ -536,6 +536,48 @@ export type Database = {
         }
         Relationships: []
       }
+      whatsapp_pending_transactions: {
+        Row: {
+          amount: number
+          category_id: string | null
+          category_name: string | null
+          created_at: string
+          description: string
+          expires_at: string
+          id: string
+          payment_method: string | null
+          phone_number: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          category_id?: string | null
+          category_name?: string | null
+          created_at?: string
+          description: string
+          expires_at?: string
+          id?: string
+          payment_method?: string | null
+          phone_number: string
+          type?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          category_id?: string | null
+          category_name?: string | null
+          created_at?: string
+          description?: string
+          expires_at?: string
+          id?: string
+          payment_method?: string | null
+          phone_number?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
