@@ -2,7 +2,7 @@ import { useState } from "react";
 import {
   LayoutDashboard, Wallet, CalendarCheck, Sparkles, MoreHorizontal,
   CreditCard, Tag, Target, TrendingUp, Brain, FileText,
-  HeadphonesIcon, Settings, X,
+  HeadphonesIcon, Settings, X, Users,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -20,6 +20,7 @@ const moreItems = [
   { to: "/dashboard/budgets", icon: Tag, label: "Categorias" },
   { to: "/dashboard/goals", icon: Target, label: "Metas" },
   { to: "/dashboard/investments", icon: TrendingUp, label: "Investimentos" },
+  { to: "/dashboard/family", icon: Users, label: "Família" },
   { to: "/dashboard/behavior", icon: Brain, label: "Comportamento" },
   { to: "/dashboard/reports", icon: FileText, label: "Relatórios" },
   { to: "/dashboard/chat", icon: HeadphonesIcon, label: "Suporte" },
