@@ -1,13 +1,13 @@
 import { useState, useRef, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Send, Sparkles, Wallet, TrendingDown, Utensils, Truck, Car, Bot } from "lucide-react";
+import { Send, Sparkles, Wallet, TrendingDown, Utensils, Truck, Car, Bot, ImagePlus, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import ReactMarkdown from "react-markdown";
 import { motion, AnimatePresence } from "framer-motion";
 
-type Msg = { role: "user" | "assistant"; content: string };
+type Msg = { role: "user" | "assistant"; content: string; imagePreview?: string };
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/nylo-chat`;
 
@@ -16,10 +16,11 @@ const WELCOME_MSG: Msg = {
   content: `Olá! 👋 Sou o **Nox IA**, seu assessor financeiro pessoal!
 
 Estou aqui para te ajudar com qualquer dúvida sobre suas finanças:
-- "Quanto gastei com delivery este mês?"
-- "Como estão meus orçamentos?"
-- "Quanto tenho investido?"
-- "Comparar com mês passado"
+
+💬 *"Quanto gastei com delivery este mês?"*
+📊 *"Como estão meus orçamentos?"*
+💰 *"Quanto tenho investido?"*
+📸 *Envie a foto de um comprovante para registrar!*
 
 Pergunte o que quiser! 👌`,
 };
@@ -38,28 +39,67 @@ export default function NyloChat() {
   const [messages, setMessages] = useState<Msg[]>([WELCOME_MSG]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<{ base64: string; mimeType: string; preview: string } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Arquivo inválido", description: "Selecione uma imagem.", variant: "destructive" });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "Imagem muito grande", description: "Máximo 5MB.", variant: "destructive" });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string;
+      const base64 = dataUrl.split(",")[1];
+      setSelectedImage({ base64, mimeType: file.type, preview: dataUrl });
+    };
+    reader.readAsDataURL(file);
+    // Reset input so same file can be selected again
+    e.target.value = "";
+  };
+
   const sendMessage = async (text: string) => {
-    if (!text.trim() || isLoading) return;
-    const userMsg: Msg = { role: "user", content: text.trim() };
+    if ((!text.trim() && !selectedImage) || isLoading) return;
+
+    const displayText = text.trim() || (selectedImage ? "📸 Comprovante enviado" : "");
+    const userMsg: Msg = {
+      role: "user",
+      content: displayText,
+      imagePreview: selectedImage?.preview,
+    };
+
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
     setInput("");
+    const imageToSend = selectedImage;
+    setSelectedImage(null);
     setIsLoading(true);
 
     let assistantSoFar = "";
 
     try {
       const apiMessages = newMessages
-        .filter((_, i) => i > 0 || newMessages[0] !== WELCOME_MSG)
         .filter((m) => m !== WELCOME_MSG)
         .map((m) => ({ role: m.role, content: m.content }));
+
+      const body: Record<string, unknown> = { messages: apiMessages };
+      if (imageToSend) {
+        body.imageBase64 = imageToSend.base64;
+        body.imageMimeType = imageToSend.mimeType;
+      }
 
       const resp = await fetch(CHAT_URL, {
         method: "POST",
@@ -67,7 +107,7 @@ export default function NyloChat() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
-        body: JSON.stringify({ messages: apiMessages }),
+        body: JSON.stringify(body),
       });
 
       if (!resp.ok) {
@@ -153,7 +193,7 @@ export default function NyloChat() {
           <div className="h-11 w-11 rounded-2xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-md">
             <Bot className="h-5 w-5 text-primary-foreground" />
           </div>
-          <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-accent-foreground border-2 border-background" />
+          <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-accent border-2 border-background" />
         </div>
         <div>
           <h1 className="text-lg font-semibold text-foreground tracking-tight">Nox IA</h1>
@@ -162,10 +202,7 @@ export default function NyloChat() {
       </div>
 
       {/* Messages */}
-      <div
-        ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto space-y-5 pr-1 mb-4 scrollbar-hide"
-      >
+      <div className="flex-1 overflow-y-auto space-y-5 pr-1 mb-4 scrollbar-hide">
         <AnimatePresence initial={false}>
           {messages.map((m, i) => (
             <motion.div
@@ -187,8 +224,16 @@ export default function NyloChat() {
                     : "bg-card border border-border rounded-2xl rounded-bl-md shadow-sm"
                 }`}
               >
+                {/* Image preview in user message */}
+                {m.imagePreview && (
+                  <img
+                    src={m.imagePreview}
+                    alt="Comprovante"
+                    className="rounded-xl mb-2 max-h-48 w-auto object-cover"
+                  />
+                )}
                 {m.role === "assistant" ? (
-                  <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:mb-1.5 [&>ul]:mb-1.5 [&>ol]:mb-1.5 [&>p:last-child]:mb-0">
+                  <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:mb-2 [&>ul]:mb-2 [&>ol]:mb-2 [&>p:last-child]:mb-0">
                     <ReactMarkdown>{m.content}</ReactMarkdown>
                   </div>
                 ) : (
@@ -220,7 +265,7 @@ export default function NyloChat() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Quick actions - only show initially */}
+      {/* Quick actions */}
       {showQuickActions && (
         <motion.div
           initial={{ opacity: 0, y: 8 }}
@@ -242,22 +287,69 @@ export default function NyloChat() {
         </motion.div>
       )}
 
+      {/* Image preview */}
+      <AnimatePresence>
+        {selectedImage && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            className="flex items-center gap-2 mb-2 p-2 bg-card border border-border rounded-xl"
+          >
+            <img src={selectedImage.preview} alt="Preview" className="h-12 w-12 rounded-lg object-cover shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-foreground">📸 Comprovante selecionado</p>
+              <p className="text-xs text-muted-foreground">Adicione uma descrição ou envie direto</p>
+            </div>
+            <button
+              onClick={() => setSelectedImage(null)}
+              className="h-6 w-6 rounded-full bg-muted flex items-center justify-center hover:bg-destructive/20 transition-colors shrink-0"
+            >
+              <X className="h-3.5 w-3.5 text-muted-foreground" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Input */}
       <div className="flex gap-2 pt-2 border-t border-border">
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleImageSelect}
+        />
+
+        {/* Image button */}
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={isLoading}
+          className="h-11 w-11 rounded-xl border-border bg-card shrink-0 hover:border-primary/40 hover:bg-accent/50 transition-all"
+          title="Enviar comprovante"
+        >
+          <ImagePlus className="h-4 w-4 text-muted-foreground" />
+        </Button>
+
         <div className="flex-1 relative">
           <Sparkles className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/40" />
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Pergunte sobre suas finanças..."
+            placeholder={selectedImage ? "Adicione uma descrição (opcional)..." : "Pergunte sobre suas finanças..."}
             className="pl-10 rounded-xl border-border bg-card h-11 text-sm placeholder:text-muted-foreground/50"
             onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage(input)}
             disabled={isLoading}
           />
         </div>
+
         <Button
           onClick={() => sendMessage(input)}
-          disabled={isLoading || !input.trim()}
+          disabled={isLoading || (!input.trim() && !selectedImage)}
           size="icon"
           className="h-11 w-11 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm transition-all duration-200 disabled:bg-muted disabled:text-muted-foreground"
         >
