@@ -25,7 +25,7 @@ async function sendWhatsAppMessage(phone: string, message: string) {
   return resp.json();
 }
 
-// Send WhatsApp message with up to 3 quick-reply buttons
+// Send WhatsApp message with up to 3 quick-reply buttons via UAZAPI /send/menu
 async function sendWhatsAppButtons(
   phone: string,
   body: string,
@@ -36,23 +36,27 @@ async function sendWhatsAppButtons(
   const UAZAPI_TOKEN = Deno.env.get("UAZAPI_TOKEN");
   if (!UAZAPI_URL || !UAZAPI_TOKEN) throw new Error("UAZAPI credentials not configured");
 
-  const resp = await fetch(`${UAZAPI_URL}/send/buttons`, {
+  // UAZAPI V2 uses /send/menu with type "button"
+  // choices = array of button label strings (max 3)
+  const resp = await fetch(`${UAZAPI_URL}/send/menu`, {
     method: "POST",
     headers: { "Content-Type": "application/json", token: UAZAPI_TOKEN },
     body: JSON.stringify({
       number: phone,
-      title: "",
-      body,
-      footer: footer || "",
-      buttons: buttons.map((b) => ({ id: b.id, text: b.text })),
+      type: "button",
+      text: body,
+      footerText: footer || "",
+      choices: buttons.map((b) => b.text),
     }),
   });
 
   if (!resp.ok) {
     const t = await resp.text();
-    console.warn("UAZAPI buttons error (falling back to text):", resp.status, t);
-    // Fallback to plain text if buttons not supported
-    return sendWhatsAppMessage(phone, body + (footer ? `\n${footer}` : ""));
+    console.warn("UAZAPI /send/menu error (falling back to text):", resp.status, t);
+    // Fallback to plain text
+    const fallback = body + (footer ? `\n\n${footer}` : "") +
+      `\n\n${buttons.map(b => b.text).join(" | ")}`;
+    return sendWhatsAppMessage(phone, fallback);
   }
   return resp.json();
 }
