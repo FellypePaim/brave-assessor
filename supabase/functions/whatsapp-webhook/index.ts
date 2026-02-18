@@ -25,39 +25,138 @@ async function sendWhatsAppMessage(phone: string, message: string) {
   return resp.json();
 }
 
-async function getUserFinancialContext(supabase: any) {
-  const now = new Date();
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
-  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0];
+async function downloadMediaAsBase64(mediaUrl: string): Promise<string> {
+  const resp = await fetch(mediaUrl);
+  if (!resp.ok) throw new Error(`Failed to download media: ${resp.status}`);
+  const buffer = await resp.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
 
-  const [
-    { data: profile },
-    { data: wallets },
-    { data: categories },
-    { data: thisMonthTx },
-  ] = await Promise.all([
-    supabase.from("profiles").select("display_name, monthly_income").single(),
-    supabase.from("wallets").select("name, type, balance"),
-    supabase.from("categories").select("name, icon, budget_limit"),
-    supabase.from("transactions").select("amount, type, description, date, categories(name)")
-      .gte("date", startOfMonth).lte("date", endOfMonth).order("date", { ascending: false }).limit(20),
-  ]);
+async function processImageWithAI(imageBase64: string, mimeType: string, financialContext: string, userCaption?: string) {
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-  const totalBalance = (wallets || []).reduce((s: number, w: any) => s + Number(w.balance), 0);
-  let totalIncome = 0, totalExpense = 0;
-  for (const tx of thisMonthTx || []) {
-    if (tx.type === "income") totalIncome += Number(tx.amount);
-    else totalExpense += Number(tx.amount);
+  const systemPrompt = `Você é o Nox IA 🤖, assessor financeiro pessoal via WhatsApp.
+
+📋 REGRAS DE FORMATAÇÃO:
+- Use emojis relevantes em TODAS as respostas
+- Separe informações em parágrafos curtos com quebras de linha
+- Use emojis no início de cada parágrafo
+- Máximo 800 caracteres
+- Seja caloroso e pessoal
+
+🧾 ANÁLISE DE COMPROVANTES:
+Você está recebendo a FOTO de um comprovante/recibo/nota fiscal.
+Analise a imagem e extraia:
+- Valor (amount)
+- Descrição do pagamento (description)
+- Categoria mais adequada das disponíveis
+- Tipo: "expense" ou "income"
+- Forma de pagamento se visível (PIX, cartão, dinheiro, etc.)
+
+Responda SOMENTE com JSON quando identificar uma transação:
+{"action":"add_transaction","amount":50.00,"description":"Supermercado Extra","category":"Alimentação","type":"expense","payment_method":"PIX"}
+
+Se não conseguir identificar os dados, responda em texto explicando o que viu e pedindo mais informações.
+
+${financialContext}`;
+
+  const userContent: any[] = [
+    {
+      type: "image_url",
+      image_url: { url: `data:${mimeType};base64,${imageBase64}` },
+    },
+    {
+      type: "text",
+      text: userCaption || "Analise este comprovante e extraia os dados da transação.",
+    },
+  ];
+
+  const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${LOVABLE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userContent },
+      ],
+    }),
+  });
+
+  if (!resp.ok) {
+    const t = await resp.text();
+    console.error("AI vision error:", resp.status, t);
+    throw new Error("AI vision processing failed");
   }
 
-  return `
-Nome: ${profile?.display_name || "Usuário"}
-Renda: R$ ${profile?.monthly_income ? Number(profile.monthly_income).toFixed(2) : "?"}
-Saldo total: R$ ${totalBalance.toFixed(2)}
-Mês atual: Receitas R$ ${totalIncome.toFixed(2)} | Despesas R$ ${totalExpense.toFixed(2)}
-Categorias: ${(categories || []).map((c: any) => c.name).join(", ")}
-Últimas transações: ${(thisMonthTx || []).slice(0, 5).map((t: any) => `${t.type === "income" ? "+" : "-"}R$${Number(t.amount).toFixed(2)} ${t.description}`).join("; ") || "nenhuma"}
-`;
+  const data = await resp.json();
+  return data.choices?.[0]?.message?.content || "Desculpe, não consegui analisar a imagem.";
+}
+
+async function processAudioWithAI(audioBase64: string, mimeType: string, financialContext: string) {
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+
+  const systemPrompt = `Você é o Nox IA 🤖, assessor financeiro pessoal via WhatsApp.
+
+📋 REGRAS DE FORMATAÇÃO:
+- Use emojis relevantes em TODAS as respostas
+- Separe informações em parágrafos curtos com quebras de linha
+- Use emojis no início de cada parágrafo
+- Máximo 800 caracteres
+- Seja caloroso e pessoal
+
+🎙️ ÁUDIO RECEBIDO:
+O usuário enviou um áudio. Transcreva e interprete o que foi dito.
+
+Se for um comando de transação (ex: "gastei 50 reais no almoço"), responda SOMENTE com JSON:
+{"action":"add_transaction","amount":50,"description":"Almoço","category":"Alimentação","type":"expense"}
+
+Se for uma pergunta, responda em texto formatado com emojis e parágrafos.
+
+${financialContext}`;
+
+  const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${LOVABLE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash",
+      messages: [
+        { role: "system", content: systemPrompt },
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_audio",
+              input_audio: { data: audioBase64, format: mimeType.includes("ogg") ? "ogg" : "mp3" },
+            },
+            { type: "text", text: "Transcreva e interprete este áudio." },
+          ],
+        },
+      ],
+    }),
+  });
+
+  if (!resp.ok) {
+    const t = await resp.text();
+    console.error("AI audio error:", resp.status, t);
+    throw new Error("AI audio processing failed");
+  }
+
+  const data = await resp.json();
+  return data.choices?.[0]?.message?.content || "Desculpe, não consegui processar o áudio.";
 }
 
 async function processWithNoxIA(userMessage: string, financialContext: string) {
@@ -120,69 +219,72 @@ ${financialContext}`;
   return data.choices?.[0]?.message?.content || "Desculpe, não consegui processar sua mensagem.";
 }
 
+function getMediaInfo(message: any) {
+  // UAZAPI media fields
+  const hasImage = message.isMedia && (message.mimetype?.startsWith("image/") || message.type === "image");
+  const hasAudio = message.isMedia && (message.mimetype?.startsWith("audio/") || message.type === "ptt" || message.type === "audio");
+  const mediaUrl = message.mediaUrl || message.media?.url || message.deprecatedMms3Url;
+  const mimetype = message.mimetype || "application/octet-stream";
+  const caption = message.caption || message.body || "";
+
+  return { hasImage, hasAudio, mediaUrl, mimetype, caption };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
     const body = await req.json();
-    
+
     // Log key fields for debugging
     console.log("Webhook keys:", JSON.stringify({
       EventType: body.EventType,
-      chatId: body.chat?.id,
-      chatNumber: body.chat?.number,
       chatPhone: body.chat?.phone,
-      msgFrom: body.message?.from,
-      msgSender: body.message?.sender,
-      msgNumber: body.message?.number,
-      msgPhone: body.message?.phone,
       msgBody: body.message?.body,
-      msgText: body.message?.text,
       msgFromMe: body.message?.fromMe,
-      from: body.from,
-      number: body.number,
+      isMedia: body.message?.isMedia,
+      msgType: body.message?.type,
+      mimetype: body.message?.mimetype,
+      hasMediaUrl: !!(body.message?.mediaUrl || body.message?.media?.url),
     }));
 
-    // UAZAPI webhook payload - extract message info
     const message = body.message || {};
     const chat = body.chat || {};
-    
-    // Try multiple fields to find the real phone number
+
     const phone = chat.number || chat.phone || message.number || message.phone || message.from || message.sender || body.number || body.from;
     const text = message.body || message.text || message.message || body.body || body.text;
     const isFromMe = message.fromMe || body.fromMe || false;
 
-    // Ignore messages sent by us
     if (isFromMe) {
       return new Response(JSON.stringify({ ok: true, ignored: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    if (!phone || !text) {
-      console.log("Missing phone or text, skipping. phone:", phone, "text:", text);
+    // Check for media
+    const { hasImage, hasAudio, mediaUrl, mimetype, caption } = getMediaInfo(message);
+    const hasMedia = hasImage || hasAudio;
+
+    if (!phone || (!text && !hasMedia)) {
+      console.log("Missing phone or content, skipping. phone:", phone, "text:", text, "hasMedia:", hasMedia);
       return new Response(JSON.stringify({ ok: true, skipped: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Clean phone number (remove @s.whatsapp.net, @lid etc)
     const cleanPhone = phone.replace(/@.*$/, "").replace(/\D/g, "");
-    const messageText = text.trim();
+    const messageText = (text || "").trim();
 
-    console.log(`Message from ${cleanPhone}: ${messageText}`);
+    console.log(`Message from ${cleanPhone}: ${hasMedia ? `[${hasImage ? "IMAGE" : "AUDIO"}] ` : ""}${messageText}`);
 
-    // Create admin supabase client for webhook operations
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Check if this is a verification code
+    // Check verification code
     const codeMatch = messageText.match(/^NOX-(\d{6})$/i);
     if (codeMatch) {
       const code = `NOX-${codeMatch[1]}`;
-      
-      // Find the pending verification
       const { data: link } = await supabaseAdmin
         .from("whatsapp_links")
         .select("*")
@@ -198,18 +300,18 @@ serve(async (req) => {
         });
       }
 
-      // Link the phone number
       await supabaseAdmin
         .from("whatsapp_links")
         .update({ phone_number: cleanPhone, verified: true })
         .eq("id", link.id);
 
-      await sendWhatsAppMessage(cleanPhone, 
+      await sendWhatsAppMessage(cleanPhone,
         "✅ WhatsApp vinculado com sucesso!\n\n" +
         "Agora você pode:\n" +
         '• Registrar gastos: "Gastei 50 com almoço"\n' +
-        '• Ver saldo: "Qual meu saldo?"\n' +
-        '• Ver resumo: "Como estou este mês?"\n\n' +
+        "• 📸 Enviar foto do comprovante\n" +
+        "• 🎙️ Enviar áudio com seus gastos\n" +
+        '• Ver saldo: "Qual meu saldo?"\n\n' +
         "Experimente agora! 💰"
       );
 
@@ -218,7 +320,7 @@ serve(async (req) => {
       });
     }
 
-    // Check if phone is linked to a user
+    // Check if phone is linked
     const { data: link } = await supabaseAdmin
       .from("whatsapp_links")
       .select("user_id")
@@ -240,13 +342,9 @@ serve(async (req) => {
       });
     }
 
-    // Create user-scoped supabase client
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    
-    // We need to use admin client but scope queries to user
     const userId = link.user_id;
 
-    // Get financial context using admin client filtered by user
+    // Get financial context
     const [
       { data: profile },
       { data: wallets },
@@ -254,7 +352,7 @@ serve(async (req) => {
       { data: recentTx },
     ] = await Promise.all([
       supabaseAdmin.from("profiles").select("display_name, monthly_income").eq("id", userId).single(),
-      supabaseAdmin.from("wallets").select("name, type, balance").eq("user_id", userId),
+      supabaseAdmin.from("wallets").select("name, type, balance, id").eq("user_id", userId),
       supabaseAdmin.from("categories").select("id, name, icon, budget_limit").eq("user_id", userId),
       supabaseAdmin.from("transactions").select("amount, type, description, date, categories(name)")
         .eq("user_id", userId).order("date", { ascending: false }).limit(10),
@@ -268,26 +366,44 @@ Saldo: R$ ${totalBalance.toFixed(2)}
 Categorias: ${(categories || []).map((c: any) => `${c.name} (id:${c.id})`).join(", ")}
 Últimas transações: ${(recentTx || []).slice(0, 5).map((t: any) => `${t.type === "income" ? "+" : "-"}R$${Number(t.amount).toFixed(2)} ${t.description}`).join("; ") || "nenhuma"}`;
 
-    // Process with Nox IA
-    const aiResponse = await processWithNoxIA(messageText, financialContext);
+    // Process based on message type
+    let aiResponse: string;
+
+    if (hasImage && mediaUrl) {
+      try {
+        console.log("Downloading image from:", mediaUrl);
+        const imageBase64 = await downloadMediaAsBase64(mediaUrl);
+        aiResponse = await processImageWithAI(imageBase64, mimetype, financialContext, caption);
+      } catch (e) {
+        console.error("Image processing error:", e);
+        aiResponse = "😕 Não consegui processar a imagem. Tente enviar novamente ou me diga os dados da transação por texto!";
+      }
+    } else if (hasAudio && mediaUrl) {
+      try {
+        console.log("Downloading audio from:", mediaUrl);
+        const audioBase64 = await downloadMediaAsBase64(mediaUrl);
+        aiResponse = await processAudioWithAI(audioBase64, mimetype, financialContext);
+      } catch (e) {
+        console.error("Audio processing error:", e);
+        aiResponse = "😕 Não consegui processar o áudio. Tente enviar novamente ou me diga por texto!";
+      }
+    } else {
+      aiResponse = await processWithNoxIA(messageText, financialContext);
+    }
 
     // Check if AI wants to create a transaction
     let replyText = aiResponse;
     try {
-      // Try to parse as JSON action
       const jsonMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"add_transaction"[\s\S]*\}/);
       if (jsonMatch) {
         const action = JSON.parse(jsonMatch[0]);
-        
-        // Find matching category
+
         const matchedCategory = (categories || []).find(
           (c: any) => c.name.toLowerCase() === action.category?.toLowerCase()
         );
 
-        // Get default wallet
         const defaultWallet = (wallets || [])[0];
 
-        // Insert transaction
         const { error: txError } = await supabaseAdmin.from("transactions").insert({
           user_id: userId,
           amount: action.amount,
@@ -302,7 +418,6 @@ Categorias: ${(categories || []).map((c: any) => `${c.name} (id:${c.id})`).join(
           console.error("Transaction insert error:", txError);
           replyText = `❌ Não consegui registrar a transação: ${txError.message}`;
         } else {
-          // Update wallet balance
           if (defaultWallet) {
             const balanceChange = action.type === "income" ? action.amount : -action.amount;
             await supabaseAdmin.from("wallets").update({
@@ -311,16 +426,16 @@ Categorias: ${(categories || []).map((c: any) => `${c.name} (id:${c.id})`).join(
           }
 
           const emoji = action.type === "income" ? "💰" : "💸";
+          const paymentInfo = action.payment_method ? `\n💳 ${action.payment_method}` : "";
           replyText = `${emoji} Transação registrada!\n\n` +
             `📝 ${action.description}\n` +
             `💵 R$ ${Number(action.amount).toFixed(2)}\n` +
-            `📂 ${matchedCategory?.name || "Sem categoria"}\n` +
+            `📂 ${matchedCategory?.name || "Sem categoria"}${paymentInfo}\n` +
             `📅 ${new Date().toLocaleDateString("pt-BR")}\n\n` +
-            `Saldo atualizado: R$ ${(totalBalance + (action.type === "income" ? action.amount : -action.amount)).toFixed(2)}`;
+            `💰 Saldo atualizado: R$ ${(totalBalance + (action.type === "income" ? action.amount : -action.amount)).toFixed(2)}`;
         }
       }
     } catch (parseErr) {
-      // Not a JSON action, use AI response as-is
       console.log("Response is text, not action");
     }
 
