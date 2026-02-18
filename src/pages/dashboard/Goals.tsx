@@ -75,10 +75,19 @@ export default function Goals() {
     },
   });
 
+  const { data: profile } = useQuery({
+    queryKey: ["profile", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from("profiles").select("monthly_income").eq("id", user!.id).single();
+      return data;
+    },
+    enabled: !!user,
+  });
+
   const perMonth = months > 0 ? amount / months : 0;
   const perWeek = months > 0 ? amount / (months * 4.33) : 0;
   const perDay = months > 0 ? amount / (months * 30) : 0;
-  const incomeEstimate = 3000;
+  const incomeEstimate = Number(profile?.monthly_income) || 0;
   const pctIncome = incomeEstimate > 0 ? (perMonth / incomeEstimate) * 100 : 0;
 
   const getDifficultyLabel = () => {

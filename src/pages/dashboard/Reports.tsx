@@ -30,6 +30,26 @@ export default function Reports() {
   const [sendWhatsApp, setSendWhatsApp] = useState(false);
   const [activeView, setActiveView] = useState<"categoria" | "fluxo" | "comparativo">("categoria");
 
+  const handleExportCSV = () => {
+    if (transactions.length === 0) return;
+    const header = ["Data", "Descrição", "Categoria", "Tipo", "Valor (R$)"];
+    const rows = transactions.map((t: any) => [
+      t.date,
+      `"${t.description.replace(/"/g, '""')}"`,
+      `"${(t.categories?.name || "Sem categoria").replace(/"/g, '""')}"`,
+      t.type === "income" ? "Receita" : "Despesa",
+      Number(t.amount).toFixed(2).replace(".", ","),
+    ]);
+    const csv = [header, ...rows].map(r => r.join(";")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `relatorio-${months[Number(month)]}-${year}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const startDate = `${year}-${String(Number(month) + 1).padStart(2, "0")}-01`;
   const endDate = new Date(Number(year), Number(month) + 1, 0).toISOString().slice(0, 10);
 
@@ -124,7 +144,7 @@ export default function Reports() {
           <p className="text-muted-foreground text-sm">Análises detalhadas das suas finanças</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="rounded-full gap-1.5">
+          <Button variant="outline" size="sm" className="rounded-full gap-1.5" onClick={handleExportCSV}>
             <FileSpreadsheet className="h-4 w-4" /> Exportar CSV
           </Button>
         </div>
