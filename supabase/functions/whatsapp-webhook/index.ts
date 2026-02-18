@@ -598,8 +598,10 @@ Categorias: ${(categories || []).map((c: any) => `${c.name} (id:${c.id})`).join(
         const amountMatch  = messageText.match(/^r?\$?\s*(\d+(?:[.,]\d{1,2})?)$/i);
         // User sends "desc: nova descrição" to change description
         const descMatch    = messageText.match(/^(?:desc(?:rição)?|descrição|nome|item)\s*[:\-]\s*(.+)$/i);
+        // User sends "receita" or "despesa" to change type
+        const typeMatch    = messageText.match(/^(receita|income|entrada|despesa|expense|gasto|saída|saida)$/i);
         // User sends a category name to change category
-        const catMatch     = !confirmMatch && !cancelMatch && !amountMatch && !descMatch
+        const catMatch     = !confirmMatch && !cancelMatch && !amountMatch && !descMatch && !typeMatch
           ? (categories || []).find((c: any) => messageText.toLowerCase() === c.name.toLowerCase())
           : null;
 
@@ -644,6 +646,29 @@ Categorias: ${(categories || []).map((c: any) => `${c.name} (id:${c.id})`).join(
             `📝 ${newDesc}\n` +
             `💵 R$ ${Number(pending.amount).toFixed(2)}\n` +
             `📂 ${pending.category_name || "Sem categoria"}\n\n` +
+            `✅ *SIM* para confirmar | ❌ *NÃO* para cancelar`
+          );
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        if (typeMatch) {
+          const isIncome = /receita|income|entrada/i.test(messageText);
+          const newType = isIncome ? "income" : "expense";
+          await supabaseAdmin
+            .from("whatsapp_pending_transactions")
+            .update({ type: newType })
+            .eq("id", pending.id);
+          const emoji = newType === "income" ? "💰" : "💸";
+          const typeLabel = newType === "income" ? "Receita" : "Despesa";
+          await sendWhatsAppMessage(cleanPhone,
+            `✏️ Tipo alterado para *${typeLabel}*\n\n` +
+            `${emoji} *Confirmar transação?*\n\n` +
+            `📝 ${pending.description}\n` +
+            `💵 R$ ${Number(pending.amount).toFixed(2)}\n` +
+            `📂 ${pending.category_name || "Sem categoria"}\n` +
+            `🏷️ ${typeLabel}\n\n` +
             `✅ *SIM* para confirmar | ❌ *NÃO* para cancelar`
           );
           return new Response(JSON.stringify({ ok: true }), {
