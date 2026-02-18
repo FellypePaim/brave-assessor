@@ -167,6 +167,39 @@ export default function Settings() {
     await supabase.from("profiles").update({ [field]: value }).eq("id", user.id);
   };
 
+  const selectPlan = async (newPlanKey: string) => {
+    if (!user || newPlanKey === plan) return;
+    const oldPlan = plan;
+
+    // Update plan in DB
+    const { error } = await supabase
+      .from("profiles")
+      .update({ subscription_plan: newPlanKey as any })
+      .eq("id", user.id);
+
+    if (error) {
+      toast({ title: "Erro ao alterar plano", description: error.message, variant: "destructive" });
+      return;
+    }
+
+    setPlan(newPlanKey);
+    toast({ title: "Plano atualizado!", description: `Agora você está no ${PLANS.find(p => p.key === newPlanKey)?.name}.` });
+
+    // Send WhatsApp notification (fire and forget)
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      const supabaseProjectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+      fetch(`https://${supabaseProjectId}.supabase.co/functions/v1/notify-plan-change`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ newPlan: newPlanKey, oldPlan }),
+      }).catch(() => {/* silent */});
+    }
+  };
+
   const currentPlan = PLANS.find(p => p.key === plan);
   const initials = displayName ? displayName.charAt(0).toUpperCase() : "U";
 
@@ -317,7 +350,7 @@ export default function Settings() {
                     ✓ Plano atual
                   </div>
                 ) : (
-                  <Button size="sm" className="w-full mt-4 rounded-xl" variant="outline">
+                  <Button size="sm" className="w-full mt-4 rounded-xl" variant="outline" onClick={() => selectPlan(p.key)}>
                     <Sparkles className="h-3.5 w-3.5 mr-1.5" /> Selecionar plano
                   </Button>
                 )}
