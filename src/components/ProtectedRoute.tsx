@@ -15,6 +15,19 @@ function usePlanStatus(userId?: string): PlanStatus {
     }
 
     const check = async () => {
+      // Check if admin first — admins always have access
+      const { data: roleData } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId)
+        .eq("role", "admin")
+        .maybeSingle();
+
+      if (roleData) {
+        setStatus("active");
+        return;
+      }
+
       const { data } = await supabase
         .from("profiles")
         .select("subscription_plan, subscription_expires_at")

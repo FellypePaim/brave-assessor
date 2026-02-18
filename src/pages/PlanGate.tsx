@@ -184,9 +184,15 @@ export default function PlanGate() {
                     ))}
                   </div>
                   {p.key === "teste" ? (
-                    <div className="text-center py-2 rounded-xl bg-muted/50 border border-border">
-                      <p className="text-xs text-muted-foreground">Apenas via admin</p>
-                    </div>
+                    <a
+                      href={`https://wa.me/5537998195029?text=${encodeURIComponent("Olá! Gostaria de solicitar o Plano Teste do Nox Assessor.")}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center gap-2 w-full py-2 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold transition-colors"
+                    >
+                      <MessageSquare className="h-3.5 w-3.5" />
+                      Solicitar via WhatsApp
+                    </a>
                   ) : (
                     <Button
                       size="sm"
