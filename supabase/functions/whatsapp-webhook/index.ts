@@ -580,33 +580,99 @@ Categorias: ${(categories || []).map((c: any) => `${c.name} (id:${c.id})`).join(
       aiResponse = await processWithNoxIA(messageText, financialContext);
     }
 
-    // Check if user is confirming/cancelling a pending transaction
+    // Check if user is interacting with a pending transaction (confirm / cancel / edit)
     if (hasText) {
-      const confirmMatch = messageText.match(/^(sim|s|confirmar|ok|yes|confirm)$/i);
-      const cancelMatch = messageText.match(/^(não|nao|n|cancelar|cancel|no)$/i);
+      const { data: pending } = await supabaseAdmin
+        .from("whatsapp_pending_transactions")
+        .select("*")
+        .eq("phone_number", cleanPhone)
+        .gt("expires_at", new Date().toISOString())
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-      if (confirmMatch || cancelMatch) {
-        const { data: pending } = await supabaseAdmin
-          .from("whatsapp_pending_transactions")
-          .select("*")
-          .eq("phone_number", cleanPhone)
-          .gt("expires_at", new Date().toISOString())
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
+      if (pending) {
+        const confirmMatch = messageText.match(/^(sim|s|confirmar|ok|yes|confirm)$/i);
+        const cancelMatch  = messageText.match(/^(não|nao|n|cancelar|cancel|no)$/i);
+        // User sends just a number to change the amount, e.g. "45" or "45,50" or "45.50"
+        const amountMatch  = messageText.match(/^r?\$?\s*(\d+(?:[.,]\d{1,2})?)$/i);
+        // User sends "desc: nova descrição" to change description
+        const descMatch    = messageText.match(/^(?:desc(?:rição)?|descrição|nome|item)\s*[:\-]\s*(.+)$/i);
+        // User sends a category name to change category
+        const catMatch     = !confirmMatch && !cancelMatch && !amountMatch && !descMatch
+          ? (categories || []).find((c: any) => messageText.toLowerCase() === c.name.toLowerCase())
+          : null;
 
-        if (pending) {
-          // Delete pending regardless of confirm/cancel
+        if (cancelMatch) {
+          await supabaseAdmin.from("whatsapp_pending_transactions").delete().eq("id", pending.id);
+          await sendWhatsAppMessage(cleanPhone, "❌ Transação cancelada!");
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        if (amountMatch) {
+          const newAmount = parseFloat(amountMatch[1].replace(",", "."));
+          await supabaseAdmin
+            .from("whatsapp_pending_transactions")
+            .update({ amount: newAmount })
+            .eq("id", pending.id);
+          const emoji = pending.type === "income" ? "💰" : "💸";
+          await sendWhatsAppMessage(cleanPhone,
+            `✏️ Valor atualizado para *R$ ${newAmount.toFixed(2)}*\n\n` +
+            `${emoji} *Confirmar transação?*\n\n` +
+            `📝 ${pending.description}\n` +
+            `💵 R$ ${newAmount.toFixed(2)}\n` +
+            `📂 ${pending.category_name || "Sem categoria"}\n\n` +
+            `✅ *SIM* para confirmar | ❌ *NÃO* para cancelar`
+          );
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        if (descMatch) {
+          const newDesc = descMatch[1].trim();
+          await supabaseAdmin
+            .from("whatsapp_pending_transactions")
+            .update({ description: newDesc })
+            .eq("id", pending.id);
+          const emoji = pending.type === "income" ? "💰" : "💸";
+          await sendWhatsAppMessage(cleanPhone,
+            `✏️ Descrição atualizada para *${newDesc}*\n\n` +
+            `${emoji} *Confirmar transação?*\n\n` +
+            `📝 ${newDesc}\n` +
+            `💵 R$ ${Number(pending.amount).toFixed(2)}\n` +
+            `📂 ${pending.category_name || "Sem categoria"}\n\n` +
+            `✅ *SIM* para confirmar | ❌ *NÃO* para cancelar`
+          );
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        if (catMatch) {
+          await supabaseAdmin
+            .from("whatsapp_pending_transactions")
+            .update({ category_id: (catMatch as any).id, category_name: (catMatch as any).name })
+            .eq("id", pending.id);
+          const emoji = pending.type === "income" ? "💰" : "💸";
+          await sendWhatsAppMessage(cleanPhone,
+            `✏️ Categoria atualizada para *${(catMatch as any).name}*\n\n` +
+            `${emoji} *Confirmar transação?*\n\n` +
+            `📝 ${pending.description}\n` +
+            `💵 R$ ${Number(pending.amount).toFixed(2)}\n` +
+            `📂 ${(catMatch as any).name}\n\n` +
+            `✅ *SIM* para confirmar | ❌ *NÃO* para cancelar`
+          );
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        if (confirmMatch) {
           await supabaseAdmin.from("whatsapp_pending_transactions").delete().eq("id", pending.id);
 
-          if (cancelMatch) {
-            await sendWhatsAppMessage(cleanPhone, "❌ Transação cancelada!");
-            return new Response(JSON.stringify({ ok: true }), {
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            });
-          }
-
-          // Confirmed — insert transaction
           const defaultWallet = (wallets || [])[0];
           const { error: txError } = await supabaseAdmin.from("transactions").insert({
             user_id: userId,
