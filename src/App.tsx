@@ -9,6 +9,7 @@ import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import PlanGate from "./pages/PlanGate";
+import PaymentConfirmed from "./pages/PaymentConfirmed";
 import DashboardLayout from "./layouts/DashboardLayout";
 import Dashboard from "./pages/Dashboard";
 import Placeholder from "./pages/dashboard/Placeholder";
@@ -48,6 +49,16 @@ const App = () => (
               element={
                 <AuthOnlyRoute>
                   <PlanGate />
+                </AuthOnlyRoute>
+              }
+            />
+
+            {/* Página de confirmação de pagamento */}
+            <Route
+              path="/pagamento-confirmado"
+              element={
+                <AuthOnlyRoute>
+                  <PaymentConfirmed />
                 </AuthOnlyRoute>
               }
             />

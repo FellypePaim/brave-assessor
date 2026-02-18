@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { Crown, Zap, Star, CheckCircle2, Lock, MessageSquare, Clock, LogOut } from "lucide-react";
+import { Crown, Zap, Star, CheckCircle2, Lock, MessageSquare, Clock, LogOut, Loader2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 const NOX_PHONE = "5537999385148";
 const NOX_PHONE_DISPLAY = "(37) 9 9938-5148";
@@ -15,9 +16,9 @@ const PLANS = [
     period: "10 minutos",
     description: "Liberado pelo administrador",
     icon: Clock,
-    color: "text-emerald-500",
-    bg: "bg-emerald-500/10",
-    border: "border-emerald-500/30",
+    color: "text-primary",
+    bg: "bg-primary/10",
+    border: "border-primary/30",
     features: [
       "Acesso completo por 10 minutos",
       "Todas as funcionalidades do Mensal",
@@ -31,9 +32,9 @@ const PLANS = [
     period: "/mês",
     description: "Ideal para começar",
     icon: Zap,
-    color: "text-blue-500",
-    bg: "bg-blue-500/10",
-    border: "border-blue-500/30",
+    color: "text-secondary-foreground",
+    bg: "bg-secondary",
+    border: "border-secondary",
     features: [
       "WhatsApp conectado",
       "Cartões de crédito",
@@ -49,9 +50,9 @@ const PLANS = [
     period: "/mês · 12x",
     description: "Melhor custo-benefício",
     icon: Star,
-    color: "text-amber-500",
-    bg: "bg-amber-500/10",
-    border: "border-amber-500/30",
+    color: "text-primary",
+    bg: "bg-primary/10",
+    border: "border-primary/40",
     badge: "Mais Popular",
     features: [
       "Tudo do plano Mensal",
@@ -64,7 +65,9 @@ const PLANS = [
 
 export default function PlanGate() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [planInfo, setPlanInfo] = useState<{ plan: string; name: string } | null>(null);
+  const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -87,6 +90,24 @@ export default function PlanGate() {
     };
     fetchPlan();
   }, [user]);
+
+  const handleCheckout = async (plan: "mensal" | "anual") => {
+    setLoadingPlan(plan);
+    try {
+      const { data, error } = await supabase.functions.invoke("create-checkout", {
+        body: { plan },
+      });
+      if (error || !data?.url) throw new Error(error?.message || "Erro ao criar sessão de pagamento");
+      window.location.href = data.url;
+    } catch (err: any) {
+      toast({
+        title: "Erro ao processar pagamento",
+        description: err.message,
+        variant: "destructive",
+      });
+      setLoadingPlan(null);
+    }
+  };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -122,14 +143,12 @@ export default function PlanGate() {
               )}
             </div>
             <h1 className="text-3xl font-extrabold text-foreground mb-2">
-              {isExpired
-                ? "Seu plano expirou"
-                : "Acesso bloqueado"}
+              {isExpired ? "Seu plano expirou" : "Escolha seu plano"}
             </h1>
             <p className="text-muted-foreground max-w-md mx-auto text-sm">
               {isExpired
                 ? `Olá${planInfo?.name ? `, ${planInfo.name}` : ""}! Seu plano chegou ao fim. Renove para continuar acessando o Nox Assessor.`
-                : `Olá${planInfo?.name ? `, ${planInfo.name}` : ""}! Para acessar o Nox Assessor, escolha um dos planos abaixo e entre em contato com nossa equipe.`}
+                : `Olá${planInfo?.name ? `, ${planInfo.name}` : ""}! Assine agora e tenha acesso completo ao Nox Assessor. Pagamento 100% seguro via Stripe.`}
             </p>
           </div>
 
@@ -140,10 +159,10 @@ export default function PlanGate() {
               return (
                 <div
                   key={p.key}
-                  className={`relative rounded-2xl border-2 p-5 ${p.border} bg-card`}
+                  className={`relative rounded-2xl border-2 p-5 flex flex-col ${p.border} bg-card`}
                 >
                   {p.badge && (
-                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-xs font-bold bg-amber-500 text-white px-3 py-0.5 rounded-full whitespace-nowrap">
+                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-xs font-bold bg-primary text-primary-foreground px-3 py-0.5 rounded-full whitespace-nowrap">
                       {p.badge}
                     </span>
                   )}
@@ -156,7 +175,7 @@ export default function PlanGate() {
                     <span className="text-2xl font-extrabold text-foreground">{p.price}</span>
                     <span className="text-xs text-muted-foreground">{p.period}</span>
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-2 mb-5 flex-1">
                     {p.features.map((f, i) => (
                       <div key={i} className="flex items-start gap-2 text-xs">
                         <CheckCircle2 className={`h-3.5 w-3.5 shrink-0 mt-0.5 ${p.color}`} />
@@ -165,22 +184,24 @@ export default function PlanGate() {
                     ))}
                   </div>
                   {p.key === "teste" ? (
-                    <div className="mt-4 text-center py-2 rounded-xl bg-muted/50 border border-border">
+                    <div className="text-center py-2 rounded-xl bg-muted/50 border border-border">
                       <p className="text-xs text-muted-foreground">Apenas via admin</p>
                     </div>
                   ) : (
                     <Button
                       size="sm"
-                      className="w-full mt-4 rounded-xl bg-[#25D366] hover:bg-[#1ebe5d] text-white"
-                      onClick={() =>
-                        window.open(
-                          `https://wa.me/${NOX_PHONE}?text=${encodeURIComponent(`Olá! Quero assinar o ${p.name} (${p.price}${p.period}).`)}`,
-                          "_blank"
-                        )
-                      }
+                      className="w-full rounded-xl"
+                      disabled={loadingPlan === p.key}
+                      onClick={() => handleCheckout(p.key as "mensal" | "anual")}
                     >
-                      <MessageSquare className="h-3.5 w-3.5 mr-1.5" />
-                      Quero assinar
+                      {loadingPlan === p.key ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                          Aguarde…
+                        </>
+                      ) : (
+                        "Assinar agora"
+                      )}
                     </Button>
                   )}
                 </div>
@@ -194,7 +215,8 @@ export default function PlanGate() {
               Tem dúvidas? Fale diretamente com nossa equipe no WhatsApp.
             </p>
             <Button
-              className="gap-2 bg-[#25D366] hover:bg-[#1ebe5d] text-white"
+              variant="outline"
+              className="gap-2"
               onClick={() => window.open(`https://wa.me/${NOX_PHONE}`, "_blank")}
             >
               <MessageSquare className="h-4 w-4" />
