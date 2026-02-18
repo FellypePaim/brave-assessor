@@ -139,13 +139,16 @@ export default function Wallets() {
             ) : (
               <div className="space-y-1">
                 {transactions.slice(0, 8).map((t) => (
-                  <div key={t.id} className="flex items-center gap-3 py-2 border-b border-border last:border-0 cursor-pointer hover:bg-muted/30 rounded-lg px-2 -mx-2 transition-colors group" onClick={() => setEditTx(t)}>
-                    <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${t.type === "income" ? "bg-emerald-500/10" : "bg-destructive/10"}`}>
+                  <div key={t.id} className={`flex items-center gap-3 py-2 border-b border-border last:border-0 cursor-pointer rounded-lg px-2 -mx-2 transition-colors group ${t.type === "income" ? "hover:bg-emerald-500/5" : "hover:bg-destructive/5"}`} onClick={() => setEditTx(t)}>
+                    <div className={`h-9 w-9 rounded-full flex items-center justify-center shrink-0 ${t.type === "income" ? "bg-emerald-500/15" : "bg-destructive/10"}`}>
                       {t.type === "income" ? <TrendingUp className="h-4 w-4 text-emerald-500" /> : <TrendingDown className="h-4 w-4 text-destructive" />}
                     </div>
-                    <div className="flex-1 min-w-0"><p className="text-sm font-medium text-foreground truncate">{t.description}</p><p className="text-xs text-muted-foreground">{new Date(t.date).toLocaleDateString("pt-BR")}</p></div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-medium truncate ${t.type === "income" ? "text-emerald-700 dark:text-emerald-400" : "text-foreground"}`}>{t.description}</p>
+                      <p className="text-xs text-muted-foreground">{new Date(t.date).toLocaleDateString("pt-BR")} · <span className={t.type === "income" ? "text-emerald-500 font-medium" : "text-destructive font-medium"}>{t.type === "income" ? "Receita" : "Despesa"}</span></p>
+                    </div>
                     <div className="flex items-center gap-2">
-                      <p className={`text-sm font-semibold ${t.type === "income" ? "text-emerald-500" : "text-destructive"}`}>{t.type === "income" ? "+" : "-"}{fmt(Number(t.amount))}</p>
+                      <p className={`text-sm font-bold ${t.type === "income" ? "text-emerald-500" : "text-destructive"}`}>{t.type === "income" ? "+" : "-"}{fmt(Number(t.amount))}</p>
                       <Pencil className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
                   </div>

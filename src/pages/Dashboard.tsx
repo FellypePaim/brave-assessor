@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import {
   X, ChevronLeft, ChevronRight, Plus, MessageSquare,
   TrendingDown, TrendingUp, Clock, DollarSign, FileText, Smile, Frown, Meh,
-  RefreshCw, Sparkles, Check, CalendarCheck, AlertTriangle, ArrowRight
+  RefreshCw, Sparkles, Check, CalendarCheck, AlertTriangle, ArrowRight, CalendarDays
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { AddTransactionDialog } from "@/components/AddTransactionDialog";
@@ -385,6 +385,47 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Últimas Transações */}
+      <Card>
+        <CardContent className="p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center"><CalendarDays className="h-4 w-4 text-primary" /></div>
+              <h3 className="font-semibold text-foreground">Últimas Transações</h3>
+            </div>
+            <button onClick={() => navigate("/dashboard/wallets")} className="text-sm text-primary hover:underline inline-flex items-center gap-1">
+              Ver todas <ArrowRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          {transactions.length === 0 ? (
+            <div className="flex flex-col items-center text-center py-6">
+              <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center"><CalendarDays className="h-6 w-6 text-muted-foreground/50" /></div>
+              <p className="mt-3 text-sm text-muted-foreground">Nenhuma transação no período</p>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {transactions.slice(0, 5).map((t) => (
+                <div key={t.id} className={`flex items-center gap-3 py-2 border-b border-border last:border-0 rounded-lg px-2 -mx-2 transition-colors ${t.type === "income" ? "hover:bg-emerald-500/5" : "hover:bg-destructive/5"}`}>
+                  <div className={`h-9 w-9 rounded-full flex items-center justify-center shrink-0 ${t.type === "income" ? "bg-emerald-500/15" : "bg-destructive/10"}`}>
+                    {t.type === "income" ? <TrendingUp className="h-4 w-4 text-emerald-500" /> : <TrendingDown className="h-4 w-4 text-destructive" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-medium truncate ${t.type === "income" ? "text-emerald-700 dark:text-emerald-400" : "text-foreground"}`}>{t.description}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(t.date).toLocaleDateString("pt-BR")} · <span className={`font-medium ${t.type === "income" ? "text-emerald-500" : "text-destructive"}`}>{t.type === "income" ? "Receita" : "Despesa"}</span>
+                      {(t as any).categories?.name && <> · {(t as any).categories.name}</>}
+                    </p>
+                  </div>
+                  <p className={`text-sm font-bold shrink-0 ${t.type === "income" ? "text-emerald-500" : "text-destructive"}`}>
+                    {t.type === "income" ? "+" : "-"}{fmt(Number(t.amount))}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Alertas */}
       <Card>
