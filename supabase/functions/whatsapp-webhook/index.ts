@@ -25,32 +25,94 @@ async function sendWhatsAppMessage(phone: string, message: string) {
   return resp.json();
 }
 
-// Download media via UAZAPI - tries multiple known endpoints for V2
-async function downloadMediaFromUazapi(messageId: string, mediaType?: string): Promise<{ base64: string; mimetype: string } | null> {
+// Extract media from webhook payload inline data (base64 or URL in content field)
+function extractMediaFromPayload(message: any, mediaType?: string): { base64: string; mimetype: string } | null {
+  // UAZAPI may send media inline in the webhook payload
+  const content = message.content;
+  console.log("Checking inline media in payload. content type:", typeof content, "keys:", content && typeof content === "object" ? Object.keys(content).join(", ") : String(content)?.substring(0, 100));
+
+  if (content && typeof content === "object") {
+    // base64 inline
+    if (content.base64) {
+      const mime = content.mimetype || content.mimeType || guessMimeType(mediaType);
+      console.log("Found base64 in content, mimetype:", mime);
+      return { base64: content.base64, mimetype: mime };
+    }
+    // URL in content
+    const url = content.url || content.mediaUrl || content.fileUrl || content.downloadUrl || content.link;
+    if (url) {
+      console.log("Found media URL in content:", url.substring(0, 100));
+      // Return the URL for async download - handled below
+      return { base64: `URL:${url}`, mimetype: content.mimetype || guessMimeType(mediaType) };
+    }
+  }
+
+  // Sometimes content is a string URL directly
+  if (typeof content === "string" && (content.startsWith("http://") || content.startsWith("https://"))) {
+    console.log("Found media URL string in content:", content.substring(0, 100));
+    return { base64: `URL:${content}`, mimetype: guessMimeType(mediaType) };
+  }
+
+  // Check other fields that might contain media
+  const mediaUrl = message.mediaUrl || message.media?.url || message.fileUrl || message.url;
+  if (mediaUrl) {
+    console.log("Found media URL in message fields:", mediaUrl.substring(0, 100));
+    return { base64: `URL:${mediaUrl}`, mimetype: message.mimetype || guessMimeType(mediaType) };
+  }
+
+  return null;
+}
+
+// Download media - first try inline payload, then UAZAPI API endpoints
+async function downloadMediaFromUazapi(messageId: string, mediaType?: string, message?: any): Promise<{ base64: string; mimetype: string } | null> {
   const UAZAPI_URL = Deno.env.get("UAZAPI_URL");
   const UAZAPI_TOKEN = Deno.env.get("UAZAPI_TOKEN");
-  if (!UAZAPI_URL || !UAZAPI_TOKEN) return null;
 
-  // UAZAPI V2 - The full messageId from webhook is "instancePhone:messageHash"
+  // 1. Try to extract from webhook payload first (no extra API call needed)
+  if (message) {
+    const inline = extractMediaFromPayload(message, mediaType);
+    if (inline) {
+      // If it's a URL reference, download it
+      if (inline.base64.startsWith("URL:")) {
+        const url = inline.base64.slice(4);
+        try {
+          console.log("Downloading media from URL:", url.substring(0, 100));
+          const mediaResp = await fetch(url);
+          if (mediaResp.ok) {
+            const ct = mediaResp.headers.get("content-type") || inline.mimetype;
+            const buffer = await mediaResp.arrayBuffer();
+            const bytes = new Uint8Array(buffer);
+            let binary = "";
+            for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+            return { base64: btoa(binary), mimetype: ct };
+          }
+        } catch (e) {
+          console.error("Error downloading from URL:", e);
+        }
+      } else {
+        return inline;
+      }
+    }
+  }
+
+  if (!UAZAPI_URL || !UAZAPI_TOKEN) {
+    console.error("UAZAPI credentials not configured");
+    return null;
+  }
+
+  // 2. Try UAZAPI API endpoints
   const shortId = messageId.includes(":") ? messageId.split(":")[1] : messageId;
-  const fullId = messageId; // e.g. "553799385148:AC6B99D741D02E57F78F92C4252C238B"
+  const fullId = messageId;
 
-  // 405 on POST = endpoint exists but wrong method → try GET with path param
-  // 404 on GET with query string → try path parameter style
   const endpoints = [
-    // GET with path parameter (most common REST pattern)
     { method: "GET",  path: `/message/getMedia/${shortId}`, body: null },
     { method: "GET",  path: `/message/getMedia/${fullId}`, body: null },
     { method: "GET",  path: `/message/getLink/${shortId}`, body: null },
-    { method: "GET",  path: `/message/getLink/${fullId}`, body: null },
     { method: "GET",  path: `/message/${shortId}/getMedia`, body: null },
     { method: "GET",  path: `/message/${shortId}/download`, body: null },
-    // Query string variants
     { method: "GET",  path: `/message/getMedia?messageid=${shortId}`, body: null },
     { method: "GET",  path: `/message/getMedia?id=${shortId}`, body: null },
-    // POST variants (405 = endpoint exists)
     { method: "POST", path: "/message/getMedia", body: { messageid: shortId } },
-    { method: "POST", path: "/message/getMedia", body: { id: shortId } },
     { method: "POST", path: "/message/getLink",  body: { messageid: shortId } },
   ];
 
@@ -69,19 +131,11 @@ async function downloadMediaFromUazapi(messageId: string, mediaType?: string): P
       if (!resp.ok) continue;
 
       const data = await resp.json();
-      console.log("Media download response keys:", Object.keys(data).join(", "));
-      console.log("Media download response:", JSON.stringify(data).substring(0, 300));
-
-      // Direct base64 in response
       if (data.base64) {
-        const mime = data.mimetype || data.mimeType || guessMimeType(mediaType);
-        return { base64: data.base64, mimetype: mime };
+        return { base64: data.base64, mimetype: data.mimetype || guessMimeType(mediaType) };
       }
-
-      // URL to download separately
       const url = data.url || data.mediaUrl || data.fileUrl || data.downloadUrl || data.link;
       if (url) {
-        console.log("Downloading from URL:", url.substring(0, 100));
         const mediaResp = await fetch(url);
         if (!mediaResp.ok) continue;
         const ct = mediaResp.headers.get("content-type") || guessMimeType(mediaType);
@@ -96,7 +150,7 @@ async function downloadMediaFromUazapi(messageId: string, mediaType?: string): P
     }
   }
 
-  console.error("All media download endpoints failed for messageId:", messageId);
+  console.error("All media download methods failed for messageId:", messageId);
   return null;
 }
 
@@ -308,6 +362,11 @@ serve(async (req) => {
     const body = await req.json();
 
     // Detailed log for debugging media messages
+    // Log full content field for media diagnosis
+    if (body.message?.content) {
+      console.log("Message content field:", JSON.stringify(body.message.content).substring(0, 500));
+    }
+
     console.log("Webhook payload:", JSON.stringify({
       EventType: body.EventType,
       chatPhone: body.chat?.phone,
@@ -455,7 +514,7 @@ Categorias: ${(categories || []).map((c: any) => `${c.name} (id:${c.id})`).join(
       await sendWhatsAppMessage(cleanPhone, mediaLabel);
 
       try {
-        const mediaData = await downloadMediaFromUazapi(messageId, mediaType);
+        const mediaData = await downloadMediaFromUazapi(messageId, mediaType, message);
 
         if (!mediaData) {
           aiResponse = "😕 Não consegui baixar a mídia. Tente enviar novamente ou descreva por texto!";
