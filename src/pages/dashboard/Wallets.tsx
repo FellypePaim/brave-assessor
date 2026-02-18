@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import {
   Wallet, TrendingUp, TrendingDown, Landmark, Plus,
   CalendarDays, ArrowRight, LayoutGrid, ArrowDownUp, Building2,
-  Download, Search, Filter, ChevronLeft, ChevronRight, Pencil
+  Download, Search, Filter, ChevronLeft, ChevronRight, Pencil, AlertTriangle
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
@@ -71,20 +71,27 @@ export default function Wallets() {
 
   const WalletCard = ({ w }: { w: any }) => {
     const bgColor = w.color || "hsl(270, 60%, 55%)";
+    const isNegative = Number(w.balance) < 0;
     return (
       <div
         key={w.id}
-        className="rounded-xl text-white p-4 min-w-[160px] flex items-center gap-3 cursor-pointer hover:brightness-110 transition-all group relative"
-        style={{ background: bgColor }}
+        className={`rounded-xl text-white p-4 min-w-[160px] flex items-center gap-3 cursor-pointer hover:brightness-110 transition-all group relative ${isNegative ? "ring-2 ring-destructive ring-offset-2 ring-offset-background" : ""}`}
+        style={{ background: isNegative ? "linear-gradient(135deg, #dc2626, #b91c1c)" : bgColor }}
         onClick={() => setEditWallet(w)}
       >
         <Pencil className="absolute top-2 right-2 h-3.5 w-3.5 opacity-0 group-hover:opacity-70 transition-opacity" />
+        {isNegative && (
+          <div className="absolute top-2 left-2">
+            <AlertTriangle className="h-3.5 w-3.5 text-yellow-300" />
+          </div>
+        )}
         <div className="h-10 w-10 rounded-lg bg-white/20 flex items-center justify-center shrink-0 text-lg">
           {w.icon || "🏦"}
         </div>
         <div>
           <p className="text-sm font-semibold leading-tight">{w.name}</p>
-          <p className="text-sm font-bold">{fmt(Number(w.balance))}</p>
+          <p className={`text-sm font-bold ${isNegative ? "text-yellow-300" : ""}`}>{fmt(Number(w.balance))}</p>
+          {isNegative && <p className="text-[10px] text-white/80 mt-0.5">Saldo negativo</p>}
         </div>
       </div>
     );
