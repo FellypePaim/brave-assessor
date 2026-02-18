@@ -12,7 +12,7 @@ const tabs = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Início", end: true },
   { to: "/dashboard/wallets", icon: Wallet, label: "Carteira" },
   { to: "/dashboard/transactions", icon: CalendarCheck, label: "Contas" },
-  { to: "/dashboard/nylo-ia", icon: Sparkles, label: "Nox IA" },
+  { to: "/dashboard/brave-ia", icon: Sparkles, label: "Brave IA" },
 ];
 
 const moreItems = [

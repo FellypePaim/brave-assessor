@@ -223,8 +223,8 @@ export default function Behavior() {
             <p className="text-xs text-muted-foreground">{status.desc}</p>
           </div>
         </div>
-        <Button size="sm" className="rounded-full bg-primary text-primary-foreground gap-1.5 text-xs" onClick={() => navigate("/dashboard/nylo-ia")}>
-          <Sparkles className="h-3.5 w-3.5" /> Nox IA
+        <Button size="sm" className="rounded-full bg-primary text-primary-foreground gap-1.5 text-xs" onClick={() => navigate("/dashboard/brave-ia")}>
+          <Sparkles className="h-3.5 w-3.5" /> Brave IA
         </Button>
       </Card>
 
@@ -401,8 +401,8 @@ export default function Behavior() {
             ))}
           </div>
         )}
-        <Button variant="outline" size="sm" className="mt-4 rounded-full gap-1.5 w-full" onClick={() => navigate("/dashboard/nylo-ia")}>
-          <Sparkles className="h-3.5 w-3.5" /> Conversar com o Nox IA para mais insights
+        <Button variant="outline" size="sm" className="mt-4 rounded-full gap-1.5 w-full" onClick={() => navigate("/dashboard/brave-ia")}>
+          <Sparkles className="h-3.5 w-3.5" /> Conversar com o Brave IA para mais insights
         </Button>
       </Card>
     </div>

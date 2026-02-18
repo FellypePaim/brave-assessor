@@ -228,7 +228,7 @@ export default function Dashboard() {
             <div className="flex items-start gap-3">
               <span className="text-2xl">👋</span>
               <div>
-                <h3 className="font-semibold text-foreground">Bem-vindo ao Nox!</h3>
+                <h3 className="font-semibold text-foreground">Bem-vindo ao Brave!</h3>
                 <p className="text-sm text-muted-foreground mt-1">Veja como aproveitar ao máximo seu assessor financeiro</p>
               </div>
             </div>

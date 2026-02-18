@@ -39,7 +39,7 @@ const PLANS = [
   },
   {
     key: "mensal",
-    name: "Nox Mensal",
+    name: "Brave Mensal",
     price: "R$ 19,90",
     period: "/mês",
     description: "Ideal para começar",
@@ -59,7 +59,7 @@ const PLANS = [
   },
   {
     key: "anual",
-    name: "Nox Anual",
+    name: "Brave Anual",
     price: "R$ 14,90",
     period: "/mês · 12x",
     description: "Melhor custo-benefício",

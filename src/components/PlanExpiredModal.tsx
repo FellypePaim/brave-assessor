@@ -30,9 +30,9 @@ export default function PlanExpiredModal() {
       if (hasPaidPlan && isExpired) {
         setExpired(true);
         const names: Record<string, string> = {
-          mensal: "Nox Mensal",
-          anual: "Nox Anual",
-          trimestral: "Nox Trimestral",
+          mensal: "Brave Mensal",
+          anual: "Brave Anual",
+          trimestral: "Brave Trimestral",
         };
         setPlanName(names[data.subscription_plan] || data.subscription_plan);
       }

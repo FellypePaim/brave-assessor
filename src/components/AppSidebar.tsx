@@ -61,22 +61,22 @@ export function AppSidebar() {
               N
             </div>
             <div className="group-data-[collapsible=icon]:hidden">
-              <span className="font-bold text-base text-primary leading-none">Nox Assessor</span>
+              <span className="font-bold text-base text-primary leading-none">Brave Assessor</span>
               <p className="text-[11px] text-muted-foreground leading-tight">Finanças inteligentes</p>
             </div>
           </div>
         </div>
 
-        {/* Nylo IA Button */}
+        {/* Brave IA Button */}
         <div className="px-3 py-2 group-data-[collapsible=icon]:px-1.5">
           <NavLink
-            to="/dashboard/nylo-ia"
+            to="/dashboard/brave-ia"
             className="flex items-center gap-3 rounded-xl bg-primary px-4 py-3 text-primary-foreground hover:brightness-110 transition-all group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-2"
             activeClassName="ring-2 ring-primary/30"
           >
             <Sparkles className="h-5 w-5 shrink-0" />
             <div className="group-data-[collapsible=icon]:hidden">
-              <span className="font-semibold text-sm leading-none">Nox IA</span>
+              <span className="font-semibold text-sm leading-none">Brave IA</span>
               <p className="text-[11px] opacity-80 leading-tight">Seu assessor</p>
             </div>
           </NavLink>
