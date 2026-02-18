@@ -476,11 +476,16 @@ serve(async (req) => {
       });
     }
 
+    // Button click responses from UAZAPI may come with empty text but buttonOrListid set
+    const buttonId = message.buttonOrListid || message.selectedButtonId || message.buttonId || "";
+    const isButtonResponse = !!(buttonId) || message.type === "buttonResponse" || message.type === "interactive";
+
     const isMedia = isMediaMessage(message);
     const hasText = !!(text && text.trim());
+    const hasButtonResponse = !!(buttonId.trim());
 
-    if (!phone || (!hasText && !isMedia)) {
-      console.log("Missing phone or content, skipping. phone:", phone, "text:", text, "isMedia:", isMedia);
+    if (!phone || (!hasText && !isMedia && !hasButtonResponse)) {
+      console.log("Missing phone or content, skipping. phone:", phone, "text:", text, "isMedia:", isMedia, "buttonId:", buttonId);
       return new Response(JSON.stringify({ ok: true, skipped: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -488,10 +493,12 @@ serve(async (req) => {
 
     const cleanPhone = phone.replace(/@.*$/, "").replace(/\D/g, "");
     const messageText = (text || "").trim();
+    // effectiveText considers both text messages and button click IDs
+    const effectiveText = messageText || buttonId.trim();
     const isAudio = isAudioMessage(message);
     const isImage = isImageMessage(message);
 
-    console.log(`Message from ${cleanPhone}: type=${message.type} isMedia=${isMedia} isAudio=${isAudio} isImage=${isImage} text="${messageText}"`);
+    console.log(`Message from ${cleanPhone}: type=${message.type} isMedia=${isMedia} isAudio=${isAudio} isImage=${isImage} text="${messageText}" buttonId="${buttonId}"`);
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -584,40 +591,9 @@ Saldo: R$ ${totalBalance.toFixed(2)}
 Categorias: ${(categories || []).map((c: any) => `${c.name} (id:${c.id})`).join(", ")}
 Últimas transações: ${(recentTx || []).slice(0, 5).map((t: any) => `${t.type === "income" ? "+" : "-"}R$${Number(t.amount).toFixed(2)} ${t.description}`).join("; ") || "nenhuma"}`;
 
-    // Process based on message type
-    let aiResponse: string;
-
-    if (isMedia && messageId) {
-      // Send acknowledgment while processing
-      const mediaLabel = isAudio ? "🎙️ Processando seu áudio..." : "📸 Analisando o comprovante...";
-      console.log(`Downloading media: messageId=${messageId} mediaType=${mediaType}`);
-      await sendWhatsAppMessage(cleanPhone, mediaLabel);
-
-      try {
-        const mediaData = await downloadMediaFromUazapi(messageId, mediaType, message);
-
-        if (!mediaData) {
-          aiResponse = "😕 Não consegui baixar a mídia. Tente enviar novamente ou descreva por texto!";
-        } else if (isAudio) {
-          console.log("Processing audio, mimetype:", mediaData.mimetype);
-          aiResponse = await processAudioWithAI(mediaData.base64, mediaData.mimetype, financialContext);
-        } else if (isImage) {
-          console.log("Processing image, mimetype:", mediaData.mimetype);
-          const caption = message.caption || "";
-          aiResponse = await processImageWithAI(mediaData.base64, mediaData.mimetype, financialContext, caption);
-        } else {
-          aiResponse = "📎 Recebi seu arquivo, mas só consigo processar áudios e imagens por enquanto!";
-        }
-      } catch (e) {
-        console.error("Media processing error:", e);
-        aiResponse = "😕 Não consegui processar a mídia. Tente novamente ou escreva por texto!";
-      }
-    } else {
-      aiResponse = await processWithNoxIA(messageText, financialContext);
-    }
-
-    // Check if user is interacting with a pending transaction (confirm / cancel / edit)
-    if (hasText) {
+    // ── PRIORITY 1: Check if user is interacting with a pending transaction ──
+    // This must happen BEFORE calling AI, so button clicks get handled immediately
+    if (effectiveText) {
       const { data: pending } = await supabaseAdmin
         .from("whatsapp_pending_transactions")
         .select("*")
@@ -628,19 +604,13 @@ Categorias: ${(categories || []).map((c: any) => `${c.name} (id:${c.id})`).join(
         .maybeSingle();
 
       if (pending) {
-      // Also handle button click responses (UAZAPI sends buttonId or selectedButtonId)
-      const buttonId = message.buttonOrListid || message.selectedButtonId || message.buttonId || "";
-      const effectiveText = messageText || buttonId;
+        console.log(`Pending transaction found: ${pending.id}, effectiveText="${effectiveText}"`);
 
-      const confirmMatch = effectiveText.match(/^(sim|s|confirmar|ok|yes|confirm)$/i);
-      const cancelMatch  = effectiveText.match(/^(não|nao|n|cancelar|cancel|no|nao)$/i);
-        // User sends just a number to change the amount, e.g. "45" or "45,50" or "45.50"
+        const confirmMatch = effectiveText.match(/^(sim|s|confirmar|ok|yes|confirm|✅ confirmar)$/i);
+        const cancelMatch  = effectiveText.match(/^(não|nao|n|cancelar|cancel|no|❌ cancelar)$/i);
         const amountMatch  = effectiveText.match(/^r?\$?\s*(\d+(?:[.,]\d{1,2})?)$/i);
-        // User sends "desc: nova descrição" to change description
         const descMatch    = effectiveText.match(/^(?:desc(?:rição)?|descrição|nome|item)\s*[:\-]\s*(.+)$/i);
-        // User sends "receita" or "despesa" to change type
         const typeMatch    = effectiveText.match(/^(receita|income|entrada|despesa|expense|gasto|saída|saida)$/i);
-        // User sends a category name to change category
         const catMatch     = !confirmMatch && !cancelMatch && !amountMatch && !descMatch && !typeMatch
           ? (categories || []).find((c: any) => effectiveText.toLowerCase() === c.name.toLowerCase())
           : null;
@@ -698,7 +668,7 @@ Categorias: ${(categories || []).map((c: any) => `${c.name} (id:${c.id})`).join(
         }
 
         if (typeMatch) {
-          const isIncome = /receita|income|entrada/i.test(messageText);
+          const isIncome = /receita|income|entrada/i.test(effectiveText);
           const newType = isIncome ? "income" : "expense";
           await supabaseAdmin
             .from("whatsapp_pending_transactions")
@@ -782,10 +752,54 @@ Categorias: ${(categories || []).map((c: any) => `${c.name} (id:${c.id})`).join(
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
+
+        // Unknown response while pending — re-show the confirmation
+        const emoji = pending.type === "income" ? "💰" : "💸";
+        await sendWhatsAppButtons(
+          cleanPhone,
+          `${emoji} *Confirmar transação?*\n\n` +
+          `📝 ${pending.description}\n` +
+          `💵 R$ ${Number(pending.amount).toFixed(2)}\n` +
+          `📂 ${pending.category_name || "Sem categoria"}`,
+          [{ id: "sim", text: "✅ Confirmar" }, { id: "nao", text: "❌ Cancelar" }],
+          "Ou corrija: valor, descrição, categoria ou tipo"
+        );
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
     }
 
-    // Check if AI returned a transaction action
+    // ── PRIORITY 2: Process media or text with AI ──
+    let aiResponse: string;
+
+    if (isMedia && messageId) {
+      const mediaLabel = isAudio ? "🎙️ Processando seu áudio..." : "📸 Analisando o comprovante...";
+      console.log(`Downloading media: messageId=${messageId} mediaType=${mediaType}`);
+      await sendWhatsAppMessage(cleanPhone, mediaLabel);
+
+      try {
+        const mediaData = await downloadMediaFromUazapi(messageId, mediaType, message);
+
+        if (!mediaData) {
+          aiResponse = "😕 Não consegui baixar a mídia. Tente enviar novamente ou descreva por texto!";
+        } else if (isAudio) {
+          console.log("Processing audio, mimetype:", mediaData.mimetype);
+          aiResponse = await processAudioWithAI(mediaData.base64, mediaData.mimetype, financialContext);
+        } else if (isImage) {
+          console.log("Processing image, mimetype:", mediaData.mimetype);
+          const caption = message.caption || "";
+          aiResponse = await processImageWithAI(mediaData.base64, mediaData.mimetype, financialContext, caption);
+        } else {
+          aiResponse = "📎 Recebi seu arquivo, mas só consigo processar áudios e imagens por enquanto!";
+        }
+      } catch (e) {
+        console.error("Media processing error:", e);
+        aiResponse = "😕 Não consegui processar a mídia. Tente novamente ou escreva por texto!";
+      }
+    } else {
+      aiResponse = await processWithNoxIA(effectiveText || messageText, financialContext);
+    }
     let replyText = aiResponse;
     try {
       const jsonMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"add_transaction"[\s\S]*\}/);
