@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
     }
 
     // Parse body
-    const { userId, email, password, fetchOnly } = await req.json();
+    const { userId, email, password, fetchOnly, deleteUser } = await req.json();
 
     if (!userId) {
       return new Response(JSON.stringify({ error: "userId is required" }), {
@@ -81,6 +81,28 @@ Deno.serve(async (req) => {
       }
       return new Response(
         JSON.stringify({ success: true, user: { id: data.user.id, email: data.user.email } }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // deleteUser mode — permanently delete user
+    if (deleteUser) {
+      // Prevent self-deletion
+      if (userId === callerId) {
+        return new Response(JSON.stringify({ error: "Você não pode excluir sua própria conta." }), {
+          status: 400,
+          headers: corsHeaders,
+        });
+      }
+      const { error } = await adminClient.auth.admin.deleteUser(userId);
+      if (error) {
+        return new Response(JSON.stringify({ error: error.message }), {
+          status: 400,
+          headers: corsHeaders,
+        });
+      }
+      return new Response(
+        JSON.stringify({ success: true }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

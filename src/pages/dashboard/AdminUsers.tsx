@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import {
   Search, Users, Pencil, Shield, Zap, Star, UserCircle2,
-  Phone, Calendar, Crown, RefreshCw, ShieldCheck, ShieldOff, Eye, EyeOff, Mail, Lock,
+  Phone, Calendar, Crown, RefreshCw, ShieldCheck, ShieldOff, Eye, EyeOff, Mail, Lock, Trash2,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -59,6 +59,8 @@ export default function AdminUsers() {
   const [editPassword, setEditPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteUser, setConfirmDeleteUser] = useState<UserRow | null>(null);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -240,6 +242,37 @@ export default function AdminUsers() {
   const isExpired = (u: UserRow) =>
     u.subscription_expires_at && new Date(u.subscription_expires_at) < new Date();
 
+  const deleteUser = async (u: UserRow) => {
+    setDeletingId(u.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Sem sessão");
+
+      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/admin-update-user`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ userId: u.id, deleteUser: true }),
+        }
+      );
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+
+      toast({ title: "Usuário excluído", description: `${u.display_name || u.id} foi removido.` });
+      setConfirmDeleteUser(null);
+      fetchUsers();
+    } catch (err: any) {
+      toast({ title: "Erro ao excluir", description: err.message, variant: "destructive" });
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -379,11 +412,24 @@ export default function AdminUsers() {
                     <td className="px-4 py-3 text-xs text-muted-foreground">
                       {format(new Date(u.created_at), "dd/MM/yyyy", { locale: ptBR })}
                     </td>
-                    {/* Edit */}
+                    {/* Actions */}
                     <td className="px-4 py-3 text-right">
-                      <Button variant="ghost" size="sm" onClick={() => openEdit(u)} className="h-8 px-2">
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => openEdit(u)} className="h-8 px-2">
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        {u.role !== "admin" && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setConfirmDeleteUser(u)}
+                            className="h-8 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            disabled={deletingId === u.id}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -543,6 +589,36 @@ export default function AdminUsers() {
             <Button variant="outline" onClick={() => setEditUser(null)}>Cancelar</Button>
             <Button onClick={saveEdit} disabled={saving}>
               {saving ? "Salvando..." : "Salvar alterações"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Delete Dialog */}
+      <Dialog open={!!confirmDeleteUser} onOpenChange={open => !open && setConfirmDeleteUser(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="h-4 w-4" /> Excluir usuário
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            <p className="text-sm text-foreground">
+              Tem certeza que deseja excluir permanentemente{" "}
+              <span className="font-semibold">{confirmDeleteUser?.display_name || "este usuário"}</span>?
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Todos os dados do usuário serão removidos. Essa ação não pode ser desfeita.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDeleteUser(null)}>Cancelar</Button>
+            <Button
+              variant="destructive"
+              onClick={() => confirmDeleteUser && deleteUser(confirmDeleteUser)}
+              disabled={!!deletingId}
+            >
+              {deletingId ? "Excluindo..." : "Excluir permanentemente"}
             </Button>
           </DialogFooter>
         </DialogContent>
