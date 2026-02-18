@@ -580,6 +580,72 @@ Categorias: ${(categories || []).map((c: any) => `${c.name} (id:${c.id})`).join(
       aiResponse = await processWithNoxIA(messageText, financialContext);
     }
 
+    // Check if user is confirming/cancelling a pending transaction
+    if (hasText) {
+      const confirmMatch = messageText.match(/^(sim|s|confirmar|ok|yes|confirm)$/i);
+      const cancelMatch = messageText.match(/^(não|nao|n|cancelar|cancel|no)$/i);
+
+      if (confirmMatch || cancelMatch) {
+        const { data: pending } = await supabaseAdmin
+          .from("whatsapp_pending_transactions")
+          .select("*")
+          .eq("phone_number", cleanPhone)
+          .gt("expires_at", new Date().toISOString())
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (pending) {
+          // Delete pending regardless of confirm/cancel
+          await supabaseAdmin.from("whatsapp_pending_transactions").delete().eq("id", pending.id);
+
+          if (cancelMatch) {
+            await sendWhatsAppMessage(cleanPhone, "❌ Transação cancelada!");
+            return new Response(JSON.stringify({ ok: true }), {
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+
+          // Confirmed — insert transaction
+          const defaultWallet = (wallets || [])[0];
+          const { error: txError } = await supabaseAdmin.from("transactions").insert({
+            user_id: userId,
+            amount: pending.amount,
+            description: pending.description,
+            type: pending.type,
+            category_id: pending.category_id || null,
+            wallet_id: defaultWallet?.id || null,
+            date: new Date().toISOString().split("T")[0],
+          });
+
+          if (txError) {
+            await sendWhatsAppMessage(cleanPhone, `❌ Erro ao registrar: ${txError.message}`);
+          } else {
+            if (defaultWallet) {
+              const balanceChange = pending.type === "income" ? Number(pending.amount) : -Number(pending.amount);
+              await supabaseAdmin.from("wallets").update({
+                balance: Number(defaultWallet.balance) + balanceChange,
+              }).eq("id", defaultWallet.id);
+            }
+            const emoji = pending.type === "income" ? "💰" : "💸";
+            const paymentInfo = pending.payment_method ? `\n💳 ${pending.payment_method}` : "";
+            const newBalance = totalBalance + (pending.type === "income" ? Number(pending.amount) : -Number(pending.amount));
+            await sendWhatsAppMessage(cleanPhone,
+              `${emoji} Transação registrada!\n\n` +
+              `📝 ${pending.description}\n` +
+              `💵 R$ ${Number(pending.amount).toFixed(2)}\n` +
+              `📂 ${pending.category_name || "Sem categoria"}${paymentInfo}\n` +
+              `📅 ${new Date().toLocaleDateString("pt-BR")}\n\n` +
+              `💰 Novo saldo: R$ ${newBalance.toFixed(2)}`
+            );
+          }
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
+    }
+
     // Check if AI returned a transaction action
     let replyText = aiResponse;
     try {
@@ -591,38 +657,28 @@ Categorias: ${(categories || []).map((c: any) => `${c.name} (id:${c.id})`).join(
           (c: any) => c.name.toLowerCase() === action.category?.toLowerCase()
         );
 
-        const defaultWallet = (wallets || [])[0];
-
-        const { error: txError } = await supabaseAdmin.from("transactions").insert({
+        // Save as pending and ask for confirmation instead of auto-registering
+        await supabaseAdmin.from("whatsapp_pending_transactions").insert({
           user_id: userId,
+          phone_number: cleanPhone,
           amount: action.amount,
           description: action.description,
           type: action.type || "expense",
           category_id: matchedCategory?.id || null,
-          wallet_id: defaultWallet?.id || null,
-          date: new Date().toISOString().split("T")[0],
+          category_name: matchedCategory?.name || action.category || null,
+          payment_method: action.payment_method || null,
         });
 
-        if (txError) {
-          console.error("Transaction insert error:", txError);
-          replyText = `❌ Não consegui registrar a transação: ${txError.message}`;
-        } else {
-          if (defaultWallet) {
-            const balanceChange = action.type === "income" ? action.amount : -action.amount;
-            await supabaseAdmin.from("wallets").update({
-              balance: Number(defaultWallet.balance) + balanceChange,
-            }).eq("id", defaultWallet.id);
-          }
-
-          const emoji = action.type === "income" ? "💰" : "💸";
-          const paymentInfo = action.payment_method ? `\n💳 ${action.payment_method}` : "";
-          replyText = `${emoji} Transação registrada!\n\n` +
-            `📝 ${action.description}\n` +
-            `💵 R$ ${Number(action.amount).toFixed(2)}\n` +
-            `📂 ${matchedCategory?.name || "Sem categoria"}${paymentInfo}\n` +
-            `📅 ${new Date().toLocaleDateString("pt-BR")}\n\n` +
-            `💰 Saldo atualizado: R$ ${(totalBalance + (action.type === "income" ? action.amount : -action.amount)).toFixed(2)}`;
-        }
+        const emoji = action.type === "income" ? "💰" : "💸";
+        const paymentInfo = action.payment_method ? `\n💳 ${action.payment_method}` : "";
+        replyText =
+          `${emoji} *Confirmar transação?*\n\n` +
+          `📝 ${action.description}\n` +
+          `💵 R$ ${Number(action.amount).toFixed(2)}\n` +
+          `📂 ${matchedCategory?.name || action.category || "Sem categoria"}${paymentInfo}\n\n` +
+          `✅ Responda *SIM* para confirmar\n` +
+          `❌ Responda *NÃO* para cancelar\n` +
+          `✏️ Ou corrija os dados e envie novamente`;
       }
     } catch (parseErr) {
       console.log("Response is text, not action");
