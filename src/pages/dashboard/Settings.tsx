@@ -328,7 +328,7 @@ export default function Settings() {
               </div>
               <div>
                 <p className="text-sm font-medium text-foreground">Mensagem Noturna</p>
-                <p className="text-xs text-muted-foreground">Receba um resumo do dia à meia-noite</p>
+                <p className="text-xs text-muted-foreground">Receba um resumo do dia às 22:00</p>
               </div>
             </div>
             <Switch
