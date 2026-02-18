@@ -114,11 +114,30 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    console.log("Webhook received:", JSON.stringify(body).slice(0, 500));
+    
+    // Log key fields for debugging
+    console.log("Webhook keys:", JSON.stringify({
+      EventType: body.EventType,
+      chatId: body.chat?.id,
+      chatNumber: body.chat?.number,
+      chatPhone: body.chat?.phone,
+      msgFrom: body.message?.from,
+      msgSender: body.message?.sender,
+      msgNumber: body.message?.number,
+      msgPhone: body.message?.phone,
+      msgBody: body.message?.body,
+      msgText: body.message?.text,
+      msgFromMe: body.message?.fromMe,
+      from: body.from,
+      number: body.number,
+    }));
 
     // UAZAPI webhook payload - extract message info
-    const message = body.message || body;
-    const phone = message.from || message.phone || message.sender || body.from;
+    const message = body.message || {};
+    const chat = body.chat || {};
+    
+    // Try multiple fields to find the real phone number
+    const phone = chat.number || chat.phone || message.number || message.phone || message.from || message.sender || body.number || body.from;
     const text = message.body || message.text || message.message || body.body || body.text;
     const isFromMe = message.fromMe || body.fromMe || false;
 
@@ -130,13 +149,13 @@ serve(async (req) => {
     }
 
     if (!phone || !text) {
-      console.log("Missing phone or text, skipping");
+      console.log("Missing phone or text, skipping. phone:", phone, "text:", text);
       return new Response(JSON.stringify({ ok: true, skipped: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Clean phone number (remove @s.whatsapp.net etc)
+    // Clean phone number (remove @s.whatsapp.net, @lid etc)
     const cleanPhone = phone.replace(/@.*$/, "").replace(/\D/g, "");
     const messageText = text.trim();
 
