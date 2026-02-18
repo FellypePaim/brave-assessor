@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import {
   Search, Users, Pencil, Shield, Zap, Star, UserCircle2,
-  Phone, Calendar, Crown, RefreshCw, ShieldCheck, ShieldOff,
+  Phone, Calendar, Crown, RefreshCw, ShieldCheck, ShieldOff, Eye, EyeOff, Mail, Lock,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -18,6 +18,7 @@ import { ptBR } from "date-fns/locale";
 interface UserRow {
   id: string;
   display_name: string | null;
+  email: string | null;
   monthly_income: number | null;
   subscription_plan: string;
   subscription_expires_at: string | null;
@@ -54,6 +55,9 @@ export default function AdminUsers() {
   const [editExpiry, setEditExpiry] = useState("");
   const [editRole, setEditRole] = useState("");
   const [editIncome, setEditIncome] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editPassword, setEditPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const fetchUsers = useCallback(async () => {
@@ -89,6 +93,7 @@ export default function AdminUsers() {
     const rows: UserRow[] = profiles.map(p => ({
       id: p.id,
       display_name: p.display_name,
+      email: null, // loaded on demand via edge function
       monthly_income: p.monthly_income,
       subscription_plan: p.subscription_plan || "free",
       subscription_expires_at: expiryMap.get(p.id) ?? null,
@@ -120,20 +125,45 @@ export default function AdminUsers() {
     setFiltered(list);
   }, [search, filterPlan, filterRole, users]);
 
-  const openEdit = (u: UserRow) => {
+  const openEdit = async (u: UserRow) => {
     setEditUser(u);
     setEditName(u.display_name || "");
     setEditPlan(u.subscription_plan);
     setEditExpiry(u.subscription_expires_at ? u.subscription_expires_at.slice(0, 10) : "");
     setEditRole(u.role);
     setEditIncome(u.monthly_income?.toString() || "");
+    setEditPassword("");
+    setShowPassword(false);
+
+    // Fetch email via edge function (admin API)
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+      try {
+        const res = await fetch(
+          `https://${projectId}.supabase.co/functions/v1/admin-update-user`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({ userId: u.id, fetchOnly: true }),
+          }
+        );
+        const json = await res.json();
+        setEditEmail(json.user?.email || "");
+      } catch {
+        setEditEmail("");
+      }
+    }
   };
 
   const saveEdit = async () => {
     if (!editUser) return;
     setSaving(true);
 
-    // For "teste" plan, always set expiry to 10 minutes from now (regardless of editExpiry)
+    // For "teste" plan, always set expiry to 10 minutes from now
     let expiresAt: string | null = editExpiry ? new Date(editExpiry).toISOString() : null;
     if (editPlan === "teste") {
       expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
@@ -162,10 +192,41 @@ export default function AdminUsers() {
       return;
     }
 
-    // Update role: delete old, insert new
+    // Update role
     if (editRole !== editUser.role) {
       await supabase.from("user_roles").delete().eq("user_id", editUser.id);
       await supabase.from("user_roles").insert({ user_id: editUser.id, role: editRole as any });
+    }
+
+    // Update email / password via edge function if changed
+    const hasEmail = editEmail.trim() && editEmail !== editUser.email;
+    const hasPassword = editPassword.trim().length >= 6;
+    if (hasEmail || hasPassword) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+        const body: Record<string, string> = { userId: editUser.id };
+        if (hasEmail) body.email = editEmail.trim();
+        if (hasPassword) body.password = editPassword;
+
+        const res = await fetch(
+          `https://${projectId}.supabase.co/functions/v1/admin-update-user`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify(body),
+          }
+        );
+        const json = await res.json();
+        if (json.error) {
+          toast({ title: "Erro ao atualizar auth", description: json.error, variant: "destructive" });
+          setSaving(false);
+          return;
+        }
+      }
     }
 
     const planLabel = editPlan === "teste" ? "Plano Teste (10 min)" : editPlan;
@@ -417,6 +478,51 @@ export default function AdminUsers() {
                     className="mt-1"
                   />
                   <p className="text-[10px] text-muted-foreground mt-1">Deixe vazio para plano sem expiração.</p>
+                </div>
+
+                {/* Email & Password — auth fields */}
+                <div className="rounded-xl border border-border bg-muted/20 p-3 space-y-3">
+                  <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                    <Lock className="h-3.5 w-3.5" /> Credenciais de acesso
+                  </p>
+                  <div>
+                    <Label className="text-xs">E-mail</Label>
+                    <div className="relative mt-1">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                      <Input
+                        type="email"
+                        value={editEmail}
+                        onChange={e => setEditEmail(e.target.value)}
+                        className="pl-9"
+                        placeholder="email@exemplo.com"
+                        maxLength={255}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Nova senha <span className="text-muted-foreground font-normal">(deixe vazio para não alterar)</span></Label>
+                    <div className="relative mt-1">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                      <Input
+                        type={showPassword ? "text" : "password"}
+                        value={editPassword}
+                        onChange={e => setEditPassword(e.target.value)}
+                        className="pl-9 pr-9"
+                        placeholder="Mínimo 6 caracteres"
+                        maxLength={128}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(v => !v)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      >
+                        {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                      </button>
+                    </div>
+                    {editPassword && editPassword.length < 6 && (
+                      <p className="text-[10px] text-destructive mt-1">Mínimo de 6 caracteres</p>
+                    )}
+                  </div>
                 </div>
 
                 {/* WhatsApp info (read-only) */}

@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.check-expired-plans]
 verify_jwt = false
+
+[functions.admin-update-user]
+verify_jwt = false
