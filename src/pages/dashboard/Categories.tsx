@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Lock, Pencil, UtensilsCrossed, ShoppingCart, GraduationCap, Gamepad2, Home, Package, DollarSign, Heart, Car, BookOpen, Shirt, MoreHorizontal } from "lucide-react";
+import { Plus, Target, Pencil, UtensilsCrossed, ShoppingCart, GraduationCap, Gamepad2, Home, Package, DollarSign, Heart, Car, BookOpen, Shirt, MoreHorizontal } from "lucide-react";
 import { EditCategoryDialog } from "@/components/EditCategoryDialog";
 
 const iconMap: Record<string, React.ElementType> = {
@@ -69,16 +69,22 @@ export default function Categories() {
               <div className={`h-12 w-12 rounded-2xl ${style.bg} flex items-center justify-center shrink-0 shadow-sm group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300`}>
                 <IconComp className={`h-6 w-6 ${style.text} drop-shadow-sm`} />
               </div>
-              <div className="min-w-0">
-                <p className="font-semibold text-foreground text-sm">{cat.name}</p>
-                <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-foreground text-sm">{cat.name}</p>
                   {cat.budget_limit ? (
-                    <span>Limite: R$ {Number(cat.budget_limit).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+                      <span>Limite: R$ {Number(cat.budget_limit).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                    </div>
                   ) : (
-                    <><Lock className="h-3 w-3" /><span>Padrão</span></>
+                    <button
+                      className="mt-1.5 flex items-center gap-1 text-[11px] font-medium text-primary/80 hover:text-primary border border-dashed border-primary/30 hover:border-primary/60 rounded-lg px-2 py-0.5 transition-all hover:bg-primary/5"
+                      onClick={(e) => { e.stopPropagation(); setEditCategory(cat); }}
+                    >
+                      <Target className="h-3 w-3" />
+                      Definir orçamento
+                    </button>
                   )}
                 </div>
-              </div>
               <div className={`absolute top-4 right-4 h-3.5 w-3.5 rounded-full ${style.dot} shadow-md group-hover:scale-125 transition-transform duration-300`} />
             </Card>
           );
