@@ -28,6 +28,7 @@ import AdminUsers from "./pages/dashboard/AdminUsers";
 import Settings from "./pages/dashboard/Settings";
 import NyloChat from "./pages/dashboard/NyloChat";
 import NotFound from "./pages/NotFound";
+import Install from "./pages/Install";
 
 const queryClient = new QueryClient();
 
@@ -40,6 +41,7 @@ const App = () => (
         <AuthProvider>
           <Routes>
             <Route path="/" element={<Index />} />
+            <Route path="/install" element={<Install />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
 
