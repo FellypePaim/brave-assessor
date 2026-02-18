@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Wallet, Tag, CreditCard, CalendarCheck,
   Target, TrendingUp, Brain, FileText, HeadphonesIcon,
-  Settings, LogOut, Sparkles, User, ShieldCheck
+  Settings, LogOut, Sparkles, ShieldCheck, Users
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
@@ -28,6 +28,7 @@ const menuItems = [
   { title: "Compromissos", url: "/dashboard/transactions", icon: CalendarCheck },
   { title: "Metas", url: "/dashboard/goals", icon: Target },
   { title: "Investimentos", url: "/dashboard/investments", icon: TrendingUp },
+  { title: "Família", url: "/dashboard/family", icon: Users },
   { title: "Comportamento", url: "/dashboard/behavior", icon: Brain },
   { title: "Relatórios", url: "/dashboard/reports", icon: FileText },
   { title: "Suporte", url: "/dashboard/chat", icon: HeadphonesIcon },
