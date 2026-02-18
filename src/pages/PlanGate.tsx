@@ -27,7 +27,7 @@ const PLANS = [
   },
   {
     key: "mensal",
-    name: "Nox Mensal",
+    name: "Brave Mensal",
     price: "R$ 19,90",
     period: "/mês",
     description: "Ideal para começar",
@@ -45,7 +45,7 @@ const PLANS = [
   },
   {
     key: "anual",
-    name: "Nox Anual",
+    name: "Brave Anual",
     price: "R$ 14,90",
     period: "/mês · 12x",
     description: "Melhor custo-benefício",
@@ -122,7 +122,7 @@ export default function PlanGate() {
       <header className="border-b border-border px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Crown className="h-6 w-6 text-primary" />
-          <span className="font-bold text-lg text-foreground">Nox Assessor</span>
+          <span className="font-bold text-lg text-foreground">Brave Assessor</span>
         </div>
         <Button variant="ghost" size="sm" onClick={handleLogout} className="text-muted-foreground">
           <LogOut className="h-4 w-4 mr-2" />
@@ -147,8 +147,8 @@ export default function PlanGate() {
             </h1>
             <p className="text-muted-foreground max-w-md mx-auto text-sm">
               {isExpired
-                ? `Olá${planInfo?.name ? `, ${planInfo.name}` : ""}! Seu plano chegou ao fim. Renove para continuar acessando o Nox Assessor.`
-                : `Olá${planInfo?.name ? `, ${planInfo.name}` : ""}! Assine agora e tenha acesso completo ao Nox Assessor. Pagamento 100% seguro via Stripe.`}
+                ? `Olá${planInfo?.name ? `, ${planInfo.name}` : ""}! Seu plano chegou ao fim. Renove para continuar acessando o Brave Assessor.`
+                : `Olá${planInfo?.name ? `, ${planInfo.name}` : ""}! Assine agora e tenha acesso completo ao Brave Assessor. Pagamento 100% seguro via Stripe.`}
             </p>
           </div>
 
@@ -185,7 +185,7 @@ export default function PlanGate() {
                   </div>
                   {p.key === "teste" ? (
                     <a
-                      href={`https://wa.me/5537998195029?text=${encodeURIComponent("Olá! Gostaria de solicitar o Plano Teste do Nox Assessor.")}`}
+                      href={`https://wa.me/5537998195029?text=${encodeURIComponent("Olá! Gostaria de solicitar o Plano Teste do Brave Assessor.")}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center justify-center gap-2 w-full py-2 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold transition-colors"

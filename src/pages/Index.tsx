@@ -15,7 +15,7 @@ import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger,
 } from "@/components/ui/accordion";
 
-const WHATSAPP_LINK = "https://wa.me/5511999999999?text=Quero%20começar%20a%20usar%20o%20Nox%20Assessor";
+const WHATSAPP_LINK = "https://wa.me/5511999999999?text=Quero%20começar%20a%20usar%20o%20Brave%20Assessor";
 
 const easeOut = [0.22, 1, 0.36, 1] as const;
 
@@ -79,7 +79,7 @@ function Header({ onOpenAuth }: { onOpenAuth: () => void }) {
       <div className="container mx-auto flex items-center justify-between h-16 px-4">
         <a href="#" className="flex items-center gap-2 font-bold text-xl text-foreground">
           <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground text-sm font-extrabold">N</div>
-          Nox Assessor
+          Brave Assessor
         </a>
         <nav className="hidden md:flex items-center gap-6">
           {links.map((l) => (
@@ -195,7 +195,7 @@ function Hero({ onOpenAuth }: { onOpenAuth: () => void }) {
           <div className="rounded-3xl overflow-hidden shadow-2xl shadow-primary/10">
             <img
               src={heroImage}
-              alt="Mulher usando o Nox Assessor no celular"
+              alt="Mulher usando o Brave Assessor no celular"
               className="w-full h-auto object-cover"
               loading="eager"
             />
@@ -214,10 +214,10 @@ function WhatIs() {
     <section id="o-que-e" className="py-16 md:py-24 bg-secondary/30">
       <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={stagger} className="container mx-auto px-4 max-w-3xl text-center">
         <motion.h2 variants={fadeUp} className="text-3xl md:text-4xl font-bold text-foreground">
-          O que é o Nox Assessor?
+          O que é o Brave Assessor?
         </motion.h2>
         <motion.p variants={fadeUp} className="mt-6 text-muted-foreground text-lg leading-relaxed">
-          O Nox combina a praticidade do WhatsApp com inteligência artificial para transformar a maneira como você cuida do seu dinheiro. Sem planilhas complicadas, sem apps que você esquece de abrir.
+          O Brave combina a praticidade do WhatsApp com inteligência artificial para transformar a maneira como você cuida do seu dinheiro. Sem planilhas complicadas, sem apps que você esquece de abrir.
         </motion.p>
         <motion.p variants={fadeUp} className="mt-4 text-muted-foreground text-lg leading-relaxed">
           É como conversar com um amigo que entende de finanças: você manda uma mensagem e ele organiza tudo pra você, sem julgamento e com dicas práticas.
@@ -232,7 +232,7 @@ const steps = [
   {
     icon: MessageSquare,
     title: "Mande um zap",
-    desc: 'Digite "gastei 45 no mercado", mande um áudio ou foto do recibo. O Nox entende tudo.',
+    desc: 'Digite "gastei 45 no mercado", mande um áudio ou foto do recibo. O Brave entende tudo.',
     chip: { text: '"Gastei 89 de uber hoje"', variant: "pink" as const },
   },
   {
@@ -250,7 +250,7 @@ const steps = [
   {
     icon: Bell,
     title: "Receba alertas inteligentes",
-    desc: "O Nox avisa quando você está gastando demais ou quando uma conta vai vencer.",
+    desc: "O Brave avisa quando você está gastando demais ou quando uma conta vai vencer.",
     chip: { text: "⚠ Você já gastou 80% do limite", variant: "warning" as const },
   },
 ];

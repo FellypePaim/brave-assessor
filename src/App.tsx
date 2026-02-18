@@ -86,7 +86,7 @@ const App = () => (
               <Route path="behavior" element={<Behavior />} />
               <Route path="admin/support" element={<AdminSupport />} />
               <Route path="admin/users" element={<AdminUsers />} />
-              <Route path="nylo-ia" element={<NyloChat />} />
+              <Route path="brave-ia" element={<NyloChat />} />
             </Route>
 
             <Route path="*" element={<NotFound />} />

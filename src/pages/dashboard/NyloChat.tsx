@@ -13,7 +13,7 @@ const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/nylo-chat`;
 
 const WELCOME_MSG: Msg = {
   role: "assistant",
-  content: `Olá! 👋 Sou o **Nox IA**, seu assessor financeiro pessoal!
+  content: `Olá! 👋 Sou o **Brave IA**, seu assessor financeiro pessoal!
 
 Estou aqui para te ajudar com qualquer dúvida sobre suas finanças:
 
@@ -177,7 +177,7 @@ export default function NyloChat() {
       }
     } catch (e) {
       console.error(e);
-      toast({ title: "Erro", description: "Não foi possível conectar ao Nox IA", variant: "destructive" });
+      toast({ title: "Erro", description: "Não foi possível conectar ao Brave IA", variant: "destructive" });
     }
 
     setIsLoading(false);
@@ -196,7 +196,7 @@ export default function NyloChat() {
           <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-accent border-2 border-background" />
         </div>
         <div>
-          <h1 className="text-lg font-semibold text-foreground tracking-tight">Nox IA</h1>
+          <h1 className="text-lg font-semibold text-foreground tracking-tight">Brave IA</h1>
           <p className="text-xs text-muted-foreground">Seu assessor financeiro pessoal</p>
         </div>
       </div>
