@@ -31,20 +31,71 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const now = new Date().toISOString();
+    const now = new Date();
+    const nowIso = now.toISOString();
 
-    // Find all users with expired paid plans
+    // Window for "expiring soon" = now + 3 days (±1h to avoid duplicate sends)
+    const in3Days = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+    const in3DaysStart = new Date(in3Days.getTime() - 30 * 60 * 1000).toISOString(); // -30min
+    const in3DaysEnd   = new Date(in3Days.getTime() + 30 * 60 * 1000).toISOString(); // +30min
+
+    // ── 1. Find plans expiring in ~3 days and send reminder ──
+    const { data: expiringProfiles } = await supabaseAdmin
+      .from("profiles")
+      .select("id, display_name, subscription_plan, subscription_expires_at")
+      .in("subscription_plan", ["mensal", "anual", "trimestral"])
+      .gte("subscription_expires_at", in3DaysStart)
+      .lte("subscription_expires_at", in3DaysEnd)
+      .not("subscription_expires_at", "is", null);
+
+    let reminders = 0;
+    for (const profile of expiringProfiles ?? []) {
+      const { data: waLink } = await supabaseAdmin
+        .from("whatsapp_links")
+        .select("phone_number")
+        .eq("user_id", profile.id)
+        .eq("verified", true)
+        .maybeSingle();
+
+      if (!waLink?.phone_number) continue;
+
+      const name = profile.display_name || "Usuário";
+      const expiryDate = new Date(profile.subscription_expires_at!).toLocaleDateString("pt-BR");
+      const planNames: Record<string, string> = {
+        mensal: "Nox Mensal",
+        anual: "Nox Anual",
+        trimestral: "Nox Trimestral",
+      };
+
+      const message =
+        `⏰ *Lembrete: seu plano expira em 3 dias, ${name}!*\n\n` +
+        `📋 Plano: *${planNames[profile.subscription_plan] || profile.subscription_plan}*\n` +
+        `📅 Expira em: *${expiryDate}*\n\n` +
+        `Para não perder acesso aos seus recursos:\n` +
+        `• Modo Família\n` +
+        `• Análise comportamental\n` +
+        `• WhatsApp conectado\n\n` +
+        `💳 *Renove agora:*\n` +
+        `Abra o app Nox → Configurações → Planos e Assinatura\n\n` +
+        `_Nox IA - Seu assessor financeiro 🤖_`;
+
+      await sendWhatsAppMessage(waLink.phone_number, message);
+      reminders++;
+      console.log(`Sent 3-day expiry reminder to ${waLink.phone_number} (user: ${profile.id})`);
+    }
+
+    // ── 2. Find all users with already-expired paid plans ──
     const { data: expiredProfiles, error: fetchErr } = await supabaseAdmin
       .from("profiles")
       .select("id, display_name, subscription_plan, subscription_expires_at")
       .in("subscription_plan", ["mensal", "anual", "trimestral"])
-      .lt("subscription_expires_at", now)
+      .lt("subscription_expires_at", nowIso)
       .not("subscription_expires_at", "is", null);
 
     if (fetchErr) throw fetchErr;
     if (!expiredProfiles || expiredProfiles.length === 0) {
       console.log("No expired plans found.");
-      return new Response(JSON.stringify({ ok: true, processed: 0 }), {
+      return new Response(JSON.stringify({ ok: true, processed: 0, reminders }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -120,7 +171,7 @@ serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ ok: true, processed }), {
+    return new Response(JSON.stringify({ ok: true, processed, reminders }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error: any) {
