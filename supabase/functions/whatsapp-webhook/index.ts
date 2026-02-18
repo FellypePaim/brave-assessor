@@ -11,10 +11,10 @@ async function sendWhatsAppMessage(phone: string, message: string) {
   const UAZAPI_TOKEN = Deno.env.get("UAZAPI_TOKEN");
   if (!UAZAPI_URL || !UAZAPI_TOKEN) throw new Error("UAZAPI credentials not configured");
 
-  const resp = await fetch(`${UAZAPI_URL}/chat/send/text`, {
+  const resp = await fetch(`${UAZAPI_URL}/send/text`, {
     method: "POST",
     headers: { "Content-Type": "application/json", token: UAZAPI_TOKEN },
-    body: JSON.stringify({ phone, message }),
+    body: JSON.stringify({ number: phone, text: message }),
   });
 
   if (!resp.ok) {
