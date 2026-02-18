@@ -37,6 +37,7 @@ const menuItems = [
 
 const adminItems = [
   { title: "Atendimentos", url: "/dashboard/admin/support", icon: HeadphonesIcon },
+  { title: "Usuários",     url: "/dashboard/admin/users",   icon: Users },
 ];
 
 export function AppSidebar() {
