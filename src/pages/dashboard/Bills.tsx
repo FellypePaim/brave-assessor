@@ -208,7 +208,7 @@ export default function Bills() {
         <AddTransactionDialog
           trigger={
             <Button className="rounded-full gap-2 bg-primary hover:bg-primary/90">
-              <Plus className="h-4 w-4" /> Nova Conta
+              <Plus className="h-4 w-4" /> Nova Transação
             </Button>
           }
         />

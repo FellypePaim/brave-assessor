@@ -34,7 +34,7 @@ serve(async (req) => {
         market.push({ label: "EURO", value: `R$ ${eurData.rates.BRL.toFixed(2)}`, change: null, positive: true });
       }
       if (gbpData.rates?.BRL) {
-        market.push({ label: "LIBRA", value: `R$ ${gbpData.rates.BRL.toFixed(2)}`, change: null, positive: true });
+        market.push({ label: "LIBRA (GBP)", value: `R$ ${gbpData.rates.BRL.toFixed(2)}`, change: null, positive: true });
       }
     } catch (e) {
       console.error("Exchange rate error:", e.message);

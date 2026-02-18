@@ -26,7 +26,7 @@ export default function Dashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const displayName = user?.user_metadata?.display_name || "Usuário";
+  const displayName = user?.user_metadata?.display_name || user?.email?.split("@")[0] || "Usuário";
   const [showWelcome, setShowWelcome] = useState(true);
   const [period, setPeriod] = useState<Period>("month");
   const [showTour, setShowTour] = useState(false);
