@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Target, Calculator, AlertCircle, Pencil } from "lucide-react";
+import { Plus, Target, Calculator, AlertCircle, Pencil, PlusCircle, Check, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { addMonths, format } from "date-fns";
 import { EditGoalDialog } from "@/components/EditGoalDialog";
@@ -19,6 +19,8 @@ export default function Goals() {
   const [months, setMonths] = useState(0);
   const [goalName, setGoalName] = useState("");
   const [editGoal, setEditGoal] = useState<any>(null);
+  const [depositGoalId, setDepositGoalId] = useState<string | null>(null);
+  const [depositAmount, setDepositAmount] = useState("");
 
   const { data: goals = [] } = useQuery({
     queryKey: ["goals", user?.id],
@@ -51,6 +53,25 @@ export default function Goals() {
       toast({ title: "Meta criada com sucesso!" });
       setGoalName("");
       setShowCalc(false);
+    },
+  });
+
+  const addDeposit = useMutation({
+    mutationFn: async ({ goalId, currentAmount, deposit }: { goalId: string; currentAmount: number; deposit: number }) => {
+      const { error } = await supabase
+        .from("financial_goals")
+        .update({ current_amount: currentAmount + deposit })
+        .eq("id", goalId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["goals"] });
+      toast({ title: "Aporte registrado! 🎯" });
+      setDepositGoalId(null);
+      setDepositAmount("");
+    },
+    onError: (e: any) => {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
     },
   });
 
@@ -151,63 +172,128 @@ export default function Goals() {
             <p className="text-sm mt-1">Crie sua primeira meta para começar</p>
           </div>
         ) : (
-                <div className="space-y-4">
+          <div className="space-y-4">
             {goals.map((goal) => {
               const pct = goal.target_amount > 0 ? Math.min((Number(goal.current_amount) / Number(goal.target_amount)) * 100, 100) : 0;
               const goalColor = (goal as any).color || undefined;
               const remaining = Number(goal.target_amount) - Number(goal.current_amount);
+              const isDepositing = depositGoalId === goal.id;
+
               return (
-                <Card key={goal.id} className="p-5 hover:shadow-md transition-shadow cursor-pointer group relative" onClick={() => setEditGoal(goal)}>
-                  <button className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-muted">
+                <Card key={goal.id} className="p-5 hover:shadow-md transition-shadow group relative">
+                  {/* Edit pencil */}
+                  <button
+                    className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-muted"
+                    onClick={() => setEditGoal(goal)}
+                  >
                     <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
                   </button>
 
-                  {/* Header */}
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      {goalColor && <div className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: goalColor }} />}
-                      <p className="font-semibold text-foreground">{goal.name}</p>
-                    </div>
-                    <span
-                      className="text-sm font-bold px-2 py-0.5 rounded-full"
-                      style={{
-                        backgroundColor: goalColor ? `${goalColor}20` : 'hsl(var(--primary) / 0.12)',
-                        color: goalColor || 'hsl(var(--primary))',
-                      }}
-                    >
-                      {pct.toFixed(0)}%
-                    </span>
-                  </div>
-
-                  {/* Progress bar */}
-                  <div className="w-full h-3 bg-muted rounded-full overflow-hidden mb-2">
-                    <div
-                      className="h-full rounded-full transition-all duration-700"
-                      style={{ width: `${pct}%`, backgroundColor: goalColor || 'hsl(var(--primary))' }}
-                    />
-                  </div>
-
-                  {/* Values row */}
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>
-                      <span className="font-semibold text-foreground">
-                        R$ {Number(goal.current_amount).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                  {/* Clickable area (not the deposit section) */}
+                  <div className="cursor-pointer" onClick={() => !isDepositing && setEditGoal(goal)}>
+                    {/* Header */}
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        {goalColor && <div className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: goalColor }} />}
+                        <p className="font-semibold text-foreground">{goal.name}</p>
+                      </div>
+                      <span
+                        className="text-sm font-bold px-2 py-0.5 rounded-full"
+                        style={{
+                          backgroundColor: goalColor ? `${goalColor}20` : 'hsl(var(--primary) / 0.12)',
+                          color: goalColor || 'hsl(var(--primary))',
+                        }}
+                      >
+                        {pct.toFixed(0)}%
                       </span>
-                      {" "}/ R$ {Number(goal.target_amount).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                    </span>
-                    {remaining > 0 && (
-                      <span>Faltam R$ {remaining.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                    )}
-                    {remaining <= 0 && (
-                      <span className="text-emerald-600 font-semibold">✓ Meta atingida!</span>
+                    </div>
+
+                    {/* Progress bar */}
+                    <div className="w-full h-3 bg-muted rounded-full overflow-hidden mb-2">
+                      <div
+                        className="h-full rounded-full transition-all duration-700"
+                        style={{ width: `${pct}%`, backgroundColor: goalColor || 'hsl(var(--primary))' }}
+                      />
+                    </div>
+
+                    {/* Values row */}
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>
+                        <span className="font-semibold text-foreground">
+                          R$ {Number(goal.current_amount).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                        </span>
+                        {" "}/ R$ {Number(goal.target_amount).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                      </span>
+                      {remaining > 0 && (
+                        <span>Faltam R$ {remaining.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                      )}
+                      {remaining <= 0 && (
+                        <span className="text-emerald-600 font-semibold">✓ Meta atingida!</span>
+                      )}
+                    </div>
+
+                    {/* Deadline */}
+                    {goal.deadline && (
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Prazo: {new Date(goal.deadline).toLocaleDateString("pt-BR")}
+                      </p>
                     )}
                   </div>
 
-                  {/* Deadline */}
-                  {goal.deadline && (
-                    <p className="text-xs text-muted-foreground mt-2">
-                      Prazo: {new Date(goal.deadline).toLocaleDateString("pt-BR")}
-                    </p>
+                  {/* Quick deposit section */}
+                  {isDepositing ? (
+                    <div className="mt-3 pt-3 border-t border-border flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                      <div className="relative flex-1">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground">R$</span>
+                        <Input
+                          type="number"
+                          value={depositAmount}
+                          onChange={(e) => setDepositAmount(e.target.value)}
+                          placeholder="0,00"
+                          className="h-9 rounded-xl pl-9 text-sm"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && parseFloat(depositAmount) > 0) {
+                              addDeposit.mutate({ goalId: goal.id, currentAmount: Number(goal.current_amount), deposit: parseFloat(depositAmount) });
+                            }
+                            if (e.key === "Escape") {
+                              setDepositGoalId(null);
+                              setDepositAmount("");
+                            }
+                          }}
+                        />
+                      </div>
+                      <Button
+                        size="icon"
+                        className="h-9 w-9 rounded-xl shrink-0"
+                        style={{ backgroundColor: goalColor || undefined }}
+                        disabled={!depositAmount || parseFloat(depositAmount) <= 0 || addDeposit.isPending}
+                        onClick={() => addDeposit.mutate({ goalId: goal.id, currentAmount: Number(goal.current_amount), deposit: parseFloat(depositAmount) })}
+                      >
+                        <Check className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-9 w-9 rounded-xl shrink-0"
+                        onClick={() => { setDepositGoalId(null); setDepositAmount(""); }}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="mt-3 pt-3 border-t border-border">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full h-8 rounded-xl text-xs font-semibold gap-1.5 hover:bg-primary/10"
+                        style={{ color: goalColor || undefined }}
+                        onClick={(e) => { e.stopPropagation(); setDepositGoalId(goal.id); setDepositAmount(""); }}
+                      >
+                        <PlusCircle className="h-3.5 w-3.5" />
+                        Registrar aporte
+                      </Button>
+                    </div>
                   )}
                 </Card>
               );
