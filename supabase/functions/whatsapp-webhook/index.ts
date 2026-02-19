@@ -381,14 +381,32 @@ async function processWithNoxIA(userMessage: string, financialContext: string) {
 
 💡 Capacidades:
 - Analisar gastos e finanças do usuário
-- Interpretar comandos como "Gastei X com Y" para registrar transações
+- Interpretar comandos de gasto/receita em linguagem natural para registrar transações
 - Dar dicas práticas de economia
 - Comparar períodos e identificar padrões
 
-📝 Quando o usuário disser algo como "Gastei 50 com almoço" ou "Paguei 200 de luz", responda SOMENTE com JSON (sem texto extra):
-{"action":"add_transaction","amount":50,"description":"Almoço","category":"Alimentação","type":"expense"}
+🧠 INTERPRETAÇÃO DE GASTOS (MUITO IMPORTANTE):
+Detecte QUALQUER mensagem que indique um gasto ou receita, mesmo escrito de forma informal/coloquial.
+Exemplos que DEVEM virar JSON:
+- "gastei uns 50 no mercado hoje" → R$ 50, Supermercado, Alimentação, expense
+- "almocei por 30 conto" → R$ 30, Almoço, Alimentação, expense
+- "paguei 200 de luz" → R$ 200, Energia Elétrica, Contas, expense
+- "fui ao posto, 80 de gasolina" → R$ 80, Gasolina, Transporte, expense
+- "recebi 1500 do freela" → R$ 1500, Freela, Renda Extra, income
+- "uber 15 reais" → R$ 15, Uber, Transporte, expense
+- "pizza hoje 45" → R$ 45, Pizza, Alimentação, expense
+- "farmácia uns 30" → R$ 30, Farmácia, Saúde, expense
 
-Para perguntas normais, responda em texto formatado com emojis e parágrafos.
+Quando identificar uma transação (mesmo informal), responda SOMENTE com JSON válido:
+{"action":"add_transaction","amount":50.00,"description":"Descrição limpa e clara","category":"Categoria adequada","type":"expense"}
+
+Regras para o JSON:
+- "description": nome limpo e comercial (ex: "Almoço", "Supermercado", "Gasolina")
+- "category": use as categorias disponíveis do usuário quando possível
+- "amount": sempre número, extraia mesmo valores aproximados ("uns 50" → 50)
+- "type": "expense" para gastos, "income" para receitas/entradas
+
+Para perguntas normais (não transações), responda em texto formatado com emojis e parágrafos.
 
 ${financialContext}`;
 
@@ -404,6 +422,7 @@ ${financialContext}`;
         { role: "system", content: systemPrompt },
         { role: "user", content: userMessage },
       ],
+      temperature: 0.3,
     }),
   });
 
@@ -959,18 +978,18 @@ Regras:
             return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
           }
 
-          // All data gathered – create the reminder
+          // All data gathered – store and show full confirmation before saving
           const reminderCtx = ctx;
-          await supabaseAdmin.from("reminders").insert({
-            user_id: ctx.user_id,
-            title: reminderCtx.title,
-            description: reminderCtx.description || null,
-            event_at: reminderCtx.event_at,
-            notify_minutes_before: notifyMins,
-            recurrence: reminderCtx.recurrence || "none",
-          });
 
-          await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
+          // Update session to reminder_confirm step with notifyMins included
+          await supabaseAdmin.from("whatsapp_sessions").update({
+            step: "reminder_confirm",
+            context: {
+              ...ctx,
+              notify_minutes_before: notifyMins,
+            },
+            expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+          }).eq("id", session.id);
 
           const fmtDate = (s: string) =>
             new Date(s).toLocaleString("pt-BR", {
@@ -983,12 +1002,17 @@ Regras:
           else if (notifyMins < 1440) notifyLabel = `${notifyMins / 60} hora(s)`;
           else notifyLabel = `${notifyMins / 1440} dia(s)`;
 
-          await sendWhatsAppMessage(cleanPhone,
-            `✅ *Lembrete criado com sucesso!*\n\n` +
-            `🔔 *${reminderCtx.title}*\n` +
-            `📅 ${fmtDate(reminderCtx.event_at)}\n` +
-            `⏰ Você será avisado *${notifyLabel} antes*\n\n` +
-            `_Brave IA - Seu assessor financeiro 🤖_`
+          const recLblForNotify = recurrenceLabel(reminderCtx.recurrence || "none", reminderCtx.event_at, reminderCtx.originalText || "");
+
+          await sendWhatsAppButtons(
+            cleanPhone,
+            `🔔 *Confirmar lembrete?*\n\n` +
+            `📝 *Nome:* ${reminderCtx.title}\n` +
+            `📅 *Horário:* ${fmtDate(reminderCtx.event_at)}\n` +
+            `⏰ *Aviso:* ${notifyLabel} antes\n` +
+            (recLblForNotify ? `${recLblForNotify}\n` : `🔂 *Recorrência:* Nenhuma\n`),
+            [{ id: "CONFIRM_REMINDER", text: "✅ Confirmar" }, { id: "cancelar", text: "❌ Cancelar" }],
+            "Toque para confirmar"
           );
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
@@ -1227,11 +1251,11 @@ Regras:
             const recLbl = recurrenceLabel(ctx.recurrence || "none", ctx.event_at, ctx.originalText || "");
 
             await sendWhatsAppMessage(cleanPhone,
-              `✅ *Lembrete criado!*\n\n` +
-              `🔔 *${ctx.title}*\n` +
-              `📅 ${fmtDate(ctx.event_at)}\n` +
-              `⏰ Aviso *${notifyLabel} antes*` +
-              (recLbl ? `\n${recLbl}` : "") +
+              `✅ *Lembrete salvo com sucesso!*\n\n` +
+              `📝 *Nome:* ${ctx.title}\n` +
+              `📅 *Horário:* ${fmtDate(ctx.event_at)}\n` +
+              `⏰ *Aviso:* ${notifyLabel} antes\n` +
+              (recLbl ? `${recLbl}` : `🔂 *Recorrência:* Nenhuma`) +
               `\n\n_Brave IA - Seu assessor financeiro 🤖_`
             );
             return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
