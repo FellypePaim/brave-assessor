@@ -18,10 +18,11 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
   AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Bell, Plus, Trash2, Clock, Calendar, CheckCircle2, BellOff, Repeat } from "lucide-react";
+import { Bell, Plus, Trash2, Clock, Calendar, CheckCircle2, BellOff, Repeat, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { format, isPast } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { EditReminderDialog } from "@/components/EditReminderDialog";
 
 interface Reminder {
   id: string;
@@ -73,6 +74,7 @@ export default function Reminders() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [editReminder, setEditReminder] = useState<Reminder | null>(null);
 
   const [form, setForm] = useState({
     title: "",
@@ -228,6 +230,7 @@ export default function Reminders() {
                   reminder={r}
                   onDelete={() => setDeleteId(r.id)}
                   onToggle={() => toggleMutation.mutate({ id: r.id, is_active: !r.is_active })}
+                  onEdit={() => setEditReminder(r)}
                 />
               ))}
             </div>
@@ -244,6 +247,7 @@ export default function Reminders() {
                   past
                   onDelete={() => setDeleteId(r.id)}
                   onToggle={() => toggleMutation.mutate({ id: r.id, is_active: !r.is_active })}
+                  onEdit={() => setEditReminder(r)}
                 />
               ))}
             </div>
@@ -373,17 +377,25 @@ export default function Reminders() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Edit dialog */}
+      <EditReminderDialog
+        reminder={editReminder}
+        open={!!editReminder}
+        onOpenChange={o => !o && setEditReminder(null)}
+      />
     </div>
   );
 }
 
 function ReminderCard({
-  reminder, past, onDelete, onToggle
+  reminder, past, onDelete, onToggle, onEdit
 }: {
   reminder: Reminder;
   past?: boolean;
   onDelete: () => void;
   onToggle: () => void;
+  onEdit: () => void;
 }) {
   const eventDate = new Date(reminder.event_at);
   const notifyLabel = formatNotify(reminder.notify_minutes_before);
@@ -434,6 +446,15 @@ function ReminderCard({
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground hover:text-primary"
+            onClick={onEdit}
+            title="Editar"
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
           <Button
             variant="ghost"
             size="icon"
