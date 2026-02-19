@@ -571,17 +571,26 @@ serve(async (req) => {
           .update({ phone_number: cleanPhone, verified: true })
           .eq("id", link.id);
 
+        // Fetch user's name for personalized welcome message
+        const { data: welcomeProfile } = await supabaseAdmin
+          .from("profiles")
+          .select("display_name")
+          .eq("id", link.user_id)
+          .maybeSingle();
+        const userName = welcomeProfile?.display_name || "usuário";
+
         await sendWhatsAppMessage(cleanPhone,
-          "✅ WhatsApp vinculado com sucesso!\n\n" +
-          "Agora você pode:\n" +
-          '• Registrar gastos: "Gastei 50 com almoço"\n' +
-          "• 📸 Enviar foto do comprovante\n" +
-          "• 🎙️ Enviar áudio com seus gastos\n" +
-          '• Ver saldo: "Qual meu saldo?"\n' +
-          '• Ver contas: "conferir"\n' +
-          '• 🔔 Criar lembrete: "lembrete: reunião amanhã 15h"\n' +
-          '• 📋 Ver seus lembretes: "meus lembretes"\n\n' +
-          "Experimente agora! 💰"
+          `🎉 *Olá, ${userName}! WhatsApp vinculado com sucesso!*\n\n` +
+          `Agora você pode gerenciar suas finanças direto aqui! Veja o que posso fazer por você:\n\n` +
+          `💸 *Registrar gastos (texto):*\n_"Gastei 50 no almoço"_\n_"Almocei por 30 conto"_\n_"Paguei 200 de luz"_\n\n` +
+          `📸 *Enviar foto de comprovante*\n_Basta fotografar o recibo ou nota fiscal_\n\n` +
+          `🎙️ *Enviar áudio*\n_"Gastei 80 de gasolina no posto"_\n\n` +
+          `🔔 *Criar lembretes:*\n_"lembrete: reunião amanhã 15h"_\n_"lembrete: academia toda segunda 7h"_\n\n` +
+          `📋 *Ver suas contas:* _"conferir"_\n` +
+          `📊 *Ver saldo:* _"Qual meu saldo?"_\n` +
+          `👑 *Ver seu plano:* _"meu plano"_\n` +
+          `❓ *Ajuda:* _"ajuda"_\n\n` +
+          `_Brave IA - Seu assessor financeiro 🤖_`
         );
 
         return new Response(JSON.stringify({ ok: true, linked: true }), {
@@ -1072,7 +1081,9 @@ Regras:
         if (session.step === "reminder_action") {
           const chosen: any = ctx.chosen_reminder;
 
-          if (/^(DELETE_REMINDER|cancelar.?lembrete|remover.?lembrete|deletar)/i.test(effectiveText)) {
+          // Match by buttonId OR button text (UAZAPI may send text instead of ID)
+          const isDeleteTrigger = /^(DELETE_REMINDER|cancelar.?lembrete|remover.?lembrete|deletar|🗑️|cancelar lembrete)/i.test(effectiveText);
+          if (isDeleteTrigger) {
             await sendWhatsAppButtons(
               cleanPhone,
               `⚠️ Tem certeza que quer cancelar o lembrete *${chosen.title}*?`,
@@ -1082,14 +1093,14 @@ Regras:
             return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
           }
 
-          if (/^CONFIRM_DELETE_REMINDER/i.test(effectiveText)) {
+          if (/^(CONFIRM_DELETE_REMINDER|✅ sim, cancelar|sim, cancelar)/i.test(effectiveText)) {
             await supabaseAdmin.from("reminders").delete().eq("id", chosen.id);
             await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
-            await sendWhatsAppMessage(cleanPhone, `🗑️ Lembrete *${chosen.title}* cancelado com sucesso!`);
+            await sendWhatsAppMessage(cleanPhone, `🗑️ Lembrete *${chosen.title}* cancelado com sucesso!\n\n_Brave IA - Seu assessor financeiro 🤖_`);
             return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
           }
 
-          if (/^(BACK_REMINDERS|voltar)/i.test(effectiveText)) {
+          if (/^(BACK_REMINDERS|⬅️ voltar|voltar)/i.test(effectiveText)) {
             // Rebuild the reminder list
             const reminders: any[] = ctx.reminders || [];
             const list = reminders.map((r: any, i: number) => {
@@ -1107,7 +1118,7 @@ Regras:
             return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
           }
 
-          if (/^(EDIT_REMINDER|editar)/i.test(effectiveText)) {
+          if (/^(EDIT_REMINDER|✏️ editar|editar)/i.test(effectiveText)) {
             await supabaseAdmin.from("whatsapp_sessions").update({
               step: "reminder_edit_field",
               context: { ...ctx, chosen_reminder: chosen },
@@ -1215,15 +1226,15 @@ Regras:
 
         // ── Step: confirming reminder details ──
         if (session.step === "reminder_confirm") {
-          const cancel = /^\s*(cancelar|cancel|não|nao|n)\s*$/i.test(effectiveText);
+          const cancel = /^\s*(cancelar|cancel|não|nao|n|❌ cancelar|❌)\s*$/i.test(effectiveText);
           if (cancel) {
             await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
             await sendWhatsAppMessage(cleanPhone, "❌ Lembrete cancelado.");
             return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
           }
 
-          // CONFIRM_REMINDER or "sim"
-          if (/^\s*(sim|s|ok|yes|confirmar|✅|CONFIRM_REMINDER)\s*$/i.test(effectiveText) || effectiveText === "CONFIRM_REMINDER") {
+          // CONFIRM_REMINDER or "sim" or button text "✅ Confirmar"
+          if (/^\s*(sim|s|ok|yes|confirmar|✅|✅ confirmar|CONFIRM_REMINDER)\s*$/i.test(effectiveText) || effectiveText === "CONFIRM_REMINDER") {
             // Create the reminder
             await supabaseAdmin.from("reminders").insert({
               user_id: ctx.user_id,
