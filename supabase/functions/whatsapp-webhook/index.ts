@@ -368,6 +368,8 @@ async function processWithNoxIA(userMessage: string, financialContext: string) {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
+  const todayDayOfMonth = new Date().getDate();
+
   const systemPrompt = `Você é o Brave IA 🤖, assessor financeiro pessoal via WhatsApp. Responda SEMPRE em português brasileiro.
 
 📋 REGRAS DE FORMATAÇÃO (MUITO IMPORTANTE):
@@ -385,8 +387,26 @@ async function processWithNoxIA(userMessage: string, financialContext: string) {
 - Dar dicas práticas de economia
 - Comparar períodos e identificar padrões
 
-🧠 INTERPRETAÇÃO DE GASTOS (MUITO IMPORTANTE):
-Detecte QUALQUER mensagem que indique um gasto ou receita, mesmo escrito de forma informal/coloquial.
+🧠 INTERPRETAÇÃO DE LISTAS DE RECORRÊNCIAS (PRIORIDADE MÁXIMA):
+Quando o usuário enviar uma LISTA com 2 ou mais itens que indiquem gastos/receitas recorrentes mensais, retorne SOMENTE JSON com action "add_recurring_list":
+
+Exemplos de listas:
+- "todo mês eu gasto: gmail R$20 / icloud R$20 / academia R$90"
+- "gastos mensais: netflix 45, spotify 19, academia 90"
+- "minhas contas mensais: luz 200 / internet 100 / condomínio 500"
+
+Para cada item extraia:
+- "description": nome limpo (ex: "Gmail", "Netflix", "Academia")
+- "amount": valor numérico
+- "category": categoria mais adequada
+- "type": "expense" ou "income"
+- "day_of_month": dia do mês (se mencionado como "todo dia 10" → 10, "dia 15" → 15). Se NÃO mencionado, use ${todayDayOfMonth} (dia atual)
+
+Retorne SOMENTE este JSON para listas (sem texto extra):
+{"action":"add_recurring_list","items":[{"description":"Gmail","amount":20.00,"category":"Outros","type":"expense","day_of_month":${todayDayOfMonth}},{"description":"Netflix","amount":45.00,"category":"Lazer","type":"expense","day_of_month":${todayDayOfMonth}}]}
+
+🧠 INTERPRETAÇÃO DE GASTOS ÚNICOS (IMPORTANTE):
+Detecte QUALQUER mensagem que indique UM gasto ou receita, mesmo escrito de forma informal/coloquial.
 Exemplos que DEVEM virar JSON:
 - "gastei uns 50 no mercado hoje" → R$ 50, Supermercado, Alimentação, expense
 - "almocei por 30 conto" → R$ 30, Almoço, Alimentação, expense
@@ -394,10 +414,8 @@ Exemplos que DEVEM virar JSON:
 - "fui ao posto, 80 de gasolina" → R$ 80, Gasolina, Transporte, expense
 - "recebi 1500 do freela" → R$ 1500, Freela, Renda Extra, income
 - "uber 15 reais" → R$ 15, Uber, Transporte, expense
-- "pizza hoje 45" → R$ 45, Pizza, Alimentação, expense
-- "farmácia uns 30" → R$ 30, Farmácia, Saúde, expense
 
-Quando identificar uma transação (mesmo informal), responda SOMENTE com JSON válido:
+Quando identificar UMA transação única (mesmo informal), responda SOMENTE com JSON válido:
 {"action":"add_transaction","amount":50.00,"description":"Descrição limpa e clara","category":"Categoria adequada","type":"expense"}
 
 Regras para o JSON:
@@ -841,6 +859,67 @@ Regras:
       if (session) {
         const ctx = session.context as any;
         const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+        // ── Step: confirm and save recurring list ──
+        if (session.step === "confirm_recurring_list") {
+          const items: any[] = ctx.items || [];
+          const isConfirm = /^(sim|s|confirmar|ok|yes|✅ cadastrar todas|cadastrar todas?)$/i.test(effectiveText);
+          const isCancel  = /^(não|nao|n|cancelar|cancel|❌ cancelar)$/i.test(effectiveText);
+
+          if (isCancel) {
+            await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
+            await sendWhatsAppMessage(cleanPhone, "❌ Cadastro de recorrências cancelado.");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          if (isConfirm) {
+            await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
+
+            // Insert all as recurring_transactions
+            const inserts = items.map((item: any) => ({
+              user_id: ctx.user_id,
+              description: item.description,
+              amount: Number(item.amount),
+              type: item.type || "expense",
+              category_id: item.category_id || null,
+              day_of_month: item.day_of_month || new Date().getDate(),
+              is_active: true,
+              expense_type: "fixed",
+            }));
+
+            const { error: recErr } = await supabaseAdmin.from("recurring_transactions").insert(inserts);
+
+            if (recErr) {
+              await sendWhatsAppMessage(cleanPhone, `❌ Erro ao cadastrar recorrências: ${recErr.message}`);
+            } else {
+              const total = items.reduce((s: number, i: any) => s + Number(i.amount), 0);
+              const list = items.map((i: any, idx: number) =>
+                `${idx + 1}. ✅ *${i.description}* — ${fmt(Number(i.amount))} · todo dia ${i.day_of_month || new Date().getDate()}`
+              ).join("\n");
+              await sendWhatsAppMessage(cleanPhone,
+                `🎉 *${items.length} recorrências cadastradas com sucesso!*\n\n` +
+                list +
+                `\n\n💸 *Total mensal: ${fmt(total)}*\n\n` +
+                `_Elas aparecerão automaticamente todo mês no seu painel Brave! 📊_`
+              );
+            }
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          // Unknown input: re-show confirmation
+          const totalAmount = items.reduce((s: number, i: any) => s + Number(i.amount), 0);
+          const lines = items.map((i: any, idx: number) => {
+            const dayStr = i.day_of_month ? ` · todo dia ${i.day_of_month}` : "";
+            return `${idx + 1}. *${i.description}* — ${fmt(Number(i.amount))}${dayStr}`;
+          });
+          await sendWhatsAppButtons(
+            cleanPhone,
+            `🔄 *Confirmar cadastro de ${items.length} recorrências?*\n\n` + lines.join("\n") + `\n\n💸 *Total: ${fmt(totalAmount)}*`,
+            [{ id: "sim", text: "✅ Cadastrar todas" }, { id: "nao", text: "❌ Cancelar" }],
+            "Confirme para criar as recorrências mensais"
+          );
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
 
         // ── Step: waiting for user to pick which bill to mark as paid ──
         if (session.step === "bill_selection") {
@@ -2028,6 +2107,58 @@ Categorias: ${(categories || []).map((c: any) => `${c.name} (id:${c.id})`).join(
     }
     let replyText = aiResponse;
     try {
+      // ── Detect recurring list action ──
+      const listMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"add_recurring_list"[\s\S]*\}/);
+      if (listMatch) {
+        const action = JSON.parse(listMatch[0]);
+        const items: any[] = action.items || [];
+
+        if (items.length === 0) throw new Error("Empty list");
+
+        const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+        // Match categories for each item
+        const enriched = items.map((item: any) => {
+          const matchedCat = (categories || []).find(
+            (c: any) => c.name.toLowerCase() === item.category?.toLowerCase()
+          );
+          return { ...item, category_id: matchedCat?.id || null, category_name: matchedCat?.name || item.category || "Outros" };
+        });
+
+        // Build summary text
+        const totalAmount = enriched.reduce((s: number, i: any) => s + Number(i.amount), 0);
+        const lines = enriched.map((i: any, idx: number) => {
+          const dayStr = i.day_of_month ? ` · todo dia ${i.day_of_month}` : "";
+          return `${idx + 1}. *${i.description}* — ${fmt(Number(i.amount))}${dayStr}`;
+        });
+
+        const summaryMsg =
+          `🔄 *Encontrei ${items.length} recorrências mensais:*\n\n` +
+          lines.join("\n") +
+          `\n\n💸 *Total mensal: ${fmt(totalAmount)}*\n\n` +
+          `_Cada item será cadastrado como conta recorrente mensal._`;
+
+        // Store list in session for confirmation
+        await supabaseAdmin.from("whatsapp_sessions").delete().eq("phone_number", cleanPhone);
+        await supabaseAdmin.from("whatsapp_sessions").insert({
+          phone_number: cleanPhone,
+          step: "confirm_recurring_list",
+          context: { user_id: userId, items: enriched },
+          expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+        });
+
+        await sendWhatsAppButtons(
+          cleanPhone,
+          summaryMsg,
+          [{ id: "sim", text: "✅ Cadastrar todas" }, { id: "nao", text: "❌ Cancelar" }],
+          "Confirme para criar as recorrências mensais"
+        );
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // ── Detect single transaction action ──
       const jsonMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"add_transaction"[\s\S]*\}/);
       if (jsonMatch) {
         const action = JSON.parse(jsonMatch[0]);
