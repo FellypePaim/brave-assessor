@@ -246,7 +246,7 @@ async function processImageWithAI(imageBase64: string, mimeType: string, financi
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-  const systemPrompt = `Você é o Nox IA 🤖, assessor financeiro pessoal via WhatsApp.
+  const systemPrompt = `Você é o Brave IA 🤖, assessor financeiro pessoal via WhatsApp.
 
 📋 REGRAS DE FORMATAÇÃO:
 - Use emojis relevantes em TODAS as respostas
@@ -308,7 +308,7 @@ async function processAudioWithAI(audioBase64: string, mimeType: string, financi
   if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
   // Gemini supports audio via inline data
-  const systemPrompt = `Você é o Nox IA 🤖, assessor financeiro pessoal via WhatsApp. Responda SEMPRE em português brasileiro.
+  const systemPrompt = `Você é o Brave IA 🤖, assessor financeiro pessoal via WhatsApp. Responda SEMPRE em português brasileiro.
 
 📋 REGRAS DE FORMATAÇÃO:
 - Use emojis relevantes em TODAS as respostas
@@ -368,7 +368,7 @@ async function processWithNoxIA(userMessage: string, financialContext: string) {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-  const systemPrompt = `Você é o Nox IA 🤖, assessor financeiro pessoal via WhatsApp. Responda SEMPRE em português brasileiro.
+  const systemPrompt = `Você é o Brave IA 🤖, assessor financeiro pessoal via WhatsApp. Responda SEMPRE em português brasileiro.
 
 📋 REGRAS DE FORMATAÇÃO (MUITO IMPORTANTE):
 - Use emojis relevantes em TODAS as respostas para deixar a conversa mais amigável e visual
@@ -510,9 +510,11 @@ serve(async (req) => {
 
     // Check verification code (text only)
     if (hasText) {
-      const codeMatch = messageText.match(/^NOX-(\d{6})$/i);
+      const codeMatch = messageText.match(/^(?:NOX|BRAVE)-(\d{6})$/i);
       if (codeMatch) {
-        const code = `NOX-${codeMatch[1]}`;
+        // Support both NOX- and BRAVE- prefixes
+        const prefix = messageText.toUpperCase().startsWith("BRAVE") ? "BRAVE" : "NOX";
+        const code = `${prefix}-${codeMatch[1]}`;
         const { data: link } = await supabaseAdmin
           .from("whatsapp_links")
           .select("*")
@@ -522,7 +524,7 @@ serve(async (req) => {
           .maybeSingle();
 
         if (!link) {
-          await sendWhatsAppMessage(cleanPhone, "❌ Código inválido ou expirado. Gere um novo código no app Nox.");
+          await sendWhatsAppMessage(cleanPhone, "❌ Código inválido ou expirado. Gere um novo código no app Brave.");
           return new Response(JSON.stringify({ ok: true }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
@@ -539,7 +541,8 @@ serve(async (req) => {
           '• Registrar gastos: "Gastei 50 com almoço"\n' +
           "• 📸 Enviar foto do comprovante\n" +
           "• 🎙️ Enviar áudio com seus gastos\n" +
-          '• Ver saldo: "Qual meu saldo?"\n\n' +
+          '• Ver saldo: "Qual meu saldo?"\n' +
+          '• Ver contas: "conferir"\n\n' +
           "Experimente agora! 💰"
         );
 
@@ -572,9 +575,9 @@ serve(async (req) => {
         .maybeSingle();
 
       const planNames: Record<string, string> = {
-        mensal: "Nox Mensal",
-        anual: "Nox Anual",
-        trimestral: "Nox Trimestral",
+        mensal: "Brave Mensal",
+        anual: "Brave Anual",
+        trimestral: "Brave Trimestral",
         free: "Gratuito",
       };
       const planBenefits: Record<string, string[]> = {
@@ -598,19 +601,87 @@ serve(async (req) => {
       const benefits = (planBenefits[currentPlan] || []).join("\n");
 
       const planMsg =
-        `👑 *Seu Plano Nox*\n\n` +
+        `👑 *Seu Plano Brave*\n\n` +
         `📋 *Plano atual:* ${planNames[currentPlan] || currentPlan}\n` +
         (expiryLine ? `${expiryLine}\n` : "") +
         `${daysLine}\n\n` +
         `*Benefícios ativos:*\n${benefits}\n\n` +
         (currentPlan === "free" || daysLeft !== null && daysLeft <= 3
-          ? `💳 Para renovar: Configurações → Planos e Assinatura no app Nox.\n\n`
+          ? `💳 Para renovar: Configurações → Planos e Assinatura no app Brave.\n\n`
           : "") +
-        `_Nox IA - Seu assessor financeiro 🤖_`;
+        `_Brave IA - Seu assessor financeiro 🤖_`;
 
       await sendWhatsAppMessage(cleanPhone, planMsg);
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+    // ── "conferir" / CHECK_BILLS command — show upcoming unpaid bills ──
+    const checkBillsMatch = /^\s*(conferir|check.?bills|ver.?contas|minhas.?contas|contas)\s*$/i.test(effectiveText) || effectiveText === "CHECK_BILLS";
+    if (checkBillsMatch) {
+      const { data: linkedForBills } = await supabaseAdmin
+        .from("whatsapp_links")
+        .select("user_id")
+        .eq("phone_number", cleanPhone)
+        .eq("verified", true)
+        .maybeSingle();
+
+      if (!linkedForBills) {
+        await sendWhatsAppMessage(cleanPhone, "❌ Nenhuma conta vinculada a este número. Vincule pelo app Brave primeiro.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const today = new Date();
+      const todayStr = today.toISOString().slice(0, 10);
+      const futureDate = new Date(today);
+      futureDate.setDate(today.getDate() + 7);
+      const futureDateStr = futureDate.toISOString().slice(0, 10);
+
+      const { data: upcoming } = await supabaseAdmin
+        .from("transactions")
+        .select("description, amount, type, due_date, is_paid, categories(name)")
+        .eq("user_id", linkedForBills.user_id)
+        .eq("is_paid", false)
+        .gte("due_date", todayStr)
+        .lte("due_date", futureDateStr)
+        .order("due_date", { ascending: true })
+        .limit(15);
+
+      const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      const bills = (upcoming || []).filter((t: any) => t.type === "expense");
+      const receivables = (upcoming || []).filter((t: any) => t.type === "income");
+
+      if (bills.length === 0 && receivables.length === 0) {
+        await sendWhatsAppMessage(cleanPhone, "✅ Você não tem contas pendentes nos próximos 7 dias. Tudo em dia! 🎉");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const lines: string[] = ["📋 *Suas contas dos próximos 7 dias:*"];
+
+      if (bills.length > 0) {
+        const total = bills.reduce((s: number, t: any) => s + Number(t.amount), 0);
+        lines.push("\n💸 *A Pagar:*");
+        bills.forEach((t: any) => {
+          const cat = (t as any).categories?.name || "Geral";
+          const due = t.due_date ? new Date(t.due_date + "T12:00:00").toLocaleDateString("pt-BR") : "—";
+          lines.push(`• ${t.description} — ${fmt(Number(t.amount))} · vence ${due} · ${cat}`);
+        });
+        lines.push(`💸 *Total a pagar: ${fmt(total)}*`);
+      }
+
+      if (receivables.length > 0) {
+        const total = receivables.reduce((s: number, t: any) => s + Number(t.amount), 0);
+        lines.push("\n💰 *A Receber:*");
+        receivables.forEach((t: any) => {
+          const due = t.due_date ? new Date(t.due_date + "T12:00:00").toLocaleDateString("pt-BR") : "—";
+          lines.push(`• ${t.description} — ${fmt(Number(t.amount))} · previsto ${due}`);
+        });
+        lines.push(`✅ *Total a receber: ${fmt(total)}*`);
+      }
+
+      lines.push("\n_Brave Assessor - Seu assessor financeiro 🤖_");
+      await sendWhatsAppMessage(cleanPhone, lines.join("\n"));
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     const { data: link } = await supabaseAdmin
       .from("whatsapp_links")
       .select("user_id")
@@ -620,7 +691,7 @@ serve(async (req) => {
 
     if (!link) {
       await sendWhatsAppMessage(cleanPhone,
-        "👋 Olá! Sou o Nox IA, seu assessor financeiro.\n\n" +
+        "👋 Olá! Sou o Brave IA, seu assessor financeiro.\n\n" +
         "Para começar, vincule seu WhatsApp no app:\n" +
         "1. Abra o Nox → Configurações\n" +
         "2. Clique em 'Vincular WhatsApp'\n" +
