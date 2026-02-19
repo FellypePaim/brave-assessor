@@ -386,6 +386,12 @@ async function processWithNoxIA(userMessage: string, financialContext: string) {
 - Interpretar comandos de gasto/receita em linguagem natural para registrar transações
 - Dar dicas práticas de economia
 - Comparar períodos e identificar padrões
+- Responder perguntas sobre metas financeiras (ex: "quanto falta para minha meta de viagem?")
+- Calcular projeções de metas (ex: "em quantos meses vou atingir minha meta?")
+
+🎯 METAS FINANCEIRAS:
+Quando o usuário perguntar sobre metas, use os dados do contexto "Metas financeiras" para responder com precisão.
+Exemplos: "quanto falta para minha meta de viagem?", "quando vou atingir minha meta?", "minhas metas"
 
 🧠 INTERPRETAÇÃO DE LISTAS DE RECORRÊNCIAS (PRIORIDADE MÁXIMA):
 Quando o usuário enviar uma LISTA com 2 ou mais itens que indiquem gastos/receitas recorrentes mensais, retorne SOMENTE JSON com action "add_recurring_list":
@@ -1537,6 +1543,8 @@ Regras:
 
             HELP_OUTROS: `🌟 *Outros Comandos:*\n\n` +
               `❓ *Ajuda:*\n_"ajuda"_ ou _"comandos"_\n\n` +
+              `💳 *Saldo por carteira:*\n_"saldo"_ → ver saldo de cada carteira + total\n\n` +
+              `🎯 *Metas financeiras:*\n_"metas"_ → ver e criar metas\n_"meta: Viagem"_ → criar meta diretamente\n\n` +
               `📊 *Resumo financeiro:*\n_"resumo"_ ou _"meu resumo"_\n\n` +
               `🔄 *Recorrentes:*\n_"recorrentes"_ → ver e cancelar transações fixas\n\n` +
               `🔗 *Vincular WhatsApp:*\nEnvie o código BRAVE-XXXXXX do app\n\n` +
@@ -1558,6 +1566,170 @@ Regras:
             );
             return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
           }
+        }
+
+        // ── Step: goal creation — ask name ──
+        if (session.step === "goal_ask_name") {
+          const isCancel = /^(cancelar|cancel|sair|não|nao)$/i.test(effectiveText);
+          if (isCancel) {
+            await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
+            await sendWhatsAppMessage(cleanPhone, "❌ Criação de meta cancelada.");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+          const goalName = effectiveText.trim();
+          if (!goalName) {
+            await sendWhatsAppMessage(cleanPhone, "📝 Por favor, digite o nome da sua meta.");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+          await supabaseAdmin.from("whatsapp_sessions").update({
+            step: "goal_ask_amount",
+            context: { ...ctx, name: goalName },
+            expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+          }).eq("id", session.id);
+          await sendWhatsAppMessage(cleanPhone,
+            `🎯 *Meta:* _${goalName}_\n\n💰 Qual é o *valor total* que você quer atingir?\n\nEx: _3000_, _R$ 5.000_, _1500,00_`
+          );
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // ── Step: goal creation — ask target amount ──
+        if (session.step === "goal_ask_amount") {
+          const isCancel = /^(cancelar|cancel|sair)$/i.test(effectiveText);
+          if (isCancel) {
+            await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
+            await sendWhatsAppMessage(cleanPhone, "❌ Criação de meta cancelada.");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+          const amtRaw = effectiveText.replace(/[r$\s.]/gi, "").replace(",", ".");
+          const targetAmount = parseFloat(amtRaw);
+          if (isNaN(targetAmount) || targetAmount <= 0) {
+            await sendWhatsAppMessage(cleanPhone, "❓ Não entendi o valor. Digite um número, ex: _5000_ ou _R$ 1.500_");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+          await supabaseAdmin.from("whatsapp_sessions").update({
+            step: "goal_ask_deadline",
+            context: { ...ctx, target_amount: targetAmount },
+            expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+          }).eq("id", session.id);
+          await sendWhatsAppButtons(cleanPhone,
+            `🎯 *Meta:* _${ctx.name}_\n💰 *Valor:* ${fmt(targetAmount)}\n\n📅 Tem um prazo para atingir essa meta?`,
+            [{ id: "GOAL_NO_DEADLINE", text: "Sem prazo" }],
+            "Ou envie uma data: 31/12/2025, dez/2025, 2026"
+          );
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // ── Step: goal creation — ask deadline ──
+        if (session.step === "goal_ask_deadline") {
+          const isCancel = /^(cancelar|cancel|sair)$/i.test(effectiveText);
+          if (isCancel) {
+            await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
+            await sendWhatsAppMessage(cleanPhone, "❌ Criação de meta cancelada.");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          let deadline: string | null = null;
+          const noDeadline = /^(sem\s+prazo|não|nao|n|GOAL_NO_DEADLINE)$/i.test(effectiveText);
+          if (!noDeadline) {
+            // Parse date: dd/mm/yyyy, mm/yyyy, yyyy
+            const dmyMatch = effectiveText.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+            const myMatch = effectiveText.match(/(\d{1,2})[\/\-](\d{4})/);
+            const yMatch = effectiveText.match(/^(\d{4})$/);
+            const monthNames: Record<string, number> = {
+              jan: 1, fev: 2, mar: 3, abr: 4, mai: 5, jun: 6,
+              jul: 7, ago: 8, set: 9, out: 10, nov: 11, dez: 12,
+            };
+            const monthNameMatch = effectiveText.match(/([a-z]{3})\/?(\d{4})/i);
+
+            if (dmyMatch) {
+              deadline = `${dmyMatch[3]}-${dmyMatch[2].padStart(2,"0")}-${dmyMatch[1].padStart(2,"0")}`;
+            } else if (monthNameMatch) {
+              const mon = monthNames[monthNameMatch[1].toLowerCase()];
+              if (mon) deadline = `${monthNameMatch[2]}-${String(mon).padStart(2,"0")}-01`;
+            } else if (myMatch) {
+              deadline = `${myMatch[2]}-${myMatch[1].padStart(2,"0")}-01`;
+            } else if (yMatch) {
+              deadline = `${yMatch[1]}-12-31`;
+            } else {
+              await sendWhatsAppMessage(cleanPhone,
+                "❓ Não entendi a data. Tente: _31/12/2025_, _dez/2025_, _2026_\nOu envie _sem prazo_"
+              );
+              return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            }
+          }
+
+          // Show confirmation
+          const deadlineStr = deadline
+            ? new Date(deadline + "T12:00:00").toLocaleDateString("pt-BR")
+            : "Sem prazo definido";
+          await supabaseAdmin.from("whatsapp_sessions").update({
+            step: "goal_confirm",
+            context: { ...ctx, deadline },
+            expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+          }).eq("id", session.id);
+          await sendWhatsAppButtons(cleanPhone,
+            `🎯 *Confirmar nova meta?*\n\n` +
+            `📝 *Nome:* ${ctx.name}\n` +
+            `💰 *Valor alvo:* ${fmt(Number(ctx.target_amount))}\n` +
+            `📅 *Prazo:* ${deadlineStr}\n\n` +
+            `Está tudo certo?`,
+            [{ id: "GOAL_CONFIRM_YES", text: "✅ Criar Meta" }, { id: "GOAL_CONFIRM_NO", text: "❌ Cancelar" }],
+            "Confirme para salvar"
+          );
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // ── Step: goal creation — confirm and save ──
+        if (session.step === "goal_confirm") {
+          const isConfirm = /sim|ok|yes|confirmar|GOAL_CONFIRM_YES|✅/i.test(effectiveText);
+          const isCancel = /não|nao|n|cancelar|cancel|GOAL_CONFIRM_NO|❌/i.test(effectiveText);
+
+          if (isCancel) {
+            await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
+            await sendWhatsAppMessage(cleanPhone, "❌ Meta cancelada. Nenhuma alteração foi feita.");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          if (isConfirm) {
+            const { error: goalErr } = await supabaseAdmin.from("financial_goals").insert({
+              user_id: ctx.user_id,
+              name: ctx.name,
+              target_amount: Number(ctx.target_amount),
+              current_amount: 0,
+              deadline: ctx.deadline || null,
+            });
+
+            await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
+
+            if (goalErr) {
+              await sendWhatsAppMessage(cleanPhone, `❌ Erro ao criar meta: ${goalErr.message}`);
+            } else {
+              const deadlineStr = ctx.deadline
+                ? new Date(ctx.deadline + "T12:00:00").toLocaleDateString("pt-BR")
+                : "sem prazo";
+              await sendWhatsAppMessage(cleanPhone,
+                `🎉 *Meta criada com sucesso!*\n\n` +
+                `🎯 *${ctx.name}*\n` +
+                `💰 *Objetivo:* ${fmt(Number(ctx.target_amount))}\n` +
+                `📅 *Prazo:* ${deadlineStr}\n\n` +
+                `💡 Para acompanhar suas metas, acesse o app Brave → Metas\n` +
+                `Ou envie _"metas"_ aqui a qualquer momento!\n\n` +
+                `_Brave IA - Seu assessor financeiro 🤖_`
+              );
+            }
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          // Unknown response — re-show confirmation
+          const deadlineStr = ctx.deadline
+            ? new Date(ctx.deadline + "T12:00:00").toLocaleDateString("pt-BR")
+            : "Sem prazo definido";
+          await sendWhatsAppButtons(cleanPhone,
+            `🎯 *Confirmar nova meta?*\n\n📝 *Nome:* ${ctx.name}\n💰 *Valor alvo:* ${fmt(Number(ctx.target_amount))}\n📅 *Prazo:* ${deadlineStr}`,
+            [{ id: "GOAL_CONFIRM_YES", text: "✅ Criar Meta" }, { id: "GOAL_CONFIRM_NO", text: "❌ Cancelar" }],
+            "Confirme para salvar"
+          );
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
       }
     }
@@ -1932,6 +2104,154 @@ Regras:
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    // ── "saldo" command — show balance per wallet + total ──
+    const saldoMatch = /^\s*(saldo|meu\s+saldo|ver\s+saldo|carteiras?|minha[s]?\s+carteiras?|quanto\s+tenho)\s*$/i.test(effectiveText);
+    if (saldoMatch) {
+      const { data: linkedForSaldo } = await supabaseAdmin
+        .from("whatsapp_links")
+        .select("user_id")
+        .eq("phone_number", cleanPhone)
+        .eq("verified", true)
+        .maybeSingle();
+
+      if (!linkedForSaldo) {
+        await sendWhatsAppMessage(cleanPhone, "❌ Nenhuma conta vinculada. Vincule pelo app Brave primeiro.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const { data: saldoWallets } = await supabaseAdmin
+        .from("wallets")
+        .select("name, type, balance, icon")
+        .eq("user_id", linkedForSaldo.user_id)
+        .order("balance", { ascending: false });
+
+      const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      const walletList = saldoWallets || [];
+      const totalSaldo = walletList.reduce((s: number, w: any) => s + Number(w.balance), 0);
+
+      if (walletList.length === 0) {
+        await sendWhatsAppMessage(cleanPhone,
+          "💳 Você ainda não tem carteiras cadastradas.\n\nAcesse o app Brave → Carteira para adicionar uma."
+        );
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const typeEmoji: Record<string, string> = {
+        checking: "🏦", savings: "💰", investment: "📈", cash: "💵", other: "💳",
+      };
+
+      const walletLines = walletList.map((w: any) => {
+        const emoji = typeEmoji[w.type] || "💳";
+        const sign = Number(w.balance) < 0 ? "⚠️ " : "";
+        return `${emoji} *${w.name}:* ${sign}${fmt(Number(w.balance))}`;
+      }).join("\n");
+
+      const totalEmoji = totalSaldo >= 0 ? "✅" : "⚠️";
+      await sendWhatsAppMessage(cleanPhone,
+        `💳 *Saldo das suas carteiras:*\n\n${walletLines}\n\n` +
+        `${totalEmoji} *Total consolidado: ${fmt(totalSaldo)}*\n\n` +
+        `_Brave IA - Seu assessor financeiro 🤖_`
+      );
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // ── "metas" command — list financial goals ──
+    const metasMatch = /^\s*(metas?|minha[s]?\s+metas?|ver\s+metas?|objetivos?|meus\s+objetivos?)\s*$/i.test(effectiveText);
+    if (metasMatch) {
+      const { data: linkedForMetas } = await supabaseAdmin
+        .from("whatsapp_links")
+        .select("user_id")
+        .eq("phone_number", cleanPhone)
+        .eq("verified", true)
+        .maybeSingle();
+
+      if (!linkedForMetas) {
+        await sendWhatsAppMessage(cleanPhone, "❌ Nenhuma conta vinculada. Vincule pelo app Brave primeiro.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const { data: goalsList } = await supabaseAdmin
+        .from("financial_goals")
+        .select("id, name, target_amount, current_amount, deadline")
+        .eq("user_id", linkedForMetas.user_id)
+        .order("created_at", { ascending: false })
+        .limit(10);
+
+      const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+      if (!goalsList || goalsList.length === 0) {
+        await sendWhatsAppButtons(cleanPhone,
+          "🎯 Você ainda não tem metas cadastradas!\n\nQuer criar sua primeira meta agora?",
+          [{ id: "CRIAR_META", text: "✨ Criar Meta" }],
+          "Ou envie: meta: Nome da Meta"
+        );
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const goalLines = goalsList.map((g: any, i: number) => {
+        const pct = Math.round((Number(g.current_amount) / Number(g.target_amount)) * 100);
+        const missing = Number(g.target_amount) - Number(g.current_amount);
+        const bar = "█".repeat(Math.floor(pct / 10)) + "░".repeat(10 - Math.floor(pct / 10));
+        const deadline = g.deadline
+          ? `\n    📅 Prazo: ${new Date(g.deadline + "T12:00:00").toLocaleDateString("pt-BR")}`
+          : "";
+        return `${i + 1}. 🎯 *${g.name}*\n    ${bar} ${pct}%\n    💰 ${fmt(Number(g.current_amount))} de ${fmt(Number(g.target_amount))}\n    ⏳ Falta: ${fmt(missing)}${deadline}`;
+      }).join("\n\n");
+
+      await sendWhatsAppButtons(cleanPhone,
+        `🎯 *Suas metas financeiras:*\n\n${goalLines}\n\n_Brave IA - Seu assessor financeiro 🤖_`,
+        [{ id: "CRIAR_META", text: "✨ Nova Meta" }],
+        "Criar uma nova meta"
+      );
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // ── "meta:" trigger or CRIAR_META button — create goal via WhatsApp ──
+    const metaTrigger = /^\s*meta\s*[:;]?\s*/i;
+    const isCreateGoalBtn = effectiveText === "CRIAR_META";
+    if (metaTrigger.test(messageText) || isCreateGoalBtn) {
+      const { data: linkedForGoal } = await supabaseAdmin
+        .from("whatsapp_links")
+        .select("user_id")
+        .eq("phone_number", cleanPhone)
+        .eq("verified", true)
+        .maybeSingle();
+
+      if (!linkedForGoal) {
+        await sendWhatsAppMessage(cleanPhone, "❌ Nenhuma conta vinculada. Vincule pelo app Brave primeiro.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const goalName = isCreateGoalBtn ? "" : messageText.replace(metaTrigger, "").trim();
+
+      await supabaseAdmin.from("whatsapp_sessions").delete().eq("phone_number", cleanPhone);
+
+      if (goalName) {
+        // Name provided inline — ask for target amount
+        await supabaseAdmin.from("whatsapp_sessions").insert({
+          phone_number: cleanPhone,
+          step: "goal_ask_amount",
+          context: { user_id: linkedForGoal.user_id, name: goalName },
+          expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+        });
+        await sendWhatsAppMessage(cleanPhone,
+          `🎯 *Nova meta:* _${goalName}_\n\n💰 Qual é o *valor total* que você quer atingir?\n\nEx: _3000_, _R$ 5.000_, _1500,00_`
+        );
+      } else {
+        // No name — ask for it first
+        await supabaseAdmin.from("whatsapp_sessions").insert({
+          phone_number: cleanPhone,
+          step: "goal_ask_name",
+          context: { user_id: linkedForGoal.user_id },
+          expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+        });
+        await sendWhatsAppMessage(cleanPhone,
+          `🎯 *Criar nova meta!*\n\n📝 Qual é o *nome* da sua meta?\n\nEx: _Viagem para Europa_, _Reserva de emergência_, _Comprar carro_`
+        );
+      }
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     // ── "resumo" command — show monthly financial summary ──
     const resumoMatch = /^\s*(resumo|resumo\s*do\s*m[eê]s|r[eê]sumo\s*financeiro|extrato|extrato\s*mensal|summary)\s*$/i.test(effectiveText);
     if (resumoMatch) {
@@ -2120,6 +2440,7 @@ Regras:
       { data: recentTx },
       { data: activeReminders },
       { data: recurringTx },
+      { data: financialGoals },
     ] = await Promise.all([
       supabaseAdmin.from("profiles").select("display_name, monthly_income").eq("id", userId).single(),
       supabaseAdmin.from("wallets").select("name, type, balance, id").eq("user_id", userId),
@@ -2138,6 +2459,11 @@ Regras:
         .eq("is_active", true)
         .order("day_of_month", { ascending: true })
         .limit(15),
+      supabaseAdmin.from("financial_goals")
+        .select("id, name, target_amount, current_amount, deadline")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(10),
     ]);
 
     const totalBalance = (wallets || []).reduce((s: number, w: any) => s + Number(w.balance), 0);
@@ -2164,6 +2490,18 @@ Regras:
         ).join("; ")
       : "nenhuma";
 
+    // Format financial goals for context
+    const goalsCtx = (financialGoals || []).length > 0
+      ? (financialGoals || []).map((g: any) => {
+          const pct = Math.round((Number(g.current_amount) / Number(g.target_amount)) * 100);
+          const missing = Number(g.target_amount) - Number(g.current_amount);
+          const deadline = g.deadline
+            ? ` prazo: ${new Date(g.deadline + "T12:00:00").toLocaleDateString("pt-BR")}`
+            : "";
+          return `${g.name}: R$${Number(g.current_amount).toFixed(2)}/R$${Number(g.target_amount).toFixed(2)} (${pct}%, falta R$${missing.toFixed(2)}${deadline})`;
+        }).join("; ")
+      : "nenhuma";
+
     const financialContext = `
 Nome: ${profile?.display_name || "Usuário"}
 Renda: R$ ${profile?.monthly_income ? Number(profile.monthly_income).toFixed(2) : "?"}
@@ -2172,7 +2510,8 @@ Carteiras: ${(wallets || []).map((w: any) => `${w.name} R$${Number(w.balance).to
 Categorias: ${(categories || []).map((c: any) => `${c.name} (id:${c.id})`).join(", ")}
 Últimas transações: ${(recentTx || []).slice(0, 5).map((t: any) => `${t.type === "income" ? "+" : "-"}R$${Number(t.amount).toFixed(2)} ${t.description}`).join("; ") || "nenhuma"}
 Lembretes ativos: ${remindersCtx}
-Recorrências ativas: ${recurringCtx}`;
+Recorrências ativas: ${recurringCtx}
+Metas financeiras: ${goalsCtx}`;
 
     // ── PRIORITY 1: Check if user is interacting with a pending transaction ──
     // This must happen BEFORE calling AI, so button clicks get handled immediately
