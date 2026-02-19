@@ -408,6 +408,12 @@ Regras para o JSON:
 
 Para perguntas normais (não transações), responda em texto formatado com emojis e parágrafos.
 
+⚠️ QUANDO NÃO ENTENDER:
+Se a mensagem não for uma transação clara nem uma pergunta financeira reconhecível, responda EXATAMENTE:
+"Não entendi sua mensagem 😕 Mas posso te ajudar de outras formas!"
+
+NUNCA invente informações financeiras que não existem no contexto.
+
 ${financialContext}`;
 
   const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -1613,6 +1619,78 @@ Regras:
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    // ── "resumo" command — show monthly financial summary ──
+    const resumoMatch = /^\s*(resumo|resumo\s*do\s*m[eê]s|r[eê]sumo\s*financeiro|extrato|extrato\s*mensal|summary)\s*$/i.test(effectiveText);
+    if (resumoMatch) {
+      const { data: linkedForResumo } = await supabaseAdmin
+        .from("whatsapp_links")
+        .select("user_id")
+        .eq("phone_number", cleanPhone)
+        .eq("verified", true)
+        .maybeSingle();
+
+      if (!linkedForResumo) {
+        await sendWhatsAppMessage(cleanPhone, "❌ Nenhuma conta vinculada a este número. Vincule pelo app Brave primeiro.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const resumoUserId = linkedForResumo.user_id;
+      const now = new Date();
+      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+      const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+
+      const [{ data: monthTx }, { data: resumoWallets }, { data: resumoProfile }] = await Promise.all([
+        supabaseAdmin
+          .from("transactions")
+          .select("amount, type, description, date, categories(name)")
+          .eq("user_id", resumoUserId)
+          .gte("date", firstDay)
+          .lte("date", lastDay)
+          .eq("is_paid", true),
+        supabaseAdmin.from("wallets").select("balance").eq("user_id", resumoUserId),
+        supabaseAdmin.from("profiles").select("display_name, monthly_income").eq("id", resumoUserId).maybeSingle(),
+      ]);
+
+      const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      const txList = monthTx || [];
+      const totalSpent = txList.filter((t: any) => t.type === "expense").reduce((s: number, t: any) => s + Number(t.amount), 0);
+      const totalReceived = txList.filter((t: any) => t.type === "income").reduce((s: number, t: any) => s + Number(t.amount), 0);
+      const totalBalance = (resumoWallets || []).reduce((s: number, w: any) => s + Number(w.balance), 0);
+      const monthName = now.toLocaleString("pt-BR", { month: "long" });
+
+      // Group by category
+      const categoryMap: Record<string, number> = {};
+      txList.filter((t: any) => t.type === "expense").forEach((t: any) => {
+        const cat = (t as any).categories?.name || "Outros";
+        categoryMap[cat] = (categoryMap[cat] || 0) + Number(t.amount);
+      });
+      const topCategories = Object.entries(categoryMap)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3);
+
+      const monthBudget = resumoProfile?.monthly_income ? Number(resumoProfile.monthly_income) : null;
+      const budgetLine = monthBudget
+        ? `💼 *Renda mensal:* ${fmt(monthBudget)}\n📊 *Comprometido:* ${Math.round((totalSpent / monthBudget) * 100)}%\n`
+        : "";
+
+      const categoriesLine = topCategories.length > 0
+        ? `\n🏷️ *Top categorias de gasto:*\n${topCategories.map((c, i) => `  ${i + 1}. ${c[0]} — ${fmt(c[1])}`).join("\n")}\n`
+        : "";
+
+      const resumoMsg =
+        `📊 *Resumo de ${monthName.charAt(0).toUpperCase() + monthName.slice(1)}*\n\n` +
+        `💸 *Total gasto:* ${fmt(totalSpent)}\n` +
+        `💰 *Total recebido:* ${fmt(totalReceived)}\n` +
+        `💳 *Saldo atual:* ${fmt(totalBalance)}\n` +
+        budgetLine +
+        categoriesLine +
+        `\n📈 *Transações no mês:* ${txList.length}\n\n` +
+        `_Brave IA - Seu assessor financeiro 🤖_`;
+
+      await sendWhatsAppMessage(cleanPhone, resumoMsg);
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     // ── "conferir" / CHECK_BILLS command — show upcoming unpaid bills ──
     const checkBillsMatch = /^\s*(conferir|check.?bills|ver.?contas|minhas.?contas|contas)\s*$/i.test(effectiveText) || effectiveText === "CHECK_BILLS";
     if (checkBillsMatch) {
@@ -1992,7 +2070,28 @@ Categorias: ${(categories || []).map((c: any) => `${c.name} (id:${c.id})`).join(
       console.log("Response is text, not action");
     }
 
-    await sendWhatsAppMessage(cleanPhone, replyText);
+    // Detect when bot doesn't understand and offer quick-command suggestions
+    const notUnderstoodPatterns = [
+      /não entendi/i, /não consegui entender/i, /pode reformular/i,
+      /não reconheci/i, /tente novamente/i, /não foi possível/i,
+      /não compreendi/i, /mensagem não clara/i, /poderia explicar/i,
+    ];
+    const isConfused = notUnderstoodPatterns.some(p => p.test(replyText));
+
+    if (isConfused) {
+      await sendWhatsAppButtons(
+        cleanPhone,
+        replyText + "\n\n💡 *Tente um desses comandos rápidos:*",
+        [
+          { id: "gastei", text: "💸 Registrar gasto" },
+          { id: "resumo", text: "📊 Ver resumo" },
+          { id: "conferir", text: "📋 Conferir contas" },
+        ],
+        "Ou envie 'ajuda' para ver todos os comandos"
+      );
+    } else {
+      await sendWhatsAppMessage(cleanPhone, replyText);
+    }
 
     return new Response(JSON.stringify({ ok: true }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

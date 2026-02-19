@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import { AuthModal } from "@/components/AuthModal";
+import SocialProofToast from "@/components/SocialProofToast";
 import { motion, useScroll, useTransform, useInView } from "framer-motion";
 import heroImage from "@/assets/hero-woman.jpg";
 import benefitsImage from "@/assets/hero-benefits.jpg";
@@ -814,6 +815,7 @@ const Index = () => {
       <FAQ />
       <WhyNox />
       <Footer />
+      <SocialProofToast />
     </main>
   );
 };
