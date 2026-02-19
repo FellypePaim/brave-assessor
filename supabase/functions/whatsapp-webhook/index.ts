@@ -614,7 +614,62 @@ serve(async (req) => {
       await sendWhatsAppMessage(cleanPhone, planMsg);
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    // ── Session-based multi-step flow (bill payment) ──
+    // ── Helper: parse date/time in pt-BR ──
+    function parseDateTimeBR(text: string): Date | null {
+      const now = new Date();
+      const lower = text.toLowerCase().trim();
+      const timeMatch = lower.match(/(\d{1,2})(?::(\d{2}))?h(?:(\d{2}))?|(\d{1,2}):(\d{2})/);
+      let hour = 0, minute = 0, hasTime = false;
+      if (timeMatch) {
+        hasTime = true;
+        if (timeMatch[4] !== undefined) { hour = parseInt(timeMatch[4]); minute = parseInt(timeMatch[5]); }
+        else { hour = parseInt(timeMatch[1]); minute = parseInt(timeMatch[3] || timeMatch[2] || "0"); }
+      }
+      let date = new Date(now);
+      const ddmmMatch = lower.match(/(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?/);
+      if (ddmmMatch) {
+        const d = parseInt(ddmmMatch[1]), m = parseInt(ddmmMatch[2]) - 1;
+        const y = ddmmMatch[3] ? (ddmmMatch[3].length === 2 ? 2000 + parseInt(ddmmMatch[3]) : parseInt(ddmmMatch[3])) : now.getFullYear();
+        date = new Date(y, m, d, hour, minute, 0);
+      } else if (lower.includes("amanhã") || lower.includes("amanha")) {
+        date.setDate(date.getDate() + 1); date.setHours(hour, minute, 0, 0);
+      } else if (lower.includes("hoje")) {
+        date.setHours(hour, minute, 0, 0);
+      } else if (/segunda/.test(lower)) date = nextWD(now, 1, hour, minute);
+      else if (/terça|terca/.test(lower)) date = nextWD(now, 2, hour, minute);
+      else if (/quarta/.test(lower)) date = nextWD(now, 3, hour, minute);
+      else if (/quinta/.test(lower)) date = nextWD(now, 4, hour, minute);
+      else if (/sexta/.test(lower)) date = nextWD(now, 5, hour, minute);
+      else if (/sábado|sabado/.test(lower)) date = nextWD(now, 6, hour, minute);
+      else if (/domingo/.test(lower)) date = nextWD(now, 0, hour, minute);
+      else if (hasTime) { date.setHours(hour, minute, 0, 0); if (date <= now) date.setDate(date.getDate() + 1); }
+      else return null;
+      return date;
+    }
+    function nextWD(from: Date, wd: number, h: number, m: number): Date {
+      const d = new Date(from); const diff = (wd - d.getDay() + 7) % 7 || 7;
+      d.setDate(d.getDate() + diff); d.setHours(h, m, 0, 0); return d;
+    }
+    function parseNotifyMinutes(text: string): number | null {
+      const lower = text.toLowerCase();
+      const dia = lower.match(/(\d+)\s*dia/); if (dia) return parseInt(dia[1]) * 1440;
+      const hora = lower.match(/(\d+)\s*h(?:ora)?/); if (hora) return parseInt(hora[1]) * 60;
+      const min = lower.match(/(\d+)\s*min/); if (min) return parseInt(min[1]);
+      const sh = lower.match(/^(\d+)h$/); if (sh) return parseInt(sh[1]) * 60;
+      const sm = lower.match(/^(\d+)m$/); if (sm) return parseInt(sm[1]);
+      const sd = lower.match(/^(\d+)d$/); if (sd) return parseInt(sd[1]) * 1440;
+      return null;
+    }
+    function parseRecurrence(text: string): string {
+      const lower = text.toLowerCase();
+      if (/\b(todo\s*dia|diário|diario|diariamente)\b/.test(lower)) return "daily";
+      if (/\b(toda\s*semana|semanalmente|semanal)\b/.test(lower)) return "weekly";
+      if (/\b(todo\s*m[eê]s|mensalmente|mensal)\b/.test(lower)) return "monthly";
+      if (/\b(toda\s*(segunda|terça|quarta|quinta|sexta|s[aá]bado|domingo))\b/.test(lower)) return "weekly";
+      return "none";
+    }
+
+    // ── Session-based multi-step flow (bill payment + reminder creation) ──
     {
       const { data: session } = await supabaseAdmin
         .from("whatsapp_sessions")
@@ -758,10 +813,234 @@ serve(async (req) => {
           );
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
+
+        // ── Step: waiting for notify_minutes_before ──
+        if (session.step === "reminder_notify") {
+          const cancel = /^\s*(cancelar|cancel|sair)\s*$/i.test(effectiveText);
+          if (cancel) {
+            await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
+            await sendWhatsAppMessage(cleanPhone, "❌ Lembrete cancelado.");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          // Try button value first (e.g. "30 min", "1h", "1 dia")
+          const notifyMins = parseNotifyMinutes(effectiveText);
+          if (notifyMins === null) {
+            await sendWhatsAppButtons(
+              cleanPhone,
+              "⏰ Não entendi. Quanto tempo antes você quer ser avisado?\n\nExemplo: 30 min, 1h, 2h, 1 dia",
+              [{ id: "30m", text: "30 minutos" }, { id: "1h", text: "1 hora" }, { id: "1d", text: "1 dia" }],
+              "Ou escreva manualmente"
+            );
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          // All data gathered – create the reminder
+          const reminderCtx = ctx;
+          await supabaseAdmin.from("reminders").insert({
+            user_id: ctx.user_id,
+            title: reminderCtx.title,
+            description: reminderCtx.description || null,
+            event_at: reminderCtx.event_at,
+            notify_minutes_before: notifyMins,
+            recurrence: reminderCtx.recurrence || "none",
+          });
+
+          await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
+
+          const fmtDate = (s: string) =>
+            new Date(s).toLocaleString("pt-BR", {
+              day: "2-digit", month: "2-digit", year: "numeric",
+              hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo",
+            });
+
+          let notifyLabel = "";
+          if (notifyMins < 60) notifyLabel = `${notifyMins} minutos`;
+          else if (notifyMins < 1440) notifyLabel = `${notifyMins / 60} hora(s)`;
+          else notifyLabel = `${notifyMins / 1440} dia(s)`;
+
+          await sendWhatsAppMessage(cleanPhone,
+            `✅ *Lembrete criado com sucesso!*\n\n` +
+            `🔔 *${reminderCtx.title}*\n` +
+            `📅 ${fmtDate(reminderCtx.event_at)}\n` +
+            `⏰ Você será avisado *${notifyLabel} antes*\n\n` +
+            `_Brave IA - Seu assessor financeiro 🤖_`
+          );
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // ── Step: confirming reminder details ──
+        if (session.step === "reminder_confirm") {
+          const cancel = /^\s*(cancelar|cancel|não|nao|n)\s*$/i.test(effectiveText);
+          if (cancel) {
+            await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
+            await sendWhatsAppMessage(cleanPhone, "❌ Lembrete cancelado.");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          // CONFIRM_REMINDER or "sim"
+          if (/^\s*(sim|s|ok|yes|confirmar|✅|CONFIRM_REMINDER)\s*$/i.test(effectiveText) || effectiveText === "CONFIRM_REMINDER") {
+            // Create the reminder
+            await supabaseAdmin.from("reminders").insert({
+              user_id: ctx.user_id,
+              title: ctx.title,
+              description: ctx.description || null,
+              event_at: ctx.event_at,
+              notify_minutes_before: ctx.notify_minutes_before,
+              recurrence: ctx.recurrence || "none",
+            });
+
+            await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
+
+            const fmtDate = (s: string) =>
+              new Date(s).toLocaleString("pt-BR", {
+                day: "2-digit", month: "2-digit", year: "numeric",
+                hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo",
+              });
+
+            let notifyLabel = "";
+            const nm = ctx.notify_minutes_before;
+            if (nm < 60) notifyLabel = `${nm} minutos`;
+            else if (nm < 1440) notifyLabel = `${nm / 60} hora(s)`;
+            else notifyLabel = `${nm / 1440} dia(s)`;
+
+            await sendWhatsAppMessage(cleanPhone,
+              `✅ *Lembrete criado!*\n\n` +
+              `🔔 *${ctx.title}*\n` +
+              `📅 ${fmtDate(ctx.event_at)}\n` +
+              `⏰ Aviso *${notifyLabel} antes*\n\n` +
+              `_Brave IA - Seu assessor financeiro 🤖_`
+            );
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+        }
       }
     }
 
-    // ── "MARK_PAID" button click — start bill payment flow ──
+    // ── "lembrete:" trigger — create reminder via WhatsApp ──
+    const reminderTrigger = /^\s*lembrete\s*[:;]?\s*/i;
+    if (reminderTrigger.test(messageText) && hasText) {
+      const { data: linkedForReminder } = await supabaseAdmin
+        .from("whatsapp_links")
+        .select("user_id")
+        .eq("phone_number", cleanPhone)
+        .eq("verified", true)
+        .maybeSingle();
+
+      if (!linkedForReminder) {
+        await sendWhatsAppMessage(cleanPhone, "❌ Nenhuma conta vinculada. Vincule pelo app Brave primeiro.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const reminderText = messageText.replace(reminderTrigger, "").trim();
+
+      // Extract title: everything before date/time keywords or separators
+      let title = reminderText
+        .replace(/,?\s*(amanhã|amanha|hoje|segunda|terça|quarta|quinta|sexta|sábado|sabado|domingo|\d{1,2}\/\d{1,2}|\d{1,2}h|\d{2}:\d{2}).*/i, "")
+        .trim();
+      if (!title) title = reminderText.split(/[,;]/)[0].trim();
+
+      // Parse date/time
+      const eventDate = parseDateTimeBR(reminderText);
+
+      // Parse notify time ("avisar X antes")
+      const notifyMatch = reminderText.match(/avisar\s+(.+?)(?:\s+antes|\s*$)/i);
+      const notifyMins = notifyMatch ? parseNotifyMinutes(notifyMatch[1]) : null;
+
+      // Parse recurrence
+      const recurrence = parseRecurrence(reminderText);
+
+      // Clear any old reminder sessions
+      await supabaseAdmin.from("whatsapp_sessions").delete()
+        .eq("phone_number", cleanPhone).like("step", "reminder_%");
+
+      if (!eventDate) {
+        // Ask for date/time
+        await supabaseAdmin.from("whatsapp_sessions").insert({
+          phone_number: cleanPhone,
+          step: "reminder_notify",
+          context: {
+            user_id: linkedForReminder.user_id,
+            title: title || "Lembrete",
+            event_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+            notify_minutes_before: 30,
+            recurrence,
+            awaiting: "date",
+          },
+          expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+        });
+        await sendWhatsAppMessage(cleanPhone,
+          `🔔 *Criando lembrete: ${title || "Lembrete"}*\n\n` +
+          `📅 Qual a data e horário do evento?\n\nExemplo: amanhã 15h, 19/02 16:00, sexta 10h`
+        );
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      if (notifyMins === null) {
+        // Have date, need notify time
+        await supabaseAdmin.from("whatsapp_sessions").insert({
+          phone_number: cleanPhone,
+          step: "reminder_notify",
+          context: {
+            user_id: linkedForReminder.user_id,
+            title: title || reminderText,
+            event_at: eventDate.toISOString(),
+            recurrence,
+          },
+          expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+        });
+
+        const fmtDate = eventDate.toLocaleString("pt-BR", {
+          day: "2-digit", month: "2-digit", year: "numeric",
+          hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo",
+        });
+
+        await sendWhatsAppButtons(
+          cleanPhone,
+          `🔔 *${title || reminderText}*\n📅 ${fmtDate}\n\n⏰ Com quanto tempo de antecedência você quer ser avisado?`,
+          [{ id: "30m", text: "30 minutos" }, { id: "1h", text: "1 hora" }, { id: "1d", text: "1 dia" }],
+          "Ou escreva: 2h, 15 min, 3 horas..."
+        );
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Have everything — show confirmation
+      await supabaseAdmin.from("whatsapp_sessions").insert({
+        phone_number: cleanPhone,
+        step: "reminder_confirm",
+        context: {
+          user_id: linkedForReminder.user_id,
+          title: title || reminderText,
+          event_at: eventDate.toISOString(),
+          notify_minutes_before: notifyMins,
+          recurrence,
+        },
+        expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+      });
+
+      const fmtDate = eventDate.toLocaleString("pt-BR", {
+        day: "2-digit", month: "2-digit", year: "numeric",
+        hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo",
+      });
+      let notifyLabel = "";
+      if (notifyMins < 60) notifyLabel = `${notifyMins} minutos`;
+      else if (notifyMins < 1440) notifyLabel = `${notifyMins / 60} hora(s)`;
+      else notifyLabel = `${notifyMins / 1440} dia(s)`;
+      const recLabel: Record<string, string> = { none: "", daily: "🔁 Diário", weekly: "🔁 Semanal", monthly: "🔁 Mensal" };
+
+      await sendWhatsAppButtons(
+        cleanPhone,
+        `🔔 *Confirmar lembrete?*\n\n` +
+        `📝 *${title || reminderText}*\n` +
+        `📅 ${fmtDate}\n` +
+        `⏰ Aviso: *${notifyLabel} antes*\n` +
+        (recLabel[recurrence] ? `${recLabel[recurrence]}\n` : ""),
+        [{ id: "CONFIRM_REMINDER", text: "✅ Confirmar" }, { id: "cancelar", text: "❌ Cancelar" }],
+        "Toque para confirmar"
+      );
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     if (effectiveText === "MARK_PAID" || /^\s*(marcar.?como.?pago|pagar.?conta|marcar.?pago)\s*$/i.test(effectiveText)) {
       const { data: linkedForPay } = await supabaseAdmin
         .from("whatsapp_links")

@@ -18,7 +18,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
   AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Bell, Plus, Trash2, Clock, Calendar, CheckCircle2, BellOff } from "lucide-react";
+import { Bell, Plus, Trash2, Clock, Calendar, CheckCircle2, BellOff, Repeat } from "lucide-react";
 import { toast } from "sonner";
 import { format, isPast } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -31,6 +31,7 @@ interface Reminder {
   notify_minutes_before: number;
   is_sent: boolean;
   is_active: boolean;
+  recurrence: "none" | "daily" | "weekly" | "monthly";
   created_at: string;
 }
 
@@ -46,6 +47,20 @@ const NOTIFY_OPTIONS = [
   { label: "12 horas antes", value: 720 },
   { label: "1 dia antes", value: 1440 },
 ];
+
+const RECURRENCE_OPTIONS = [
+  { label: "Não repetir", value: "none" },
+  { label: "Diário", value: "daily" },
+  { label: "Semanal", value: "weekly" },
+  { label: "Mensal", value: "monthly" },
+];
+
+const RECURRENCE_LABELS: Record<string, string> = {
+  none: "",
+  daily: "Diário",
+  weekly: "Semanal",
+  monthly: "Mensal",
+};
 
 function formatNotify(minutes: number) {
   if (minutes < 60) return `${minutes} min antes`;
@@ -65,6 +80,7 @@ export default function Reminders() {
     event_date: "",
     event_time: "",
     notify_minutes_before: "30",
+    recurrence: "none",
   });
 
   const { data: reminders = [], isLoading } = useQuery({
@@ -107,13 +123,14 @@ export default function Reminders() {
         description: form.description || null,
         event_at,
         notify_minutes_before: Number(form.notify_minutes_before),
+        recurrence: form.recurrence,
       });
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["reminders"] });
       setOpen(false);
-      setForm({ title: "", description: "", event_date: "", event_time: "", notify_minutes_before: "30" });
+      setForm({ title: "", description: "", event_date: "", event_time: "", notify_minutes_before: "30", recurrence: "none" });
       toast.success("Lembrete criado! Você receberá uma notificação no WhatsApp.");
     },
     onError: (err: Error) => toast.error(err.message),
@@ -165,6 +182,17 @@ export default function Reminders() {
             <span className="font-semibold">WhatsApp não vinculado.</span> Vincule seu WhatsApp nas{" "}
             <a href="/dashboard/settings" className="underline font-medium">Configurações</a> para receber notificações dos lembretes.
           </div>
+        </div>
+      )}
+
+      {/* WhatsApp tip */}
+      {whatsappLinked && (
+        <div className="flex items-start gap-3 p-4 rounded-xl border border-border bg-muted/50">
+          <Bell className="h-4 w-4 shrink-0 mt-0.5 text-primary" />
+          <p className="text-xs text-muted-foreground">
+            💡 <span className="font-medium">Dica:</span> Você também pode criar lembretes pelo WhatsApp! Envie uma mensagem como{" "}
+            <span className="font-mono bg-background px-1 rounded text-foreground">lembrete: reunião amanhã 15h</span>
+          </p>
         </div>
       )}
 
@@ -296,6 +324,27 @@ export default function Reminders() {
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1.5">
+                <Repeat className="h-3.5 w-3.5" /> Repetição
+              </Label>
+              <Select
+                value={form.recurrence}
+                onValueChange={v => setForm(f => ({ ...f, recurrence: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {RECURRENCE_OPTIONS.map(o => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <DialogFooter>
@@ -338,27 +387,34 @@ function ReminderCard({
 }) {
   const eventDate = new Date(reminder.event_at);
   const notifyLabel = formatNotify(reminder.notify_minutes_before);
+  const recurrenceLabel = RECURRENCE_LABELS[reminder.recurrence];
 
   return (
     <Card className={past ? "opacity-60" : ""}>
       <CardContent className="p-4 flex items-start gap-4">
         <div className={[
           "mt-0.5 h-10 w-10 rounded-xl flex items-center justify-center shrink-0",
-          reminder.is_sent ? "bg-primary/10 text-primary" :
           past ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary"
         ].join(" ")}>
-          {reminder.is_sent ? <CheckCircle2 className="h-5 w-5" /> : <Bell className="h-5 w-5" />}
+          {reminder.is_sent && reminder.recurrence === "none"
+            ? <CheckCircle2 className="h-5 w-5" />
+            : reminder.recurrence !== "none"
+            ? <Repeat className="h-5 w-5" />
+            : <Bell className="h-5 w-5" />}
         </div>
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold text-foreground truncate">{reminder.title}</span>
-            {reminder.is_sent && (
-              <Badge variant="secondary" className="text-[10px]">
-                Enviado ✓
+            {reminder.is_sent && reminder.recurrence === "none" && (
+              <Badge variant="secondary" className="text-[10px]">Enviado ✓</Badge>
+            )}
+            {recurrenceLabel && (
+              <Badge variant="outline" className="text-[10px] gap-1">
+                <Repeat className="h-2.5 w-2.5" />{recurrenceLabel}
               </Badge>
             )}
-            {!reminder.is_active && !reminder.is_sent && (
+            {!reminder.is_active && (
               <Badge variant="outline" className="text-muted-foreground text-[10px]">Inativo</Badge>
             )}
           </div>

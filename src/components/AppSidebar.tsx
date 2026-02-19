@@ -7,6 +7,8 @@ import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import {
   Sidebar,
   SidebarContent,
@@ -20,32 +22,49 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 
-const menuItems = [
-  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
-  { title: "Carteira", url: "/dashboard/wallets", icon: Wallet },
-  { title: "Categorias", url: "/dashboard/budgets", icon: Tag },
-  { title: "Cartões", url: "/dashboard/cards", icon: CreditCard },
-  { title: "Compromissos", url: "/dashboard/transactions", icon: CalendarCheck },
-  { title: "Lembretes", url: "/dashboard/reminders", icon: Bell },
-  { title: "Metas", url: "/dashboard/goals", icon: Target },
-  { title: "Investimentos", url: "/dashboard/investments", icon: TrendingUp },
-  { title: "Família", url: "/dashboard/family", icon: Users },
-  { title: "Comportamento", url: "/dashboard/behavior", icon: Brain },
-  { title: "Relatórios", url: "/dashboard/reports", icon: FileText },
-  { title: "Suporte", url: "/dashboard/chat", icon: HeadphonesIcon },
-  { title: "Configurações", url: "/dashboard/settings", icon: Settings },
-];
-
-const adminItems = [
-  { title: "Atendimentos", url: "/dashboard/admin/support", icon: HeadphonesIcon },
-  { title: "Usuários",     url: "/dashboard/admin/users",   icon: Users },
-];
-
 export function AppSidebar() {
   const { signOut, user } = useAuth();
   const { isAdmin } = useIsAdmin();
   const navigate = useNavigate();
   const displayName = user?.user_metadata?.display_name || user?.email?.split("@")[0] || "Usuário";
+
+  // Count upcoming active reminders for badge
+  const { data: reminderCount = 0 } = useQuery({
+    queryKey: ["reminders-count", user?.id],
+    queryFn: async () => {
+      const now = new Date().toISOString();
+      const { count } = await supabase
+        .from("reminders")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user!.id)
+        .eq("is_active", true)
+        .gte("event_at", now);
+      return count ?? 0;
+    },
+    enabled: !!user,
+    refetchInterval: 60_000,
+  });
+
+  const menuItems = [
+    { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, badge: 0 },
+    { title: "Carteira", url: "/dashboard/wallets", icon: Wallet, badge: 0 },
+    { title: "Categorias", url: "/dashboard/budgets", icon: Tag, badge: 0 },
+    { title: "Cartões", url: "/dashboard/cards", icon: CreditCard, badge: 0 },
+    { title: "Compromissos", url: "/dashboard/transactions", icon: CalendarCheck, badge: 0 },
+    { title: "Lembretes", url: "/dashboard/reminders", icon: Bell, badge: reminderCount },
+    { title: "Metas", url: "/dashboard/goals", icon: Target, badge: 0 },
+    { title: "Investimentos", url: "/dashboard/investments", icon: TrendingUp, badge: 0 },
+    { title: "Família", url: "/dashboard/family", icon: Users, badge: 0 },
+    { title: "Comportamento", url: "/dashboard/behavior", icon: Brain, badge: 0 },
+    { title: "Relatórios", url: "/dashboard/reports", icon: FileText, badge: 0 },
+    { title: "Suporte", url: "/dashboard/chat", icon: HeadphonesIcon, badge: 0 },
+    { title: "Configurações", url: "/dashboard/settings", icon: Settings, badge: 0 },
+  ];
+
+  const adminItems = [
+    { title: "Atendimentos", url: "/dashboard/admin/support", icon: HeadphonesIcon },
+    { title: "Usuários",     url: "/dashboard/admin/users",   icon: Users },
+  ];
 
   const handleSignOut = async () => {
     await signOut();
@@ -96,7 +115,14 @@ export function AppSidebar() {
                       className="flex items-center gap-3 text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/50 transition-colors"
                       activeClassName="text-primary font-medium bg-transparent"
                     >
-                      <item.icon className="h-4 w-4 shrink-0" />
+                      <div className="relative shrink-0">
+                        <item.icon className="h-4 w-4" />
+                        {item.badge > 0 && (
+                          <span className="absolute -top-1.5 -right-1.5 h-3.5 w-3.5 rounded-full bg-primary text-primary-foreground text-[9px] font-bold flex items-center justify-center leading-none">
+                            {item.badge > 9 ? "9+" : item.badge}
+                          </span>
+                        )}
+                      </div>
                       <span>{item.title}</span>
                     </NavLink>
                   </SidebarMenuButton>
