@@ -3,6 +3,7 @@ import { AuthModal } from "@/components/AuthModal";
 import { motion, useScroll, useTransform, useInView } from "framer-motion";
 import heroImage from "@/assets/hero-woman.jpg";
 import benefitsImage from "@/assets/hero-benefits.jpg";
+import braveLogoImg from "@/assets/brave-logo.png";
 import {
   MessageSquare, Mic, Camera, Brain, CreditCard, Target, Wallet,
   Users, FileText, Bell, TrendingUp, ChevronRight, Star, Shield,
@@ -15,7 +16,17 @@ import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger,
 } from "@/components/ui/accordion";
 
-const WHATSAPP_LINK = "https://wa.me/5511999999999?text=Quero%20começar%20a%20usar%20o%20Brave%20Assessor";
+function BraveLogo({ size = 32 }: { size?: number }) {
+  return (
+    <img
+      src={braveLogoImg}
+      alt="Brave Assessor Logo"
+      style={{ width: size, height: size, borderRadius: 8, objectFit: "cover" }}
+    />
+  );
+}
+
+const WHATSAPP_LINK = "https://wa.me/5537999385148?text=Quero%20começar%20a%20usar%20o%20Brave%20Assessor";
 
 const easeOut = [0.22, 1, 0.36, 1] as const;
 
@@ -78,7 +89,7 @@ function Header({ onOpenAuth }: { onOpenAuth: () => void }) {
     <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border">
       <div className="container mx-auto flex items-center justify-between h-16 px-4">
         <a href="#" className="flex items-center gap-2 font-bold text-xl text-foreground">
-          <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground text-sm font-extrabold">N</div>
+          <BraveLogo size={32} />
           Brave Assessor
         </a>
         <nav className="hidden md:flex items-center gap-6">
@@ -378,7 +389,7 @@ function SocialProof() {
           <Card className="border-border hover:shadow-lg transition-shadow duration-300">
             <CardContent className="p-6 text-center">
               <p className="text-muted-foreground italic leading-relaxed">
-                "Eu nunca consegui manter uma planilha. Com o Nox, eu só mando um zap e pronto. Já economizei mais de R$ 800 em 3 meses."
+                "Eu nunca consegui manter uma planilha. Com o Brave, eu só mando um zap e pronto. Já economizei mais de R$ 800 em 3 meses."
               </p>
               <p className="mt-4 text-sm font-semibold text-foreground">— Marina S., São Paulo</p>
             </CardContent>
@@ -415,7 +426,7 @@ function Pricing() {
     <section id="planos" className="py-16 md:py-24 bg-secondary/30">
       <div className="container mx-auto px-4">
         <motion.h2 initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} className="text-3xl md:text-4xl font-bold text-center text-foreground">
-          Planos e Preços do Nox Assessor
+          Planos e Preços do Brave Assessor
         </motion.h2>
         <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={stagger} className="mt-12 grid md:grid-cols-2 gap-6 max-w-3xl mx-auto">
           {plans.map((p, i) => (
@@ -459,8 +470,8 @@ function Pricing() {
 
 /* ─── FAQ ─── */
 const faqs = [
-  { q: "O Nox é complicado de usar?", a: "Não! Se você sabe mandar um WhatsApp, já sabe usar o Nox. Sem instalação, sem configuração complicada." },
-  { q: "Preciso entender de finanças?", a: "De jeito nenhum. O Nox traduz tudo em linguagem simples e te dá dicas práticas, sem jargão financeiro." },
+  { q: "O Brave é complicado de usar?", a: "Não! Se você sabe mandar um WhatsApp, já sabe usar o Brave. Sem instalação, sem configuração complicada." },
+  { q: "Preciso entender de finanças?", a: "De jeito nenhum. O Brave traduz tudo em linguagem simples e te dá dicas práticas, sem jargão financeiro." },
   { q: "Meus dados estão seguros?", a: "Sim. Usamos criptografia de ponta a ponta e seguimos todas as normas da LGPD. Seus dados são só seus." },
   { q: "Posso registrar gastos por voz?", a: "Pode sim! Basta mandar um áudio no WhatsApp e a IA transcreve e registra automaticamente." },
   { q: "Posso usar com minha família?", a: "Claro! No plano Anual, você pode adicionar até 5 membros da família para controlar as finanças juntos." },
@@ -492,18 +503,18 @@ function FAQ() {
   );
 }
 
-/* ─── WHY NOX ─── */
+/* ─── WHY BRAVE ─── */
 function WhyNox() {
   return (
     <section className="py-16 md:py-24 bg-secondary/30">
       <div className="container mx-auto px-4 max-w-3xl text-center">
         <motion.h2 initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} className="text-3xl md:text-4xl font-bold text-foreground">
-          Por que escolher o Nox?
+          Por que escolher o Brave?
         </motion.h2>
         <motion.ul initial="hidden" whileInView="visible" viewport={{ once: true }} variants={stagger} className="mt-8 space-y-4 text-left max-w-md mx-auto">
           {[
             "Suporte humanizado via WhatsApp",
-            "Desenvolvido no Brasil, em São Paulo 🇧🇷",
+            "Desenvolvido no Brasil, em Minas Gerais 🇧🇷",
             "+2.000 usuários já organizam suas finanças",
             "4.9 estrelas de avaliação",
           ].map((t, i) => (
@@ -527,7 +538,7 @@ function Footer() {
     <footer className="border-t border-border py-10">
       <div className="container mx-auto px-4 text-center space-y-3">
         <p className="text-sm text-muted-foreground">Hubflows Tecnologia Ltda — CNPJ: 49.084.621/0001-90</p>
-        <p className="text-sm text-muted-foreground">© 2026 Nox Assessor. Todos os direitos reservados.</p>
+        <p className="text-sm text-muted-foreground">© 2026 Brave Assessor. Todos os direitos reservados.</p>
         <div className="flex justify-center gap-4 text-sm">
           <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">Termos de Uso</a>
           <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">Privacidade</a>
@@ -631,7 +642,7 @@ function Benefits() {
             <div className="rounded-3xl overflow-hidden shadow-2xl shadow-primary/10 relative">
               <img
                 src={benefitsImage}
-                alt="Mulher usando o Nox no celular"
+                alt="Mulher usando o Brave no celular"
                 className="w-full h-auto object-cover"
                 loading="lazy"
               />
@@ -669,7 +680,7 @@ function Benefits() {
               Mais controle, <span className="text-primary">menos esforço</span>
             </motion.h2>
             <motion.p variants={fadeUp} className="mt-3 text-muted-foreground">
-              O que você ganha usando o Nox todos os dias
+              O que você ganha usando o Brave todos os dias
             </motion.p>
 
             <div className="mt-8 space-y-3">
@@ -710,7 +721,6 @@ const comparisonRows = [
   { icon: MsgIcon, label: "WhatsApp integrado", planilha: "✕", planilhaX: true, apps: "✕", appsX: true, nylo: "✓", nyloCheck: true },
   { icon: LineChart, label: "Previsões de gastos", planilha: "✕", planilhaX: true, apps: "✕", appsX: true, nylo: "✓", nyloCheck: true },
 ] as const;
-
 function Comparison() {
   return (
     <section className="py-16 md:py-24 bg-secondary/20">
@@ -723,7 +733,7 @@ function Comparison() {
             Por que não usar <span className="text-primary">planilha</span>?
           </motion.h2>
           <motion.p variants={fadeUp} className="mt-3 text-muted-foreground max-w-lg mx-auto">
-            Comparamos o Nox com as alternativas mais comuns para você decidir com clareza
+            Comparamos o Brave com as alternativas mais comuns para você decidir com clareza
           </motion.p>
         </motion.div>
 
@@ -749,7 +759,7 @@ function Comparison() {
                       <div className="text-[10px] md:text-xs text-muted-foreground">Mobills, Guiabolso</div>
                     </th>
                     <th className="p-3 md:p-4 text-center">
-                      <div className="font-semibold text-primary text-xs md:text-sm">Nox</div>
+                      <div className="font-semibold text-primary text-xs md:text-sm">Brave</div>
                       <div className="text-[10px] md:text-xs text-muted-foreground">IA + WhatsApp</div>
                     </th>
                   </tr>

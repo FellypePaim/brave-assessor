@@ -102,7 +102,7 @@ serve(async (req) => {
           ? "\n\n💡 Já na metade do orçamento. Mantenha o foco!"
           : "\n\n✅ Você está no caminho certo. Bom dia produtivo!";
 
-        message = `${greeting}\n\n${summary}${incomeInfo}${tip}\n\n_Nox IA - Seu assessor financeiro 🤖_`;
+        message = `${greeting}\n\n${summary}${incomeInfo}${tip}\n\n_Brave IA - Seu assessor financeiro 🤖_`;
       } else {
         // Night summary
         const greeting = `🌙 Boa noite, ${name}!`;
@@ -115,7 +115,7 @@ serve(async (req) => {
           ? "\n\n🌟 Ótimo dia! Continue assim."
           : "\n\n💪 Amanhã é uma nova oportunidade de equilibrar.";
 
-        message = `${greeting}${todaySummary}${todayTotal}${monthStatus}${encouragement}\n\n_Nox IA - Seu assessor financeiro 🤖_`;
+        message = `${greeting}${todaySummary}${todayTotal}${monthStatus}${encouragement}\n\n_Brave IA - Seu assessor financeiro 🤖_`;
       }
 
       try {

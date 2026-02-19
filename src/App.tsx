@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute, AuthOnlyRoute } from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
@@ -32,6 +32,14 @@ import Install from "./pages/Install";
 
 const queryClient = new QueryClient();
 
+// If running as PWA (standalone), redirect / to /login instead of showing the landing page
+function IndexRoute() {
+  const isStandalone =
+    window.matchMedia("(display-mode: standalone)").matches ||
+    (window.navigator as any).standalone === true;
+  return isStandalone ? <Navigate to="/login" replace /> : <Index />;
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -40,7 +48,7 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <Routes>
-            <Route path="/" element={<Index />} />
+            <Route path="/" element={<IndexRoute />} />
             <Route path="/install" element={<Install />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />

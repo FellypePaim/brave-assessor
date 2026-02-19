@@ -183,57 +183,61 @@ export default function AdminUsers() {
       expiresAt = null;
     }
 
-    // Update profile
-    const { error: profileErr } = await supabase
-      .from("profiles")
-      .update({
-        display_name: editName,
-        subscription_plan: editPlan as any,
-        monthly_income: parseFloat(editIncome) || 0,
-        subscription_expires_at: expiresAt,
-      } as any)
-      .eq("id", editUser.id);
-
-    if (profileErr) {
-      toast({ title: "Erro", description: profileErr.message, variant: "destructive" });
+    // All profile updates go through the edge function (service role bypasses RLS)
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      toast({ title: "Erro", description: "Sessão inválida", variant: "destructive" });
       setSaving(false);
       return;
     }
 
-    // Update role
+    const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+    const baseUrl = `https://${projectId}.supabase.co/functions/v1/admin-update-user`;
+    const headers = { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` };
+
+    // 1. Update plan + expiry + display_name + income via edge function (bypasses RLS)
+    const planRes = await fetch(baseUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        userId: editUser.id,
+        subscription_plan: editPlan,
+        subscription_expires_at: expiresAt,
+        display_name: editName,
+        monthly_income: parseFloat(editIncome) || 0,
+      }),
+    });
+    const planJson = await planRes.json();
+    if (planJson.error) {
+      toast({ title: "Erro ao atualizar plano", description: planJson.error, variant: "destructive" });
+      setSaving(false);
+      return;
+    }
+
+    // 2. Update role if changed
     if (editRole !== editUser.role) {
       await supabase.from("user_roles").delete().eq("user_id", editUser.id);
       await supabase.from("user_roles").insert({ user_id: editUser.id, role: editRole as any });
     }
 
-    // Update email / password via edge function if changed
+    // 3. Update email / password via edge function if changed
     const hasEmail = editEmail.trim() && editEmail !== editUser.email;
     const hasPassword = editPassword.trim().length >= 6;
     if (hasEmail || hasPassword) {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.access_token) {
-        const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
-        const body: Record<string, string> = { userId: editUser.id };
-        if (hasEmail) body.email = editEmail.trim();
-        if (hasPassword) body.password = editPassword;
+      const body: Record<string, string> = { userId: editUser.id };
+      if (hasEmail) body.email = editEmail.trim();
+      if (hasPassword) body.password = editPassword;
 
-        const res = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/admin-update-user`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${session.access_token}`,
-            },
-            body: JSON.stringify(body),
-          }
-        );
-        const json = await res.json();
-        if (json.error) {
-          toast({ title: "Erro ao atualizar auth", description: json.error, variant: "destructive" });
-          setSaving(false);
-          return;
-        }
+      const res = await fetch(baseUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+      });
+      const json = await res.json();
+      if (json.error) {
+        toast({ title: "Erro ao atualizar credenciais", description: json.error, variant: "destructive" });
+        setSaving(false);
+        return;
       }
     }
 
