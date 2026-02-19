@@ -2,7 +2,7 @@ import { useState } from "react";
 import {
   LayoutDashboard, Wallet, CalendarCheck, Sparkles, MoreHorizontal,
   CreditCard, Tag, Target, TrendingUp, Brain, FileText,
-  HeadphonesIcon, Settings, X, Users, Bell,
+  HeadphonesIcon, Settings, X, Users, Bell, ShieldCheck,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -10,6 +10,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 
 const tabs = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Início", end: true },
@@ -31,9 +32,15 @@ const moreItems = [
   { to: "/dashboard/settings", icon: Settings, label: "Configurações" },
 ];
 
+const adminItems = [
+  { to: "/dashboard/admin/support", icon: HeadphonesIcon, label: "Atendimentos" },
+  { to: "/dashboard/admin/users", icon: Users, label: "Usuários" },
+];
+
 export function MobileBottomNav() {
   const [showMore, setShowMore] = useState(false);
   const { user } = useAuth();
+  const { isAdmin } = useIsAdmin();
 
   const { data: reminderCount = 0 } = useQuery({
     queryKey: ["reminders-count", user?.id],
@@ -105,6 +112,34 @@ export function MobileBottomNav() {
                   </NavLink>
                 ))}
               </div>
+
+              {/* Admin section */}
+              {isAdmin && (
+                <>
+                  <div className="flex items-center gap-2 mt-4 mb-2 px-1">
+                    <ShieldCheck className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold">Admin</span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-3">
+                    {adminItems.map((item) => (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
+                        onClick={() => setShowMore(false)}
+                        className={({ isActive }) =>
+                          cn(
+                            "flex flex-col items-center gap-1.5 p-3 rounded-2xl transition-all relative",
+                            isActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"
+                          )
+                        }
+                      >
+                        <item.icon className="h-5 w-5" />
+                        <span className="text-[10px] font-medium leading-tight text-center">{item.label}</span>
+                      </NavLink>
+                    ))}
+                  </div>
+                </>
+              )}
             </motion.div>
           </>
         )}
