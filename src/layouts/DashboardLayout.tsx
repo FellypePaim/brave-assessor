@@ -6,6 +6,7 @@ import { Moon, Sun } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import PlanExpiredModal from "@/components/PlanExpiredModal";
+import WhatsAppBanner from "@/components/WhatsAppBanner";
 
 export default function DashboardLayout() {
   const [dark, setDark] = useState(false);
@@ -37,6 +38,7 @@ export default function DashboardLayout() {
               {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
           </header>
+          <WhatsAppBanner />
           <main className="flex-1 p-4 md:p-6 overflow-auto pb-20 md:pb-6">
             <AnimatedOutlet />
           </main>

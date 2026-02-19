@@ -240,9 +240,9 @@ export default function Dashboard() {
                   <p className="text-xs text-muted-foreground mt-0.5">Registre gastos enviando mensagens como "gastei 50 no mercado" direto pelo WhatsApp</p>
                 </div>
               </div>
-              <Button variant="outline" size="sm" className="mt-3 rounded-full border-emerald-300 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/30" onClick={() => navigate("/dashboard/settings")}>
-                <MessageSquare className="h-3.5 w-3.5 mr-1.5" /> Conectar nas Configurações
-              </Button>
+                <Button variant="outline" size="sm" className="mt-3 rounded-full border-emerald-300 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/30" onClick={() => navigate("/dashboard/settings")}>
+                  <MessageSquare className="h-3.5 w-3.5 mr-1.5" /> Conectar Meu WhatsApp
+                </Button>
             </div>
             <div className="flex items-center justify-between mt-4">
               <div className="flex gap-1.5">
