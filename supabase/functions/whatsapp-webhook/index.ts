@@ -633,13 +633,22 @@ serve(async (req) => {
       await sendWhatsAppMessage(cleanPhone, planMsg);
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    // ── Helper: parse date/time in pt-BR ──
+    // ── Helper: parse date/time in pt-BR (fallback) ──
     function parseDateTimeBR(text: string): Date | null {
       const now = new Date();
       const lower = text.toLowerCase().trim();
+      // Match "12:00 PM/AM" format
+      const timeAmPmMatch = lower.match(/(\d{1,2}):(\d{2})\s*(am|pm)/i);
       const timeMatch = lower.match(/(\d{1,2})(?::(\d{2}))?h(?:(\d{2}))?|(\d{1,2}):(\d{2})/);
       let hour = 0, minute = 0, hasTime = false;
-      if (timeMatch) {
+      if (timeAmPmMatch) {
+        hasTime = true;
+        hour = parseInt(timeAmPmMatch[1]);
+        minute = parseInt(timeAmPmMatch[2]);
+        const period = timeAmPmMatch[3].toLowerCase();
+        if (period === "pm" && hour < 12) hour += 12;
+        if (period === "am" && hour === 12) hour = 0;
+      } else if (timeMatch) {
         hasTime = true;
         if (timeMatch[4] !== undefined) { hour = parseInt(timeMatch[4]); minute = parseInt(timeMatch[5]); }
         else { hour = parseInt(timeMatch[1]); minute = parseInt(timeMatch[3] || timeMatch[2] || "0"); }
@@ -681,14 +690,83 @@ serve(async (req) => {
     }
     function parseRecurrence(text: string): string {
       const lower = text.toLowerCase();
-      if (/\b(todo\s*dia|diário|diario|diariamente)\b/.test(lower)) return "daily";
-      if (/\b(toda\s*semana|semanalmente|semanal)\b/.test(lower)) return "weekly";
-      if (/\b(todo\s*m[eê]s|mensalmente|mensal)\b/.test(lower)) return "monthly";
-      // "toda segunda/terça/quarta/quinta/sexta/sábado/domingo" → weekly
+      if (/\b(todo\s*dia|todos\s*os\s*dias|diário|diario|diariamente)\b/.test(lower)) return "daily";
+      if (/\b(toda\s*semana|todas\s*as\s*semanas|semanalmente|semanal)\b/.test(lower)) return "weekly";
+      if (/\b(todo\s*m[eê]s|todos\s*os\s*meses|mensalmente|mensal)\b/.test(lower)) return "monthly";
       if (/\b(toda\s*(segunda|terça|terca|quarta|quinta|sexta|s[aá]bado|sabado|domingo))\b/.test(lower)) return "weekly";
-      // "todo sábado", "todo domingo"
       if (/\b(todo\s*(sábado|sabado|domingo|segunda|terça|terca|quarta|quinta|sexta))\b/.test(lower)) return "weekly";
+      if (/\b(todas?\s*as?\s*(segunda|terça|terca|quarta|quinta|sexta|s[aá]bado|sabado|domingo))\b/.test(lower)) return "weekly";
       return "none";
+    }
+
+    // ── AI-powered reminder parser using Lovable AI ──
+    async function parseReminderWithAI(text: string): Promise<{
+      title: string;
+      event_at: string | null;
+      recurrence: string;
+      notify_minutes_before: number | null;
+    } | null> {
+      const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+      if (!LOVABLE_API_KEY) return null;
+
+      const nowBR = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "full", timeStyle: "short" });
+
+      const systemPrompt = `Você é um assistente que extrai informações de lembretes a partir de mensagens em português brasileiro.
+A data/hora atual em São Paulo é: ${nowBR}
+
+Retorne APENAS um JSON válido com exatamente estes campos:
+{
+  "title": "nome limpo do lembrete, sem palavras de data/hora/recorrência",
+  "event_at": "ISO 8601 com timezone -03:00 ou null se não houver data/hora clara",
+  "recurrence": "none" | "daily" | "weekly" | "monthly",
+  "notify_minutes_before": número de minutos ou null se não especificado
+}
+
+Regras:
+- title: extraia APENAS o nome/evento, sem "todos os dias", "amanhã", horários etc.
+- event_at: se o usuário diz "todos os dias às 12:00", use hoje às 12:00. Se diz "amanhã 15h", calcule corretamente.
+- recurrence: "todos os dias/todo dia/diário" → "daily", "toda semana/toda segunda/etc" → "weekly", "todo mês" → "monthly"
+- notify_minutes_before: "1h antes" → 60, "30 min antes" → 30, "1 dia antes" → 1440. null se não mencionado.
+- Nunca adicione texto extra fora do JSON.`;
+
+      try {
+        const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "google/gemini-3-flash-preview",
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: text },
+            ],
+            stream: false,
+            temperature: 0,
+          }),
+        });
+
+        if (!resp.ok) {
+          console.error("AI parse error:", resp.status, await resp.text());
+          return null;
+        }
+
+        const data = await resp.json();
+        const content = data.choices?.[0]?.message?.content?.trim() || "";
+        // Strip markdown code fences if present
+        const jsonStr = content.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+        const parsed = JSON.parse(jsonStr);
+        return {
+          title: parsed.title || "",
+          event_at: parsed.event_at || null,
+          recurrence: ["none","daily","weekly","monthly"].includes(parsed.recurrence) ? parsed.recurrence : "none",
+          notify_minutes_before: typeof parsed.notify_minutes_before === "number" ? parsed.notify_minutes_before : null,
+        };
+      } catch (e) {
+        console.error("AI reminder parse failed:", e);
+        return null;
+      }
     }
 
     // Returns human-readable recurrence label with icon
@@ -1224,23 +1302,36 @@ serve(async (req) => {
 
       const reminderText = messageText.replace(reminderTrigger, "").trim();
 
-      // Extract title: everything before date/time keywords or separators
-      let title = reminderText
-        .replace(/,?\s*(amanhã|amanha|hoje|segunda|terça|quarta|quinta|sexta|sábado|sabado|domingo|\d{1,2}\/\d{1,2}|\d{1,2}h|\d{2}:\d{2}).*/i, "")
-        .trim();
-      if (!title) title = reminderText.split(/[,;]/)[0].trim();
-      // Remove "toda/todo" from title when it's a recurrence keyword
-      title = title.replace(/\b(toda|todo)\s*(segunda|terça|terca|quarta|quinta|sexta|sábado|sabado|domingo)\b/gi, "").trim();
+      // ── AI-first parsing, regex fallback ──
+      let title = "";
+      let eventDate: Date | null = null;
+      let notifyMins: number | null = null;
+      let recurrence = "none";
 
-      // Parse date/time
-      const eventDate = parseDateTimeBR(reminderText);
+      const aiParsed = await parseReminderWithAI(reminderText);
+      if (aiParsed) {
+        title = aiParsed.title || reminderText;
+        recurrence = aiParsed.recurrence;
+        notifyMins = aiParsed.notify_minutes_before;
+        if (aiParsed.event_at) {
+          const parsed = new Date(aiParsed.event_at);
+          if (!isNaN(parsed.getTime())) eventDate = parsed;
+        }
+      }
 
-      // Parse notify time ("avisar X antes")
-      const notifyMatch = reminderText.match(/avisar\s+(.+?)(?:\s+antes|\s*$)/i);
-      const notifyMins = notifyMatch ? parseNotifyMinutes(notifyMatch[1]) : null;
-
-      // Parse recurrence
-      const recurrence = parseRecurrence(reminderText);
+      // Fallback to regex if AI didn't extract key fields
+      if (!title) {
+        title = reminderText
+          .replace(/,?\s*(amanhã|amanha|hoje|segunda|terça|quarta|quinta|sexta|sábado|sabado|domingo|\d{1,2}\/\d{1,2}|\d{1,2}h|\d{2}:\d{2}|todos?\s*os?\s*dias?|todo\s*dia|ao|às|as|de|do|da).*/i, "")
+          .trim() || reminderText.split(/[,;]/)[0].trim();
+        title = title.replace(/\b(toda|todo)\s*(segunda|terça|terca|quarta|quinta|sexta|sábado|sabado|domingo)\b/gi, "").trim();
+      }
+      if (!eventDate) eventDate = parseDateTimeBR(reminderText);
+      if (notifyMins === null) {
+        const notifyMatch = reminderText.match(/avisar\s+(.+?)(?:\s+antes|\s*$)/i);
+        notifyMins = notifyMatch ? parseNotifyMinutes(notifyMatch[1]) : null;
+      }
+      if (recurrence === "none") recurrence = parseRecurrence(reminderText);
 
       // Clear any old reminder sessions
       await supabaseAdmin.from("whatsapp_sessions").delete()
@@ -1281,7 +1372,7 @@ serve(async (req) => {
           expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
         });
 
-        const fmtDate = eventDate.toLocaleString("pt-BR", {
+        const fmtDateStr = eventDate.toLocaleString("pt-BR", {
           day: "2-digit", month: "2-digit", year: "numeric",
           hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo",
         });
@@ -1289,7 +1380,7 @@ serve(async (req) => {
 
         await sendWhatsAppButtons(
           cleanPhone,
-          `🔔 *${title || reminderText}*\n📅 ${fmtDate}${recLbl ? `\n${recLbl}` : ""}\n\n⏰ Com quanto tempo de antecedência você quer ser avisado?`,
+          `🔔 *${title || reminderText}*\n📅 ${fmtDateStr}${recLbl ? `\n${recLbl}` : ""}\n\n⏰ Com quanto tempo de antecedência você quer ser avisado?`,
           [{ id: "30m", text: "30 minutos" }, { id: "1h", text: "1 hora" }, { id: "1d", text: "1 dia" }],
           "Ou escreva: 2h, 15 min, 3 horas..."
         );
@@ -1311,7 +1402,7 @@ serve(async (req) => {
         expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
       });
 
-      const fmtDate = eventDate.toLocaleString("pt-BR", {
+      const fmtDateStr = eventDate.toLocaleString("pt-BR", {
         day: "2-digit", month: "2-digit", year: "numeric",
         hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo",
       });
@@ -1325,7 +1416,7 @@ serve(async (req) => {
         cleanPhone,
         `🔔 *Confirmar lembrete?*\n\n` +
         `📝 *${title || reminderText}*\n` +
-        `📅 ${fmtDate}\n` +
+        `📅 ${fmtDateStr}\n` +
         `⏰ Aviso: *${notifyLabel} antes*\n` +
         (recLbl ? `${recLbl}\n` : ""),
         [{ id: "CONFIRM_REMINDER", text: "✅ Confirmar" }, { id: "cancelar", text: "❌ Cancelar" }],
