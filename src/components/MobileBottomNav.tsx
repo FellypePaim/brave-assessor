@@ -2,7 +2,7 @@ import { useState } from "react";
 import {
   LayoutDashboard, Wallet, CalendarCheck, Sparkles, MoreHorizontal,
   CreditCard, Tag, Target, TrendingUp, Brain, FileText,
-  HeadphonesIcon, Settings, X, Users,
+  HeadphonesIcon, Settings, X, Users, Bell,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -18,6 +18,7 @@ const tabs = [
 const moreItems = [
   { to: "/dashboard/cards", icon: CreditCard, label: "Cartões" },
   { to: "/dashboard/budgets", icon: Tag, label: "Categorias" },
+  { to: "/dashboard/reminders", icon: Bell, label: "Lembretes" },
   { to: "/dashboard/goals", icon: Target, label: "Metas" },
   { to: "/dashboard/investments", icon: TrendingUp, label: "Investimentos" },
   { to: "/dashboard/family", icon: Users, label: "Família" },
