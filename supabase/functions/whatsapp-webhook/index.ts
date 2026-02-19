@@ -1319,16 +1319,30 @@ Regras:
           }
 
           // CONFIRM_REMINDER or "sim" or button text "✅ Confirmar"
-          if (/^\s*(sim|s|ok|yes|confirmar|✅|✅ confirmar|CONFIRM_REMINDER)\s*$/i.test(effectiveText) || effectiveText === "CONFIRM_REMINDER") {
+          // Match broadly: button text, buttonId, or natural "sim/ok/confirmar"
+          const isConfirmReminder = 
+            /sim|ok|yes|confirmar/i.test(effectiveText) ||
+            effectiveText.includes("✅") ||
+            effectiveText.toUpperCase().includes("CONFIRM_REMINDER");
+
+          if (isConfirmReminder) {
             // Create the reminder
-            await supabaseAdmin.from("reminders").insert({
+            const { error: reminderInsertError } = await supabaseAdmin.from("reminders").insert({
               user_id: ctx.user_id,
               title: ctx.title,
               description: ctx.description || null,
               event_at: ctx.event_at,
-              notify_minutes_before: ctx.notify_minutes_before,
+              notify_minutes_before: ctx.notify_minutes_before ?? 30,
               recurrence: ctx.recurrence || "none",
+              is_active: true,
+              is_sent: false,
             });
+
+            if (reminderInsertError) {
+              console.error("Error inserting reminder:", reminderInsertError);
+              await sendWhatsAppMessage(cleanPhone, `❌ Erro ao salvar lembrete: ${reminderInsertError.message}`);
+              return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            }
 
             await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
 
@@ -1653,14 +1667,21 @@ Regras:
       }
 
       const now = new Date();
-      const { data: activeReminders } = await supabaseAdmin
+      // For recurring reminders, don't filter by event_at (they repeat indefinitely)
+      // For non-recurring, only show future ones
+      const { data: allUserReminders } = await supabaseAdmin
         .from("reminders")
         .select("id, title, description, event_at, notify_minutes_before, recurrence, is_active")
         .eq("user_id", linkedForReminders.user_id)
         .eq("is_active", true)
-        .gt("event_at", now.toISOString())
         .order("event_at", { ascending: true })
-        .limit(10);
+        .limit(20);
+
+      // Filter: show recurring reminders always + non-recurring only if in the future
+      const activeReminders = (allUserReminders || []).filter((r: any) => {
+        if (r.recurrence && r.recurrence !== "none") return true; // recurring: always show
+        return new Date(r.event_at) > now; // non-recurring: only future
+      }).slice(0, 10);
 
       if (!activeReminders || activeReminders.length === 0) {
         await sendWhatsAppMessage(cleanPhone,
