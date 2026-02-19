@@ -508,20 +508,37 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Check verification code (text only)
+    // Check verification code (text only) — match code anywhere in the message
     if (hasText) {
-      const codeMatch = messageText.match(/^(?:NOX|BRAVE)-(\d{6})$/i);
+      const codeMatch = messageText.match(/(?:NOX|BRAVE)-(\d{6})/i);
       if (codeMatch) {
-        // Support both NOX- and BRAVE- prefixes
-        const prefix = messageText.toUpperCase().startsWith("BRAVE") ? "BRAVE" : "NOX";
-        const code = `${prefix}-${codeMatch[1]}`;
-        const { data: link } = await supabaseAdmin
+        // Try both prefixes to handle already-stored NOX- codes and new BRAVE- codes
+        const digits = codeMatch[1];
+        const bravCode = `BRAVE-${digits}`;
+        const noxCode = `NOX-${digits}`;
+
+        let link = null;
+        // First try BRAVE- prefix (new codes)
+        const { data: linkBrave } = await supabaseAdmin
           .from("whatsapp_links")
           .select("*")
-          .eq("verification_code", code)
+          .eq("verification_code", bravCode)
           .eq("verified", false)
           .gt("expires_at", new Date().toISOString())
           .maybeSingle();
+        if (linkBrave) {
+          link = linkBrave;
+        } else {
+          // Fallback: try NOX- prefix (legacy codes already in DB)
+          const { data: linkNox } = await supabaseAdmin
+            .from("whatsapp_links")
+            .select("*")
+            .eq("verification_code", noxCode)
+            .eq("verified", false)
+            .gt("expires_at", new Date().toISOString())
+            .maybeSingle();
+          if (linkNox) link = linkNox;
+        }
 
         if (!link) {
           await sendWhatsAppMessage(cleanPhone, "❌ Código inválido ou expirado. Gere um novo código no app Brave.");

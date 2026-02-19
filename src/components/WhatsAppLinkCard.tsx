@@ -47,7 +47,7 @@ export default function WhatsAppLinkCard({ userId }: WhatsAppLinkCardProps) {
     if (!userId) return;
     setLoading(true);
 
-    const code = `NOX-${Math.floor(100000 + Math.random() * 900000)}`;
+    const code = `BRAVE-${Math.floor(100000 + Math.random() * 900000)}`;
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
 
     await supabase.from("whatsapp_links").delete().eq("user_id", userId);
