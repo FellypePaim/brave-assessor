@@ -7,6 +7,9 @@ import {
 import { NavLink } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 const tabs = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Início", end: true },
@@ -18,7 +21,7 @@ const tabs = [
 const moreItems = [
   { to: "/dashboard/cards", icon: CreditCard, label: "Cartões" },
   { to: "/dashboard/budgets", icon: Tag, label: "Categorias" },
-  { to: "/dashboard/reminders", icon: Bell, label: "Lembretes" },
+  { to: "/dashboard/reminders", icon: Bell, label: "Lembretes", badge: true },
   { to: "/dashboard/goals", icon: Target, label: "Metas" },
   { to: "/dashboard/investments", icon: TrendingUp, label: "Investimentos" },
   { to: "/dashboard/family", icon: Users, label: "Família" },
@@ -30,6 +33,23 @@ const moreItems = [
 
 export function MobileBottomNav() {
   const [showMore, setShowMore] = useState(false);
+  const { user } = useAuth();
+
+  const { data: reminderCount = 0 } = useQuery({
+    queryKey: ["reminders-count", user?.id],
+    queryFn: async () => {
+      const now = new Date().toISOString();
+      const { count } = await supabase
+        .from("reminders")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user!.id)
+        .eq("is_active", true)
+        .gte("event_at", now);
+      return count ?? 0;
+    },
+    enabled: !!user,
+    refetchInterval: 60_000,
+  });
 
   return (
     <>
@@ -68,12 +88,19 @@ export function MobileBottomNav() {
                     onClick={() => setShowMore(false)}
                     className={({ isActive }) =>
                       cn(
-                        "flex flex-col items-center gap-1.5 p-3 rounded-2xl transition-all",
+                        "flex flex-col items-center gap-1.5 p-3 rounded-2xl transition-all relative",
                         isActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"
                       )
                     }
                   >
-                    <item.icon className="h-5 w-5" />
+                    <div className="relative">
+                      <item.icon className="h-5 w-5" />
+                      {item.badge && reminderCount > 0 && (
+                        <span className="absolute -top-1.5 -right-1.5 h-3.5 w-3.5 rounded-full bg-primary text-primary-foreground text-[9px] font-bold flex items-center justify-center leading-none">
+                          {reminderCount > 9 ? "9+" : reminderCount}
+                        </span>
+                      )}
+                    </div>
                     <span className="text-[10px] font-medium leading-tight text-center">{item.label}</span>
                   </NavLink>
                 ))}
@@ -123,8 +150,13 @@ export function MobileBottomNav() {
               "flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-xl transition-all min-w-[56px] text-muted-foreground"
             )}
           >
-            <div className="flex items-center justify-center w-10 h-8 rounded-full">
+            <div className="flex items-center justify-center w-10 h-8 rounded-full relative">
               <MoreHorizontal className="h-5 w-5" />
+              {reminderCount > 0 && (
+                <span className="absolute top-0.5 right-0.5 h-3 w-3 rounded-full bg-primary text-primary-foreground text-[8px] font-bold flex items-center justify-center leading-none">
+                  {reminderCount > 9 ? "9+" : reminderCount}
+                </span>
+              )}
             </div>
             <span className="text-[10px] leading-tight font-medium">Mais</span>
           </button>

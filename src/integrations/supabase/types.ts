@@ -328,6 +328,7 @@ export type Database = {
           is_active: boolean
           is_sent: boolean
           notify_minutes_before: number
+          recurrence: string
           title: string
           updated_at: string
           user_id: string
@@ -340,6 +341,7 @@ export type Database = {
           is_active?: boolean
           is_sent?: boolean
           notify_minutes_before?: number
+          recurrence?: string
           title: string
           updated_at?: string
           user_id: string
@@ -352,6 +354,7 @@ export type Database = {
           is_active?: boolean
           is_sent?: boolean
           notify_minutes_before?: number
+          recurrence?: string
           title?: string
           updated_at?: string
           user_id?: string
