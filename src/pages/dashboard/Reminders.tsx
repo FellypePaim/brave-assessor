@@ -24,6 +24,8 @@ import { format, isPast } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { EditReminderDialog } from "@/components/EditReminderDialog";
 
+type FilterTab = "todos" | "pontuais" | "recorrentes";
+
 interface Reminder {
   id: string;
   title: string;
@@ -75,6 +77,7 @@ export default function Reminders() {
   const [open, setOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editReminder, setEditReminder] = useState<Reminder | null>(null);
+  const [activeTab, setActiveTab] = useState<FilterTab>("todos");
 
   const [form, setForm] = useState({
     title: "",
@@ -157,8 +160,18 @@ export default function Reminders() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["reminders"] }),
   });
 
-  const upcoming = reminders.filter(r => !isPast(new Date(r.event_at)) && r.is_active);
-  const past = reminders.filter(r => isPast(new Date(r.event_at)) || !r.is_active);
+  const recurring = reminders.filter(r => r.recurrence !== "none");
+  const oneTime = reminders.filter(r => r.recurrence === "none");
+
+  const filteredReminders = (() => {
+    let base = reminders;
+    if (activeTab === "recorrentes") base = recurring;
+    if (activeTab === "pontuais") base = oneTime;
+    return base;
+  })();
+
+  const upcoming = filteredReminders.filter(r => (r.recurrence !== "none" || !isPast(new Date(r.event_at))) && r.is_active);
+  const past = filteredReminders.filter(r => r.recurrence === "none" && (isPast(new Date(r.event_at)) || !r.is_active));
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -175,6 +188,39 @@ export default function Reminders() {
           Novo Lembrete
         </Button>
       </div>
+
+      {/* Filter tabs */}
+      {reminders.length > 0 && (
+        <div className="flex gap-1 bg-muted/50 rounded-xl p-1">
+          {([
+            { key: "todos", label: "Todos", count: reminders.length },
+            { key: "recorrentes", label: "Recorrentes", count: recurring.length, icon: <Repeat className="h-3.5 w-3.5" /> },
+            { key: "pontuais", label: "Pontuais", count: oneTime.length },
+          ] as { key: FilterTab; label: string; count: number; icon?: React.ReactNode }[]).map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={[
+                "flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
+                activeTab === tab.key
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              ].join(" ")}
+            >
+              {tab.icon}
+              {tab.label}
+              {tab.count > 0 && (
+                <span className={[
+                  "text-[10px] px-1.5 py-0.5 rounded-full",
+                  activeTab === tab.key ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground",
+                ].join(" ")}>
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* WhatsApp status banner */}
       {!whatsappLinked && (

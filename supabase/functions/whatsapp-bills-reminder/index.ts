@@ -1,5 +1,5 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -23,35 +23,6 @@ async function sendWhatsAppMessage(phone: string, message: string) {
   return resp;
 }
 
-async function sendWhatsAppWithButton(phone: string, text: string, buttonLabel: string, buttonPayload: string) {
-  const UAZAPI_URL = Deno.env.get("UAZAPI_URL");
-  const UAZAPI_TOKEN = Deno.env.get("UAZAPI_TOKEN");
-  if (!UAZAPI_URL || !UAZAPI_TOKEN) throw new Error("UAZAPI credentials not configured");
-
-  // Try to send with button (interactive message)
-  try {
-    const resp = await fetch(`${UAZAPI_URL}/send/buttonMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", token: UAZAPI_TOKEN },
-      body: JSON.stringify({
-        number: phone,
-        text,
-        buttons: [{ buttonId: buttonPayload, buttonText: { displayText: buttonLabel } }],
-      }),
-    });
-
-    if (resp.ok) {
-      console.log("Button message sent successfully");
-      return;
-    }
-  } catch (e) {
-    console.warn("Button message failed, falling back to text:", e);
-  }
-
-  // Fallback: plain text with instruction
-  await sendWhatsAppMessage(phone, `${text}\n\n👉 Digite *conferir* para ver suas contas.`);
-}
-
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -61,23 +32,13 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Accept either scheduled (no body) or triggered for a specific user
     const body = await req.json().catch(() => ({}));
     const specificUserId: string | undefined = body.userId;
 
-    // Days ahead to look for upcoming bills (default: 3 days)
-    const daysAhead = body.daysAhead ?? 3;
-
-    const today = new Date();
-    const todayStr = today.toISOString().slice(0, 10);
-    const futureDate = new Date(today);
-    futureDate.setDate(today.getDate() + daysAhead);
-    const futureDateStr = futureDate.toISOString().slice(0, 10);
+    const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
     // Get users with WhatsApp linked
-    const profileQuery = supabase
-      .from("profiles")
-      .select("id, display_name");
+    const profileQuery = supabase.from("profiles").select("id, display_name");
     if (specificUserId) profileQuery.eq("id", specificUserId);
 
     const { data: profiles, error: profErr } = await profileQuery;
@@ -92,7 +53,10 @@ serve(async (req) => {
 
     const linkedMap = new Map(links?.map(l => [l.user_id, l.phone_number]) ?? []);
 
-    const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const today = new Date();
+    const todayDay = today.getDate();
+    // Target days ahead: 1 and 3
+    const targetDays = [1, 3];
 
     let sent = 0;
     let skipped = 0;
@@ -101,65 +65,107 @@ serve(async (req) => {
       const phone = linkedMap.get(profile.id);
       if (!phone) { skipped++; continue; }
 
-      // Fetch upcoming unpaid transactions (due_date within daysAhead)
+      const name = profile.display_name || "Usuário";
+
+      // ── 1. Notify about upcoming one-time unpaid transactions (1 or 3 days ahead) ──
+      const todayStr = today.toISOString().slice(0, 10);
+      const threeAhead = new Date(today); threeAhead.setDate(today.getDate() + 3);
+      const threeAheadStr = threeAhead.toISOString().slice(0, 10);
+
       const { data: upcoming } = await supabase
         .from("transactions")
         .select("description, amount, type, due_date, categories(name)")
         .eq("user_id", profile.id)
         .eq("is_paid", false)
         .gte("due_date", todayStr)
-        .lte("due_date", futureDateStr)
+        .lte("due_date", threeAheadStr)
         .order("due_date", { ascending: true })
         .limit(10);
 
       const bills = (upcoming || []).filter(t => t.type === "expense");
       const receivables = (upcoming || []).filter(t => t.type === "income");
 
-      if (bills.length === 0 && receivables.length === 0) {
-        skipped++;
-        continue;
+      if (bills.length > 0 || receivables.length > 0) {
+        let messageLines = [`⚠️ *Olá, ${name}!* Você tem compromissos nos próximos 3 dias:`];
+
+        if (bills.length > 0) {
+          const totalBills = bills.reduce((s, t) => s + Number(t.amount), 0);
+          messageLines.push(`\n📋 *Contas a Pagar:*`);
+          bills.forEach(t => {
+            const catName = (t as any).categories?.name || "Geral";
+            const due = t.due_date ? new Date(t.due_date + "T12:00:00").toLocaleDateString("pt-BR") : "—";
+            const daysUntil = t.due_date
+              ? Math.round((new Date(t.due_date + "T12:00:00").getTime() - today.getTime()) / 86400000)
+              : null;
+            const urgency = daysUntil !== null ? (daysUntil <= 1 ? "🔴 AMANHÃ" : `em ${daysUntil} dias`) : "";
+            messageLines.push(`• *${t.description}* — ${fmt(Number(t.amount))} · vence ${due} ${urgency} · ${catName}`);
+          });
+          messageLines.push(`💸 *Total: ${fmt(totalBills)}*`);
+        }
+
+        if (receivables.length > 0) {
+          const totalRec = receivables.reduce((s, t) => s + Number(t.amount), 0);
+          messageLines.push(`\n💰 *A Receber:*`);
+          receivables.forEach(t => {
+            const due = t.due_date ? new Date(t.due_date + "T12:00:00").toLocaleDateString("pt-BR") : "—";
+            messageLines.push(`• ${t.description} — ${fmt(Number(t.amount))} · previsto ${due}`);
+          });
+          messageLines.push(`✅ *Total: ${fmt(totalRec)}*`);
+        }
+
+        messageLines.push(`\n💬 Envie *conferir* para ver e marcar como pagas.\n_Brave IA - Seu assessor financeiro 🤖_`);
+
+        try {
+          await sendWhatsAppMessage(phone, messageLines.join("\n"));
+          sent++;
+        } catch (e) {
+          console.error(`Failed to send transaction reminder to ${phone}:`, e);
+          skipped++;
+        }
       }
 
-      const name = profile.display_name || "Usuário";
+      // ── 2. Notify about recurring transactions due in 1 or 3 days ──
+      const { data: recurringList } = await supabase
+        .from("recurring_transactions")
+        .select("description, amount, type, day_of_month, categories(name)")
+        .eq("user_id", profile.id)
+        .eq("is_active", true)
+        .eq("type", "expense");
 
-      let messageLines = [`⚠️ *Olá, ${name}!* Você tem compromissos próximos:`];
+      const dueRec: any[] = [];
+      for (const r of recurringList || []) {
+        const day = r.day_of_month;
+        // Calculate the due date for this month (or next if already passed)
+        let dueDate = new Date(today.getFullYear(), today.getMonth(), day);
+        if (dueDate < today) {
+          dueDate = new Date(today.getFullYear(), today.getMonth() + 1, day);
+        }
+        const daysUntil = Math.round((dueDate.getTime() - today.setHours(0, 0, 0, 0)) / 86400000);
 
-      if (bills.length > 0) {
-        const totalBills = bills.reduce((s, t) => s + Number(t.amount), 0);
-        messageLines.push(`\n📋 *Contas a Pagar (próx. ${daysAhead} dias):*`);
-        bills.forEach(t => {
-          const catName = (t as any).categories?.name || "Geral";
-          const due = t.due_date ? new Date(t.due_date + "T12:00:00").toLocaleDateString("pt-BR") : "—";
-          messageLines.push(`• ${t.description} — ${fmt(Number(t.amount))} · vence ${due} · ${catName}`);
+        if (targetDays.includes(daysUntil)) {
+          dueRec.push({ ...r, daysUntil, dueDate });
+        }
+      }
+
+      if (dueRec.length > 0) {
+        const lines: string[] = [`🔁 *Olá, ${name}!* Suas contas recorrentes estão chegando:\n`];
+        dueRec.forEach(r => {
+          const catName = (r as any).categories?.name || "Geral";
+          const due = r.dueDate.toLocaleDateString("pt-BR");
+          const urgency = r.daysUntil === 1 ? "🔴 *AMANHÃ*" : `em ${r.daysUntil} dias`;
+          lines.push(`• *${r.description}* — ${fmt(Number(r.amount))} · vence ${due} (${urgency}) · ${catName}`);
         });
-        messageLines.push(`💸 *Total a pagar: ${fmt(totalBills)}*`);
-      }
+        lines.push(`\n💡 Lembre-se de separar o dinheiro!\n_Brave IA - Seu assessor financeiro 🤖_`);
 
-      if (receivables.length > 0) {
-        const totalRec = receivables.reduce((s, t) => s + Number(t.amount), 0);
-        messageLines.push(`\n💰 *A Receber (próx. ${daysAhead} dias):*`);
-        receivables.forEach(t => {
-          const due = t.due_date ? new Date(t.due_date + "T12:00:00").toLocaleDateString("pt-BR") : "—";
-          messageLines.push(`• ${t.description} — ${fmt(Number(t.amount))} · previsto ${due}`);
-        });
-        messageLines.push(`✅ *Total a receber: ${fmt(totalRec)}*`);
-      }
-
-      messageLines.push(`\n_Brave Assessor - Seu assessor financeiro 🤖_`);
-
-      const message = messageLines.join("\n");
-
-      try {
-        await sendWhatsAppWithButton(
-          phone,
-          message,
-          "Conferir Agora!",
-          "CHECK_BILLS"
-        );
-        sent++;
-        console.log(`Bills reminder sent to ${phone} (user: ${profile.id})`);
-      } catch (e) {
-        console.error(`Failed to send to ${phone}:`, e);
+        try {
+          await sendWhatsAppMessage(phone, lines.join("\n"));
+          sent++;
+          console.log(`Recurring reminder sent to ${phone} (user: ${profile.id}): ${dueRec.length} items`);
+        } catch (e) {
+          console.error(`Failed to send recurring reminder to ${phone}:`, e);
+          skipped++;
+        }
+      } else if (bills.length === 0 && receivables.length === 0) {
         skipped++;
       }
     }

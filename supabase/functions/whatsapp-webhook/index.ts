@@ -860,15 +860,97 @@ Regras:
         const ctx = session.context as any;
         const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-        // ── Step: confirm and save recurring list ──
+        // ── Step: confirm and save recurring list (with inline editing) ──
         if (session.step === "confirm_recurring_list") {
-          const items: any[] = ctx.items || [];
-          const isConfirm = /^(sim|s|confirmar|ok|yes|✅ cadastrar todas|cadastrar todas?)$/i.test(effectiveText);
+          let items: any[] = ctx.items || [];
+          const isConfirm = /sim|ok|yes|confirmar|✅ cadastrar todas|cadastrar todas?/i.test(effectiveText);
           const isCancel  = /^(não|nao|n|cancelar|cancel|❌ cancelar)$/i.test(effectiveText);
+
+          // Helper to re-show the list with editing instructions
+          const showList = async (currentItems: any[]) => {
+            const totalAmount = currentItems.reduce((s: number, i: any) => s + Number(i.amount), 0);
+            const lines = currentItems.map((i: any, idx: number) => {
+              const dayStr = i.day_of_month ? ` · dia ${i.day_of_month}` : "";
+              return `${idx + 1}. *${i.description}* — ${fmt(Number(i.amount))}${dayStr}`;
+            });
+            await sendWhatsAppButtons(
+              cleanPhone,
+              `🔄 *Confirmar ${currentItems.length} recorrências?*\n\n` + lines.join("\n") +
+              `\n\n💸 *Total: ${fmt(totalAmount)}*\n\n` +
+              `✏️ _Para editar antes de confirmar:_\n` +
+              `• _"3 remover"_ — remove o item 3\n` +
+              `• _"2 valor 50"_ — muda valor do item 2\n` +
+              `• _"1 dia 15"_ — muda dia do item 1`,
+              [{ id: "sim", text: "✅ Cadastrar todas" }, { id: "nao", text: "❌ Cancelar" }],
+              "Confirme ou edite os itens"
+            );
+          };
 
           if (isCancel) {
             await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
             await sendWhatsAppMessage(cleanPhone, "❌ Cadastro de recorrências cancelado.");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          // ── Inline edit: "3 remover" ──
+          const removeMatch = effectiveText.match(/^(\d+)\s+remover$/i);
+          if (removeMatch) {
+            const idx = parseInt(removeMatch[1]) - 1;
+            if (idx >= 0 && idx < items.length) {
+              const removed = items[idx];
+              items = items.filter((_: any, i: number) => i !== idx);
+              await supabaseAdmin.from("whatsapp_sessions").update({
+                context: { ...ctx, items },
+                expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+              }).eq("id", session.id);
+              if (items.length === 0) {
+                await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
+                await sendWhatsAppMessage(cleanPhone, `🗑️ *${removed.description}* removido. Lista vazia, cadastro cancelado.`);
+              } else {
+                await sendWhatsAppMessage(cleanPhone, `🗑️ *${removed.description}* removido!`);
+                await showList(items);
+              }
+            } else {
+              await sendWhatsAppMessage(cleanPhone, `❓ Item ${removeMatch[1]} não existe. Use um número entre 1 e ${items.length}.`);
+            }
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          // ── Inline edit: "2 valor 50" ──
+          const valorMatch = effectiveText.match(/^(\d+)\s+valor\s+([\d.,]+)$/i);
+          if (valorMatch) {
+            const idx = parseInt(valorMatch[1]) - 1;
+            const newVal = parseFloat(valorMatch[2].replace(",", "."));
+            if (idx >= 0 && idx < items.length && !isNaN(newVal) && newVal > 0) {
+              items[idx] = { ...items[idx], amount: newVal };
+              await supabaseAdmin.from("whatsapp_sessions").update({
+                context: { ...ctx, items },
+                expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+              }).eq("id", session.id);
+              await sendWhatsAppMessage(cleanPhone, `✅ *${items[idx].description}* atualizado para ${fmt(newVal)}!`);
+              await showList(items);
+            } else {
+              await sendWhatsAppMessage(cleanPhone, `❓ Não entendi. Exemplo: _"2 valor 50"_ para mudar o valor do item 2.`);
+            }
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          // ── Inline edit: "1 dia 15" ──
+          const diaMatch = effectiveText.match(/^(\d+)\s+dia\s+(\d+)$/i);
+          if (diaMatch) {
+            const idx = parseInt(diaMatch[1]) - 1;
+            const newDay = parseInt(diaMatch[2]);
+            if (idx >= 0 && idx < items.length && newDay >= 1 && newDay <= 31) {
+              items[idx] = { ...items[idx], day_of_month: newDay };
+              await supabaseAdmin.from("whatsapp_sessions").update({
+                context: { ...ctx, items },
+                expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+              }).eq("id", session.id);
+              await sendWhatsAppMessage(cleanPhone, `✅ *${items[idx].description}* agora vence todo dia ${newDay}!`);
+              await showList(items);
+            } else {
+              await sendWhatsAppMessage(cleanPhone, `❓ Exemplo: _"1 dia 15"_ para mudar o dia de vencimento do item 1.`);
+            }
             return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
           }
 
@@ -893,31 +975,87 @@ Regras:
               await sendWhatsAppMessage(cleanPhone, `❌ Erro ao cadastrar recorrências: ${recErr.message}`);
             } else {
               const total = items.reduce((s: number, i: any) => s + Number(i.amount), 0);
-              const list = items.map((i: any, idx: number) =>
+              const savedList = items.map((i: any, idx: number) =>
                 `${idx + 1}. ✅ *${i.description}* — ${fmt(Number(i.amount))} · todo dia ${i.day_of_month || new Date().getDate()}`
               ).join("\n");
               await sendWhatsAppMessage(cleanPhone,
-                `🎉 *${items.length} recorrências cadastradas com sucesso!*\n\n` +
-                list +
+                `🎉 *${items.length} recorrências cadastradas!*\n\n` +
+                savedList +
                 `\n\n💸 *Total mensal: ${fmt(total)}*\n\n` +
-                `_Elas aparecerão automaticamente todo mês no seu painel Brave! 📊_`
+                `_Aparecem automaticamente todo mês no painel Brave! 📊_`
               );
             }
             return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
           }
 
-          // Unknown input: re-show confirmation
-          const totalAmount = items.reduce((s: number, i: any) => s + Number(i.amount), 0);
-          const lines = items.map((i: any, idx: number) => {
-            const dayStr = i.day_of_month ? ` · todo dia ${i.day_of_month}` : "";
-            return `${idx + 1}. *${i.description}* — ${fmt(Number(i.amount))}${dayStr}`;
-          });
-          await sendWhatsAppButtons(
-            cleanPhone,
-            `🔄 *Confirmar cadastro de ${items.length} recorrências?*\n\n` + lines.join("\n") + `\n\n💸 *Total: ${fmt(totalAmount)}*`,
-            [{ id: "sim", text: "✅ Cadastrar todas" }, { id: "nao", text: "❌ Cancelar" }],
-            "Confirme para criar as recorrências mensais"
-          );
+          // Unknown input: re-show list with instructions
+          await showList(items);
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // ── Step: managing recurring transactions ──
+        if (session.step === "manage_recurrentes") {
+          const recList: any[] = ctx.recList || [];
+          const fmt2 = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
+
+          if (/^\s*(voltar|sair|cancelar|cancel)\s*$/i.test(effectiveText)) {
+            await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
+            await sendWhatsAppMessage(cleanPhone, "👌 Ok! Até mais.");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          // Match "cancelar X" or just a number
+          const cancelNumMatch = effectiveText.match(/^(?:cancelar\s+)?(\d+)$/i);
+          if (cancelNumMatch) {
+            const allItems = [...(recList.filter((r: any) => r.type === "expense")), ...(recList.filter((r: any) => r.type === "income"))];
+            const idx = parseInt(cancelNumMatch[1]) - 1;
+            const chosen = allItems[idx];
+            if (!chosen) {
+              await sendWhatsAppMessage(cleanPhone, `❓ Item ${cancelNumMatch[1]} não encontrado. Envie um número válido ou *voltar* para sair.`);
+              return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            }
+            // Confirm cancellation
+            await supabaseAdmin.from("whatsapp_sessions").update({
+              step: "confirm_cancel_recurring",
+              context: { ...ctx, chosen_recurring: chosen },
+              expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+            }).eq("id", session.id);
+            await sendWhatsAppButtons(
+              cleanPhone,
+              `⚠️ Cancelar a recorrência *${chosen.description}* (${fmt2(Number(chosen.amount))}/mês · dia ${chosen.day_of_month})?`,
+              [{ id: "sim_cancel_rec", text: "✅ Sim, cancelar" }, { id: "voltar", text: "❌ Não, voltar" }],
+              ""
+            );
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          // Unknown
+          await sendWhatsAppMessage(cleanPhone, `❓ Envie o *número* da recorrência para cancelar, ou *voltar* para sair.\nEx: _"cancelar 2"_`);
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // ── Step: confirming recurring cancellation ──
+        if (session.step === "confirm_cancel_recurring") {
+          const chosen = ctx.chosen_recurring;
+          const isConfirm = /sim|sim_cancel_rec|✅|confirmar/i.test(effectiveText);
+          const isCancel  = /não|nao|voltar|❌/i.test(effectiveText);
+
+          if (isCancel) {
+            await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
+            await sendWhatsAppMessage(cleanPhone, "👌 Operação cancelada. A recorrência continua ativa.");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          if (isConfirm) {
+            await supabaseAdmin.from("recurring_transactions").update({ is_active: false }).eq("id", chosen.id);
+            await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
+            await sendWhatsAppMessage(cleanPhone,
+              `🗑️ Recorrência *${chosen.description}* cancelada com sucesso!\n\n` +
+              `_Ela não será mais gerada nos próximos meses._\n\n` +
+              `_Brave IA - Seu assessor financeiro 🤖_`
+            );
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
@@ -1716,6 +1854,76 @@ Regras:
         `📋 *Seus próximos lembretes (${activeReminders.length}):*\n\n${list}\n\n` +
         `Responda com o *número* para editar ou cancelar um lembrete.\nEnvie *cancelar* para sair.`
       );
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // ── "recorrentes" command — list active recurring transactions ──
+    const recorrentesMatch = /^\s*(recorrentes?|meus\s+recorrentes?|minhas\s+recorr[eê]ncias?|recorr[eê]ncias?|cobran[cç]as?)\s*$/i.test(effectiveText);
+    if (recorrentesMatch) {
+      const { data: linkedForRec } = await supabaseAdmin
+        .from("whatsapp_links")
+        .select("user_id")
+        .eq("phone_number", cleanPhone)
+        .eq("verified", true)
+        .maybeSingle();
+
+      if (!linkedForRec) {
+        await sendWhatsAppMessage(cleanPhone, "❌ Nenhuma conta vinculada. Vincule pelo app Brave primeiro.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const { data: recList } = await supabaseAdmin
+        .from("recurring_transactions")
+        .select("id, description, amount, type, day_of_month, expense_type, categories(name)")
+        .eq("user_id", linkedForRec.user_id)
+        .eq("is_active", true)
+        .order("day_of_month", { ascending: true })
+        .limit(20);
+
+      const fmt2 = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
+
+      if (!recList || recList.length === 0) {
+        await sendWhatsAppMessage(cleanPhone,
+          "📭 Você não tem transações recorrentes ativas.\n\n" +
+          "Para cadastrar, envie uma lista:\n" +
+          "_Netflix R$45\nAcademia R$90\nInternet R$100_\n\n" +
+          "_Brave IA - Seu assessor financeiro 🤖_"
+        );
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const expenses = recList.filter((r: any) => r.type === "expense");
+      const incomes = recList.filter((r: any) => r.type === "income");
+      const totalExp = expenses.reduce((s: number, r: any) => s + Number(r.amount), 0);
+
+      let lines = [`🔁 *Suas recorrências ativas (${recList.length}):*\n`];
+      if (expenses.length > 0) {
+        lines.push("💸 *Despesas:*");
+        expenses.forEach((r: any, i: number) => {
+          const cat = (r as any).categories?.name || "Geral";
+          lines.push(`${i + 1}. *${r.description}* — ${fmt2(Number(r.amount))} · dia ${r.day_of_month} · ${cat}`);
+        });
+        lines.push(`\n💰 *Total mensal: ${fmt2(totalExp)}*`);
+      }
+      if (incomes.length > 0) {
+        lines.push("\n✅ *Receitas:*");
+        incomes.forEach((r: any, i: number) => {
+          lines.push(`${expenses.length + i + 1}. *${r.description}* — ${fmt2(Number(r.amount))} · dia ${r.day_of_month}`);
+        });
+      }
+
+      lines.push(`\nPara cancelar uma recorrência, envie o *número*.\nEx: _"cancelar 2"_\n\nOu envie *voltar* para sair.`);
+
+      // Create session for managing recurring
+      await supabaseAdmin.from("whatsapp_sessions").delete().eq("phone_number", cleanPhone);
+      await supabaseAdmin.from("whatsapp_sessions").insert({
+        phone_number: cleanPhone,
+        step: "manage_recurrentes",
+        context: { user_id: linkedForRec.user_id, recList },
+        expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+      });
+
+      await sendWhatsAppMessage(cleanPhone, lines.join("\n"));
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
