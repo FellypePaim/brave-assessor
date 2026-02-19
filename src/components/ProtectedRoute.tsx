@@ -47,20 +47,23 @@ function usePlanStatus(userId?: string): PlanStatus {
         return;
       }
 
-      // if plan has an expiry, check it
+      // mensal/anual/trimestral: only block if expiry has passed
+      // teste: block as soon as expiry passes (10 min limit)
       if (subscription_expires_at) {
         const expired = new Date(subscription_expires_at) < new Date();
-        setStatus(expired ? "blocked" : "active");
-        return;
+        if (expired) {
+          setStatus("blocked");
+          return;
+        }
       }
 
-      // plan set but no expiry = active (edge case)
+      // Active plan with no expiry or valid expiry
       setStatus("active");
     };
 
     check();
 
-    // recheck every 30s (important for "teste" 10min plan)
+    // Only poll every 30s for "teste" plan (10min limit), otherwise check every 5min
     const interval = setInterval(check, 30_000);
     return () => clearInterval(interval);
   }, [userId]);
