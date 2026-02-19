@@ -54,8 +54,18 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Parse body
-    const { userId, email, password, fetchOnly, deleteUser } = await req.json();
+    // Parse body ONCE
+    const {
+      userId,
+      email,
+      password,
+      fetchOnly,
+      deleteUser,
+      subscription_plan,
+      subscription_expires_at,
+      display_name,
+      monthly_income,
+    } = await req.json();
 
     if (!userId) {
       return new Response(JSON.stringify({ error: "userId is required" }), {
@@ -107,10 +117,31 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Update profile data (plan, expiry, display_name, income) using service role to bypass RLS
+    const profileFieldsToUpdate: Record<string, any> = {};
+    if (subscription_plan !== undefined) profileFieldsToUpdate.subscription_plan = subscription_plan;
+    if (subscription_expires_at !== undefined) profileFieldsToUpdate.subscription_expires_at = subscription_expires_at ?? null;
+    if (display_name !== undefined) profileFieldsToUpdate.display_name = display_name;
+    if (monthly_income !== undefined) profileFieldsToUpdate.monthly_income = monthly_income;
+
+    if (Object.keys(profileFieldsToUpdate).length > 0) {
+      const { error: profileErr } = await adminClient
+        .from("profiles")
+        .update(profileFieldsToUpdate)
+        .eq("id", userId);
+
+      if (profileErr) {
+        return new Response(JSON.stringify({ error: profileErr.message }), {
+          status: 400,
+          headers: corsHeaders,
+        });
+      }
+    }
+
     if (!email && !password) {
       return new Response(
-        JSON.stringify({ error: "email or password is required" }),
-        { status: 400, headers: corsHeaders }
+        JSON.stringify({ success: true }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 

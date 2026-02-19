@@ -34,8 +34,8 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-4 h-12 w-12 rounded-xl bg-primary flex items-center justify-center text-primary-foreground text-xl font-extrabold">
-            N
+          <div className="mx-auto mb-4 h-12 w-12 rounded-xl overflow-hidden">
+            <img src="/icons/icon-192.png" alt="Brave" className="w-full h-full object-cover" />
           </div>
           <CardTitle className="text-2xl">Entrar no Brave</CardTitle>
           <CardDescription>Digite seu email e senha para acessar</CardDescription>
