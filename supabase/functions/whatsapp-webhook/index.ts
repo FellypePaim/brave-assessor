@@ -667,8 +667,35 @@ serve(async (req) => {
       if (/\b(todo\s*dia|diário|diario|diariamente)\b/.test(lower)) return "daily";
       if (/\b(toda\s*semana|semanalmente|semanal)\b/.test(lower)) return "weekly";
       if (/\b(todo\s*m[eê]s|mensalmente|mensal)\b/.test(lower)) return "monthly";
-      if (/\b(toda\s*(segunda|terça|quarta|quinta|sexta|s[aá]bado|domingo))\b/.test(lower)) return "weekly";
+      // "toda segunda/terça/quarta/quinta/sexta/sábado/domingo" → weekly
+      if (/\b(toda\s*(segunda|terça|terca|quarta|quinta|sexta|s[aá]bado|sabado|domingo))\b/.test(lower)) return "weekly";
+      // "todo sábado", "todo domingo"
+      if (/\b(todo\s*(sábado|sabado|domingo|segunda|terça|terca|quarta|quinta|sexta))\b/.test(lower)) return "weekly";
       return "none";
+    }
+
+    // Returns human-readable recurrence label with icon
+    function recurrenceLabel(recurrence: string, eventAt?: string, reminderText?: string): string {
+      const lower = (reminderText || "").toLowerCase();
+      const dayNames: Record<number, string> = { 0: "domingo", 1: "segunda", 2: "terça", 3: "quarta", 4: "quinta", 5: "sexta", 6: "sábado" };
+      if (recurrence === "daily") return "🔁 Diário";
+      if (recurrence === "monthly") return "🔁 Mensal";
+      if (recurrence === "weekly") {
+        // Try to find the specific day
+        if (/segunda/.test(lower)) return "🔁 Toda segunda-feira";
+        if (/terça|terca/.test(lower)) return "🔁 Toda terça-feira";
+        if (/quarta/.test(lower)) return "🔁 Toda quarta-feira";
+        if (/quinta/.test(lower)) return "🔁 Toda quinta-feira";
+        if (/sexta/.test(lower)) return "🔁 Toda sexta-feira";
+        if (/sábado|sabado/.test(lower)) return "🔁 Todo sábado";
+        if (/domingo/.test(lower)) return "🔁 Todo domingo";
+        if (eventAt) {
+          const wd = new Date(eventAt).getDay();
+          return `🔁 Toda ${dayNames[wd] || "semana"}`;
+        }
+        return "🔁 Semanal";
+      }
+      return "";
     }
 
     // ── Session-based multi-step flow (bill payment + reminder creation) ──
@@ -1102,12 +1129,60 @@ serve(async (req) => {
             else if (nm < 1440) notifyLabel = `${nm / 60} hora(s)`;
             else notifyLabel = `${nm / 1440} dia(s)`;
 
+            const recLbl = recurrenceLabel(ctx.recurrence || "none", ctx.event_at, ctx.originalText || "");
+
             await sendWhatsAppMessage(cleanPhone,
               `✅ *Lembrete criado!*\n\n` +
               `🔔 *${ctx.title}*\n` +
               `📅 ${fmtDate(ctx.event_at)}\n` +
-              `⏰ Aviso *${notifyLabel} antes*\n\n` +
-              `_Brave IA - Seu assessor financeiro 🤖_`
+              `⏰ Aviso *${notifyLabel} antes*` +
+              (recLbl ? `\n${recLbl}` : "") +
+              `\n\n_Brave IA - Seu assessor financeiro 🤖_`
+            );
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+        }
+
+        // ── Step: help category selection ──
+        if (session.step === "help_category") {
+          const helpMessages: Record<string, string> = {
+            HELP_FINANCAS: `💰 *Finanças - Comandos disponíveis:*\n\n` +
+              `📝 *Registrar gasto:*\n_"Gastei 50 com almoço"_\n_"Paguei 200 no mercado"_\n\n` +
+              `📸 *Enviar comprovante:*\nEnvie uma foto do recibo ou nota fiscal\n\n` +
+              `🎙️ *Áudio:*\nEnvie um áudio descrevendo a transação\n\n` +
+              `📋 *Ver contas:*\n_"conferir"_ ou _"minhas contas"_\n\n` +
+              `💳 *Pagar conta:*\n_"marcar como pago"_\n\n` +
+              `💬 *Perguntar ao Brave IA:*\n_"Qual meu saldo?"_, _"Quanto gastei esse mês?"_`,
+
+            HELP_LEMBRETES: `🔔 *Lembretes - Comandos disponíveis:*\n\n` +
+              `➕ *Criar lembrete:*\n_"lembrete: reunião amanhã 15h"_\n_"lembrete: médico 25/02 10h, avisar 1h antes"_\n\n` +
+              `🔁 *Criar lembrete recorrente:*\n_"lembrete: academia toda segunda 07h"_\n_"lembrete: reunião toda sexta 14h, avisar 30 min antes"_\n_"lembrete: contas todo mês dia 10, avisar 1 dia antes"_\n\n` +
+              `📋 *Ver lembretes:*\n_"meus lembretes"_ ou _"lembretes"_\n\n` +
+              `✏️ *Editar/Cancelar:*\nEnvie _"meus lembretes"_ e escolha pelo número`,
+
+            HELP_PLANO: `👑 *Plano - Comandos disponíveis:*\n\n` +
+              `📋 *Ver meu plano:*\n_"meu plano"_\n\n` +
+              `💳 *Renovar/Assinar:*\nAcesse o app Brave → Configurações → Planos\n\n` +
+              `🛎️ *Suporte:*\nFale com nossa equipe pelo número\n*+55 37 9981-95029*`,
+
+            HELP_OUTROS: `🌟 *Outros Comandos:*\n\n` +
+              `❓ *Ajuda:*\n_"ajuda"_ ou _"comandos"_\n\n` +
+              `🔗 *Vincular WhatsApp:*\nEnvie o código BRAVE-XXXXXX do app\n\n` +
+              `💡 *Dica:*\nO Brave IA entende linguagem natural! Escreva como preferir e ele interpreta automaticamente.`,
+          };
+
+          // Check which category was requested
+          const catKey = Object.keys(helpMessages).find(k => 
+            effectiveText.toUpperCase().includes(k) || effectiveText.toUpperCase() === k
+          );
+
+          if (catKey) {
+            await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
+            await sendWhatsAppButtons(
+              cleanPhone,
+              helpMessages[catKey],
+              [{ id: "HELP_OUTROS", text: "⚙️ Outros" }, { id: "ajuda", text: "🏠 Menu Ajuda" }],
+              "Ver mais categorias"
             );
             return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
           }
@@ -1137,6 +1212,8 @@ serve(async (req) => {
         .replace(/,?\s*(amanhã|amanha|hoje|segunda|terça|quarta|quinta|sexta|sábado|sabado|domingo|\d{1,2}\/\d{1,2}|\d{1,2}h|\d{2}:\d{2}).*/i, "")
         .trim();
       if (!title) title = reminderText.split(/[,;]/)[0].trim();
+      // Remove "toda/todo" from title when it's a recurrence keyword
+      title = title.replace(/\b(toda|todo)\s*(segunda|terça|terca|quarta|quinta|sexta|sábado|sabado|domingo)\b/gi, "").trim();
 
       // Parse date/time
       const eventDate = parseDateTimeBR(reminderText);
@@ -1153,7 +1230,6 @@ serve(async (req) => {
         .eq("phone_number", cleanPhone).like("step", "reminder_%");
 
       if (!eventDate) {
-        // Ask for date/time
         await supabaseAdmin.from("whatsapp_sessions").insert({
           phone_number: cleanPhone,
           step: "reminder_notify",
@@ -1175,7 +1251,6 @@ serve(async (req) => {
       }
 
       if (notifyMins === null) {
-        // Have date, need notify time
         await supabaseAdmin.from("whatsapp_sessions").insert({
           phone_number: cleanPhone,
           step: "reminder_notify",
@@ -1184,6 +1259,7 @@ serve(async (req) => {
             title: title || reminderText,
             event_at: eventDate.toISOString(),
             recurrence,
+            originalText: reminderText,
           },
           expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
         });
@@ -1192,10 +1268,11 @@ serve(async (req) => {
           day: "2-digit", month: "2-digit", year: "numeric",
           hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo",
         });
+        const recLbl = recurrenceLabel(recurrence, eventDate.toISOString(), reminderText);
 
         await sendWhatsAppButtons(
           cleanPhone,
-          `🔔 *${title || reminderText}*\n📅 ${fmtDate}\n\n⏰ Com quanto tempo de antecedência você quer ser avisado?`,
+          `🔔 *${title || reminderText}*\n📅 ${fmtDate}${recLbl ? `\n${recLbl}` : ""}\n\n⏰ Com quanto tempo de antecedência você quer ser avisado?`,
           [{ id: "30m", text: "30 minutos" }, { id: "1h", text: "1 hora" }, { id: "1d", text: "1 dia" }],
           "Ou escreva: 2h, 15 min, 3 horas..."
         );
@@ -1212,6 +1289,7 @@ serve(async (req) => {
           event_at: eventDate.toISOString(),
           notify_minutes_before: notifyMins,
           recurrence,
+          originalText: reminderText,
         },
         expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
       });
@@ -1224,7 +1302,7 @@ serve(async (req) => {
       if (notifyMins < 60) notifyLabel = `${notifyMins} minutos`;
       else if (notifyMins < 1440) notifyLabel = `${notifyMins / 60} hora(s)`;
       else notifyLabel = `${notifyMins / 1440} dia(s)`;
-      const recLabel: Record<string, string> = { none: "", daily: "🔁 Diário", weekly: "🔁 Semanal", monthly: "🔁 Mensal" };
+      const recLbl = recurrenceLabel(recurrence, eventDate.toISOString(), reminderText);
 
       await sendWhatsAppButtons(
         cleanPhone,
@@ -1232,9 +1310,38 @@ serve(async (req) => {
         `📝 *${title || reminderText}*\n` +
         `📅 ${fmtDate}\n` +
         `⏰ Aviso: *${notifyLabel} antes*\n` +
-        (recLabel[recurrence] ? `${recLabel[recurrence]}\n` : ""),
+        (recLbl ? `${recLbl}\n` : ""),
         [{ id: "CONFIRM_REMINDER", text: "✅ Confirmar" }, { id: "cancelar", text: "❌ Cancelar" }],
         "Toque para confirmar"
+      );
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // ── "ajuda" command — list all available commands with categories ──
+    const ajudaMatch = /^\s*(ajuda|help|comandos|menu|o que você faz|oque voce faz)\s*$/i.test(effectiveText);
+    if (ajudaMatch) {
+      // Check if user is linked so we know context
+      const { data: linkedForHelp } = await supabaseAdmin
+        .from("whatsapp_links")
+        .select("user_id")
+        .eq("phone_number", cleanPhone)
+        .eq("verified", true)
+        .maybeSingle();
+
+      // Show category selection via buttons
+      await supabaseAdmin.from("whatsapp_sessions").delete().eq("phone_number", cleanPhone);
+      await supabaseAdmin.from("whatsapp_sessions").insert({
+        phone_number: cleanPhone,
+        step: "help_category",
+        context: { linked: !!linkedForHelp },
+        expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      });
+
+      await sendWhatsAppButtons(
+        cleanPhone,
+        `🤖 *Brave IA - Central de Ajuda*\n\nEscolha uma categoria para ver os comandos disponíveis:`,
+        [{ id: "HELP_FINANCAS", text: "💰 Finanças" }, { id: "HELP_LEMBRETES", text: "🔔 Lembretes" }, { id: "HELP_PLANO", text: "👑 Plano" }],
+        "Ou escolha outra categoria abaixo"
       );
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
