@@ -5,11 +5,18 @@ import { supabase } from "@/integrations/supabase/client";
 
 type PlanStatus = "loading" | "active" | "blocked";
 
-function usePlanStatus(userId?: string): PlanStatus {
+function usePlanStatus(userId?: string, authLoading?: boolean): PlanStatus {
   const [status, setStatus] = useState<PlanStatus>("loading");
 
   useEffect(() => {
+    // Don't evaluate plan status until auth has resolved
+    if (authLoading) {
+      setStatus("loading");
+      return;
+    }
+
     if (!userId) {
+      // Auth resolved but no user — let ProtectedRoute handle redirect to /login
       setStatus("blocked");
       return;
     }
@@ -73,7 +80,7 @@ function usePlanStatus(userId?: string): PlanStatus {
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
-  const planStatus = usePlanStatus(user?.id);
+  const planStatus = usePlanStatus(user?.id, loading);
 
   if (loading || planStatus === "loading") {
     return (
