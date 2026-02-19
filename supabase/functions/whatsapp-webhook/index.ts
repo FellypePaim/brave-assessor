@@ -614,6 +614,217 @@ serve(async (req) => {
       await sendWhatsAppMessage(cleanPhone, planMsg);
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+    // ── Session-based multi-step flow (bill payment) ──
+    {
+      const { data: session } = await supabaseAdmin
+        .from("whatsapp_sessions")
+        .select("*")
+        .eq("phone_number", cleanPhone)
+        .gt("expires_at", new Date().toISOString())
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (session) {
+        const ctx = session.context as any;
+        const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+        // ── Step: waiting for user to pick which bill to mark as paid ──
+        if (session.step === "bill_selection") {
+          const bills: any[] = ctx.bills || [];
+
+          // Cancel command
+          if (/^\s*(cancelar|cancel|sair|exit)\s*$/i.test(effectiveText)) {
+            await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
+            await sendWhatsAppMessage(cleanPhone, "❌ Operação cancelada.");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          // Try to match by number (1, 2, 3...) or partial description
+          let matched: any = null;
+          const numMatch = effectiveText.match(/^(\d+)$/);
+          if (numMatch) {
+            const idx = parseInt(numMatch[1]) - 1;
+            if (idx >= 0 && idx < bills.length) matched = bills[idx];
+          } else {
+            matched = bills.find((b: any) =>
+              b.description.toLowerCase().includes(effectiveText.toLowerCase())
+            );
+          }
+
+          if (!matched) {
+            const opts = bills.map((b: any, i: number) => `${i + 1}. ${b.description} — ${fmt(Number(b.amount))}`).join("\n");
+            await sendWhatsAppMessage(cleanPhone,
+              `❓ Não encontrei essa conta. Responda com o *número* da conta:\n\n${opts}\n\nOu envie *cancelar* para sair.`
+            );
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          // Fetch user wallets
+          const { data: wallets } = await supabaseAdmin
+            .from("wallets")
+            .select("id, name, balance, type")
+            .eq("user_id", ctx.user_id)
+            .order("created_at", { ascending: true });
+
+          // Update session to wallet_selection step
+          await supabaseAdmin
+            .from("whatsapp_sessions")
+            .update({
+              step: "wallet_selection",
+              context: { ...ctx, selected_bill: matched, wallets: wallets || [] },
+              expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+            })
+            .eq("id", session.id);
+
+          const walletList = (wallets || []).map((w: any, i: number) =>
+            `${i + 1}. ${w.name} — saldo: ${fmt(Number(w.balance))}`
+          ).join("\n");
+
+          const due = matched.due_date
+            ? new Date(matched.due_date + "T12:00:00").toLocaleDateString("pt-BR")
+            : "—";
+
+          await sendWhatsAppMessage(cleanPhone,
+            `✅ *${matched.description}* selecionada!\n` +
+            `💵 Valor: ${fmt(Number(matched.amount))} · vence ${due}\n\n` +
+            `💳 De qual conta/carteira saiu o pagamento?\n\n${walletList}\n\n` +
+            `Responda com o *número* ou *nome* da carteira. Ou envie *cancelar*.`
+          );
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // ── Step: waiting for wallet selection ──
+        if (session.step === "wallet_selection") {
+          const selectedBill: any = ctx.selected_bill;
+          const wallets: any[] = ctx.wallets || [];
+
+          // Cancel command
+          if (/^\s*(cancelar|cancel|sair|exit)\s*$/i.test(effectiveText)) {
+            await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
+            await sendWhatsAppMessage(cleanPhone, "❌ Operação cancelada.");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          let matchedWallet: any = null;
+          const numMatch = effectiveText.match(/^(\d+)$/);
+          if (numMatch) {
+            const idx = parseInt(numMatch[1]) - 1;
+            if (idx >= 0 && idx < wallets.length) matchedWallet = wallets[idx];
+          } else {
+            matchedWallet = wallets.find((w: any) =>
+              w.name.toLowerCase().includes(effectiveText.toLowerCase())
+            );
+          }
+
+          if (!matchedWallet) {
+            const opts = wallets.map((w: any, i: number) => `${i + 1}. ${w.name} — ${fmt(Number(w.balance))}`).join("\n");
+            await sendWhatsAppMessage(cleanPhone,
+              `❓ Não encontrei essa carteira. Responda com o *número*:\n\n${opts}\n\nOu envie *cancelar*.`
+            );
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          // Mark the bill as paid
+          const { error: updateErr } = await supabaseAdmin
+            .from("transactions")
+            .update({ is_paid: true })
+            .eq("id", selectedBill.id)
+            .eq("user_id", ctx.user_id);
+
+          if (updateErr) {
+            await sendWhatsAppMessage(cleanPhone, `❌ Erro ao marcar como pago: ${updateErr.message}`);
+            await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          // Deduct amount from wallet
+          const newBalance = Number(matchedWallet.balance) - Number(selectedBill.amount);
+          await supabaseAdmin
+            .from("wallets")
+            .update({ balance: newBalance })
+            .eq("id", matchedWallet.id);
+
+          // Clean up session
+          await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
+
+          await sendWhatsAppMessage(cleanPhone,
+            `✅ *Conta paga com sucesso!*\n\n` +
+            `📝 ${selectedBill.description}\n` +
+            `💵 ${fmt(Number(selectedBill.amount))}\n` +
+            `💳 Debitado de: *${matchedWallet.name}*\n` +
+            `💰 Novo saldo da carteira: ${fmt(newBalance)}\n\n` +
+            `_Brave Assessor - Seu assessor financeiro 🤖_`
+          );
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+      }
+    }
+
+    // ── "MARK_PAID" button click — start bill payment flow ──
+    if (effectiveText === "MARK_PAID" || /^\s*(marcar.?como.?pago|pagar.?conta|marcar.?pago)\s*$/i.test(effectiveText)) {
+      const { data: linkedForPay } = await supabaseAdmin
+        .from("whatsapp_links")
+        .select("user_id")
+        .eq("phone_number", cleanPhone)
+        .eq("verified", true)
+        .maybeSingle();
+
+      if (!linkedForPay) {
+        await sendWhatsAppMessage(cleanPhone, "❌ Nenhuma conta vinculada. Vincule pelo app Brave primeiro.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const today = new Date();
+      const todayStr = today.toISOString().slice(0, 10);
+      const futureDate = new Date(today);
+      futureDate.setDate(today.getDate() + 30);
+      const futureDateStr = futureDate.toISOString().slice(0, 10);
+
+      const { data: upcomingForPay } = await supabaseAdmin
+        .from("transactions")
+        .select("id, description, amount, type, due_date, categories(name)")
+        .eq("user_id", linkedForPay.user_id)
+        .eq("is_paid", false)
+        .eq("type", "expense")
+        .gte("due_date", todayStr)
+        .lte("due_date", futureDateStr)
+        .order("due_date", { ascending: true })
+        .limit(10);
+
+      const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      const payBills = upcomingForPay || [];
+
+      if (payBills.length === 0) {
+        await sendWhatsAppMessage(cleanPhone, "✅ Nenhuma conta a pagar nos próximos 30 dias. Tudo em dia! 🎉");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Create session for bill_selection
+      await supabaseAdmin
+        .from("whatsapp_sessions")
+        .delete()
+        .eq("phone_number", cleanPhone); // clear any old sessions
+
+      await supabaseAdmin.from("whatsapp_sessions").insert({
+        phone_number: cleanPhone,
+        step: "bill_selection",
+        context: { user_id: linkedForPay.user_id, bills: payBills },
+        expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+      });
+
+      const list = payBills.map((b: any, i: number) => {
+        const due = b.due_date ? new Date(b.due_date + "T12:00:00").toLocaleDateString("pt-BR") : "—";
+        return `${i + 1}. ${b.description} — ${fmt(Number(b.amount))} · vence ${due}`;
+      }).join("\n");
+
+      await sendWhatsAppMessage(cleanPhone,
+        `💳 *Qual conta deseja marcar como paga?*\n\n${list}\n\n` +
+        `Responda com o *número* ou *nome* da conta.\nOu envie *cancelar* para sair.`
+      );
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     // ── "conferir" / CHECK_BILLS command — show upcoming unpaid bills ──
     const checkBillsMatch = /^\s*(conferir|check.?bills|ver.?contas|minhas.?contas|contas)\s*$/i.test(effectiveText) || effectiveText === "CHECK_BILLS";
     if (checkBillsMatch) {
@@ -637,7 +848,7 @@ serve(async (req) => {
 
       const { data: upcoming } = await supabaseAdmin
         .from("transactions")
-        .select("description, amount, type, due_date, is_paid, categories(name)")
+        .select("id, description, amount, type, due_date, is_paid, categories(name)")
         .eq("user_id", linkedForBills.user_id)
         .eq("is_paid", false)
         .gte("due_date", todayStr)
@@ -659,10 +870,10 @@ serve(async (req) => {
       if (bills.length > 0) {
         const total = bills.reduce((s: number, t: any) => s + Number(t.amount), 0);
         lines.push("\n💸 *A Pagar:*");
-        bills.forEach((t: any) => {
+        bills.forEach((t: any, i: number) => {
           const cat = (t as any).categories?.name || "Geral";
           const due = t.due_date ? new Date(t.due_date + "T12:00:00").toLocaleDateString("pt-BR") : "—";
-          lines.push(`• ${t.description} — ${fmt(Number(t.amount))} · vence ${due} · ${cat}`);
+          lines.push(`${i + 1}. ${t.description} — ${fmt(Number(t.amount))} · vence ${due} · ${cat}`);
         });
         lines.push(`💸 *Total a pagar: ${fmt(total)}*`);
       }
@@ -678,7 +889,20 @@ serve(async (req) => {
       }
 
       lines.push("\n_Brave Assessor - Seu assessor financeiro 🤖_");
+
+      // Send the bill list first
       await sendWhatsAppMessage(cleanPhone, lines.join("\n"));
+
+      // If there are bills to pay, also send the "Marcar como Pago" button
+      if (bills.length > 0) {
+        await sendWhatsAppButtons(
+          cleanPhone,
+          "Deseja marcar alguma conta como paga?",
+          [{ id: "MARK_PAID", text: "💳 Marcar como Pago" }],
+          "Clique para iniciar"
+        );
+      }
+
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
