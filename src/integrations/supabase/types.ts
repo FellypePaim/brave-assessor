@@ -319,6 +319,45 @@ export type Database = {
           },
         ]
       }
+      reminders: {
+        Row: {
+          created_at: string
+          description: string | null
+          event_at: string
+          id: string
+          is_active: boolean
+          is_sent: boolean
+          notify_minutes_before: number
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          event_at: string
+          id?: string
+          is_active?: boolean
+          is_sent?: boolean
+          notify_minutes_before?: number
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          event_at?: string
+          id?: string
+          is_active?: boolean
+          is_sent?: boolean
+          notify_minutes_before?: number
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       support_conversations: {
         Row: {
           created_at: string

@@ -27,6 +27,7 @@ import AdminSupport from "./pages/dashboard/AdminSupport";
 import AdminUsers from "./pages/dashboard/AdminUsers";
 import Settings from "./pages/dashboard/Settings";
 import NyloChat from "./pages/dashboard/NyloChat";
+import Reminders from "./pages/dashboard/Reminders";
 import NotFound from "./pages/NotFound";
 import Install from "./pages/Install";
 
@@ -97,6 +98,7 @@ const App = () => (
               <Route path="admin/support" element={<AdminSupport />} />
               <Route path="admin/users" element={<AdminUsers />} />
               <Route path="brave-ia" element={<NyloChat />} />
+              <Route path="reminders" element={<Reminders />} />
             </Route>
 
             <Route path="*" element={<NotFound />} />

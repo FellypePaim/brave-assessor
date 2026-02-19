@@ -35,3 +35,6 @@ verify_jwt = false
 
 [functions.whatsapp-bills-reminder]
 verify_jwt = false
+
+[functions.send-reminders]
+verify_jwt = false
