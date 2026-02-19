@@ -1519,13 +1519,16 @@ Regras:
               `🎙️ *Áudio:*\nEnvie um áudio descrevendo a transação\n\n` +
               `📋 *Ver contas:*\n_"conferir"_ ou _"minhas contas"_\n\n` +
               `💳 *Pagar conta:*\n_"marcar como pago"_\n\n` +
+              `🔄 *Transações recorrentes:*\n_"recorrentes"_ → lista e cancela recorrências ativas\n\n` +
+              `✏️ *Editar lista antes de confirmar:*\n_"3 remover"_ → remove item 3\n_"2 valor 50"_ → altera valor do item 2\n_"1 dia 15"_ → altera dia de vencimento do item 1\n\n` +
               `💬 *Perguntar ao Brave IA:*\n_"Qual meu saldo?"_, _"Quanto gastei esse mês?"_`,
 
             HELP_LEMBRETES: `🔔 *Lembretes - Comandos disponíveis:*\n\n` +
               `➕ *Criar lembrete:*\n_"lembrete: reunião amanhã 15h"_\n_"lembrete: médico 25/02 10h, avisar 1h antes"_\n\n` +
               `🔁 *Criar lembrete recorrente:*\n_"lembrete: academia toda segunda 07h"_\n_"lembrete: reunião toda sexta 14h, avisar 30 min antes"_\n_"lembrete: contas todo mês dia 10, avisar 1 dia antes"_\n\n` +
               `📋 *Ver lembretes:*\n_"meus lembretes"_ ou _"lembretes"_\n\n` +
-              `✏️ *Editar/Cancelar:*\nEnvie _"meus lembretes"_ e escolha pelo número`,
+              `✏️ *Editar lembrete:*\n_"editar lembrete 2"_ → edita o lembrete nº 2 da lista\n\n` +
+              `❌ *Cancelar lembrete:*\nEnvie _"meus lembretes"_ e escolha pelo número`,
 
             HELP_PLANO: `👑 *Plano - Comandos disponíveis:*\n\n` +
               `📋 *Ver meu plano:*\n_"meu plano"_\n\n` +
@@ -1534,6 +1537,8 @@ Regras:
 
             HELP_OUTROS: `🌟 *Outros Comandos:*\n\n` +
               `❓ *Ajuda:*\n_"ajuda"_ ou _"comandos"_\n\n` +
+              `📊 *Resumo financeiro:*\n_"resumo"_ ou _"meu resumo"_\n\n` +
+              `🔄 *Recorrentes:*\n_"recorrentes"_ → ver e cancelar transações fixas\n\n` +
               `🔗 *Vincular WhatsApp:*\nEnvie o código BRAVE-XXXXXX do app\n\n` +
               `💡 *Dica:*\nO Brave IA entende linguagem natural! Escreva como preferir e ele interpreta automaticamente.`,
           };
