@@ -2108,27 +2108,71 @@ Regras:
 
     const userId = link.user_id;
 
-    // Get financial context
+    // Get financial context (unified — includes data created via website AND WhatsApp)
+    const now = new Date();
+    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+    const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+
     const [
       { data: profile },
       { data: wallets },
       { data: categories },
       { data: recentTx },
+      { data: activeReminders },
+      { data: recurringTx },
     ] = await Promise.all([
       supabaseAdmin.from("profiles").select("display_name, monthly_income").eq("id", userId).single(),
       supabaseAdmin.from("wallets").select("name, type, balance, id").eq("user_id", userId),
       supabaseAdmin.from("categories").select("id, name, icon, budget_limit").eq("user_id", userId),
       supabaseAdmin.from("transactions").select("amount, type, description, date, categories(name)")
         .eq("user_id", userId).order("date", { ascending: false }).limit(10),
+      supabaseAdmin.from("reminders")
+        .select("title, description, event_at, recurrence, is_active")
+        .eq("user_id", userId)
+        .eq("is_active", true)
+        .order("event_at", { ascending: true })
+        .limit(10),
+      supabaseAdmin.from("recurring_transactions")
+        .select("description, amount, type, day_of_month, categories(name)")
+        .eq("user_id", userId)
+        .eq("is_active", true)
+        .order("day_of_month", { ascending: true })
+        .limit(15),
     ]);
 
     const totalBalance = (wallets || []).reduce((s: number, w: any) => s + Number(w.balance), 0);
+
+    // Format reminders for context (both from website and WhatsApp)
+    const futureReminders = (activeReminders || []).filter((r: any) =>
+      r.recurrence !== "none" || new Date(r.event_at) > now
+    );
+    const remindersCtx = futureReminders.length > 0
+      ? futureReminders.slice(0, 5).map((r: any) => {
+          const dt = new Date(r.event_at).toLocaleString("pt-BR", {
+            day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+            timeZone: "America/Sao_Paulo",
+          });
+          const rec = r.recurrence && r.recurrence !== "none" ? ` (${r.recurrence})` : "";
+          return `${r.title}${rec} em ${dt}`;
+        }).join("; ")
+      : "nenhum";
+
+    // Format recurring transactions for context
+    const recurringCtx = (recurringTx || []).length > 0
+      ? (recurringTx || []).slice(0, 8).map((r: any) =>
+          `${r.description} R$${Number(r.amount).toFixed(2)} dia ${r.day_of_month}`
+        ).join("; ")
+      : "nenhuma";
+
     const financialContext = `
 Nome: ${profile?.display_name || "Usuário"}
 Renda: R$ ${profile?.monthly_income ? Number(profile.monthly_income).toFixed(2) : "?"}
 Saldo: R$ ${totalBalance.toFixed(2)}
+Carteiras: ${(wallets || []).map((w: any) => `${w.name} R$${Number(w.balance).toFixed(2)}`).join(", ") || "nenhuma"}
 Categorias: ${(categories || []).map((c: any) => `${c.name} (id:${c.id})`).join(", ")}
-Últimas transações: ${(recentTx || []).slice(0, 5).map((t: any) => `${t.type === "income" ? "+" : "-"}R$${Number(t.amount).toFixed(2)} ${t.description}`).join("; ") || "nenhuma"}`;
+Últimas transações: ${(recentTx || []).slice(0, 5).map((t: any) => `${t.type === "income" ? "+" : "-"}R$${Number(t.amount).toFixed(2)} ${t.description}`).join("; ") || "nenhuma"}
+Lembretes ativos: ${remindersCtx}
+Recorrências ativas: ${recurringCtx}`;
 
     // ── PRIORITY 1: Check if user is interacting with a pending transaction ──
     // This must happen BEFORE calling AI, so button clicks get handled immediately
