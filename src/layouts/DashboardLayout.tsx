@@ -7,6 +7,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import PlanExpiredModal from "@/components/PlanExpiredModal";
 import WhatsAppBanner from "@/components/WhatsAppBanner";
+import PWAInstallBanner from "@/components/PWAInstallBanner";
 
 export default function DashboardLayout() {
   const [dark, setDark] = useState(false);
@@ -39,6 +40,7 @@ export default function DashboardLayout() {
             </Button>
           </header>
           <WhatsAppBanner />
+          <PWAInstallBanner />
           <main className="flex-1 p-4 md:p-6 overflow-auto pb-20 md:pb-6">
             <AnimatedOutlet />
           </main>
