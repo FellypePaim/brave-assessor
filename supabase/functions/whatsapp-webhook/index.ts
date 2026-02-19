@@ -1795,7 +1795,7 @@ Regras:
     }
 
     // ── "meus lembretes" command — list active reminders ──
-    const meusLembretesMatch = /^\s*(meus\s+lembretes|lembretes|ver\s+lembretes|meus\s+compromissos)\s*$/i.test(effectiveText);
+    const meusLembretesMatch = /^\s*(qual\s+)?(meus\s+lembretes|lembretes|ver\s+lembretes|meus\s+compromissos|quais\s+(meus\s+)?lembretes|listar\s+lembretes|mostrar\s+lembretes)\s*$/i.test(effectiveText);
     if (meusLembretesMatch) {
       const { data: linkedForReminders } = await supabaseAdmin
         .from("whatsapp_links")
