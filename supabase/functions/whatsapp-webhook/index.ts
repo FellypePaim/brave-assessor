@@ -1552,7 +1552,11 @@ Regras:
             HELP_OUTROS: `🌟 *Outros Comandos:*\n\n` +
               `❓ *Ajuda:*\n_"ajuda"_ ou _"comandos"_\n\n` +
               `💳 *Saldo por carteira:*\n_"saldo"_ → ver saldo de cada carteira + total\n\n` +
-              `🎯 *Metas financeiras:*\n_"metas"_ → ver e criar metas\n_"meta: Viagem"_ → criar meta diretamente\n\n` +
+              `💳 *Cartões de crédito:*\n_"cartões"_ ou _"meus cartões"_ → fatura, limite e vencimento\n\n` +
+              `🏷️ *Categorias e orçamentos:*\n_"categorias"_ ou _"orçamentos"_ → gastos por categoria e limites\n\n` +
+              `📈 *Cotações do mercado:*\n_"mercado"_ ou _"cotações"_ → dólar, bitcoin, ibovespa\n\n` +
+              `🩺 *Saúde financeira:*\n_"comportamento"_ ou _"saúde"_ → análise do seu perfil\n\n` +
+              `🎯 *Metas financeiras:*\n_"metas"_ → ver e criar metas\n_"meta: Viagem"_ → criar meta diretamente\n_"aporte"_ → depositar em uma meta\n\n` +
               `📊 *Resumo financeiro:*\n_"resumo"_ ou _"meu resumo"_\n\n` +
               `💡 *Dica personalizada:*\n_"dica"_ → IA gera uma dica baseada no seu perfil de gastos\n\n` +
               `🔄 *Recorrentes:*\n_"recorrentes"_ → ver e cancelar transações fixas\n\n` +
@@ -1684,6 +1688,83 @@ Regras:
             [{ id: "GOAL_CONFIRM_YES", text: "✅ Criar Meta" }, { id: "GOAL_CONFIRM_NO", text: "❌ Cancelar" }],
             "Confirme para salvar"
           );
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // ── Step: aporte — select goal ──
+        if (session.step === "aporte_select_goal") {
+          const goalsList: any[] = ctx.goalsList || [];
+          const isCancel = /^(cancelar|cancel|sair|voltar)$/i.test(effectiveText);
+          if (isCancel) {
+            await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
+            await sendWhatsAppMessage(cleanPhone, "❌ Aporte cancelado.");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+          let matched: any = null;
+          const numMatch = effectiveText.match(/^(\d+)$/);
+          if (numMatch) {
+            const idx = parseInt(numMatch[1]) - 1;
+            if (idx >= 0 && idx < goalsList.length) matched = goalsList[idx];
+          } else {
+            matched = goalsList.find((g: any) => g.name.toLowerCase().includes(effectiveText.toLowerCase()));
+          }
+          if (!matched) {
+            const opts = goalsList.map((g: any, i: number) => `${i + 1}. ${g.name}`).join("\n");
+            await sendWhatsAppMessage(cleanPhone, `❓ Não encontrei essa meta. Responda com o *número*:\n\n${opts}\n\nOu envie *cancelar*.`);
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+          await supabaseAdmin.from("whatsapp_sessions").update({
+            step: "aporte_enter_amount",
+            context: { ...ctx, selected_goal: matched },
+            expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+          }).eq("id", session.id);
+          const fmtA = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+          const pct = Math.round((Number(matched.current_amount) / Number(matched.target_amount)) * 100);
+          await sendWhatsAppMessage(cleanPhone,
+            `🎯 *${matched.name}*\n` +
+            `💰 Progresso: ${fmtA(Number(matched.current_amount))} / ${fmtA(Number(matched.target_amount))} (${pct}%)\n\n` +
+            `💵 Quanto deseja depositar?\n\nEx: _500_, _R$ 1.000_, _250,00_`
+          );
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // ── Step: aporte — enter amount and confirm ──
+        if (session.step === "aporte_enter_amount") {
+          const isCancel = /^(cancelar|cancel|sair)$/i.test(effectiveText);
+          if (isCancel) {
+            await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
+            await sendWhatsAppMessage(cleanPhone, "❌ Aporte cancelado.");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+          const amtRaw = effectiveText.replace(/[r$\s.]/gi, "").replace(",", ".");
+          const amount = parseFloat(amtRaw);
+          if (isNaN(amount) || amount <= 0) {
+            await sendWhatsAppMessage(cleanPhone, "❓ Não entendi o valor. Digite um número, ex: _500_ ou _R$ 1.000_");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+          const goal = ctx.selected_goal;
+          const newAmount = Number(goal.current_amount) + amount;
+          const { error: upErr } = await supabaseAdmin.from("financial_goals")
+            .update({ current_amount: newAmount })
+            .eq("id", goal.id);
+          await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
+          if (upErr) {
+            await sendWhatsAppMessage(cleanPhone, `❌ Erro ao registrar aporte: ${upErr.message}`);
+          } else {
+            const fmtA = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            const pct = Math.round((newAmount / Number(goal.target_amount)) * 100);
+            const missing = Number(goal.target_amount) - newAmount;
+            const bar = "█".repeat(Math.floor(pct / 10)) + "░".repeat(10 - Math.floor(pct / 10));
+            await sendWhatsAppMessage(cleanPhone,
+              `✅ *Aporte registrado!*\n\n` +
+              `🎯 *${goal.name}*\n` +
+              `💵 Depositado: +${fmtA(amount)}\n` +
+              `${bar} ${pct}%\n` +
+              `💰 ${fmtA(newAmount)} / ${fmtA(Number(goal.target_amount))}\n` +
+              (missing > 0 ? `⏳ Falta: ${fmtA(missing)}\n` : `🎉 *Meta atingida!*\n`) +
+              `\n_Brave IA - Seu assessor financeiro 🤖_`
+            );
+          }
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
@@ -2452,6 +2533,275 @@ ${dicaContext}`,
         `_Brave IA - Seu assessor financeiro 🤖_`;
 
       await sendWhatsAppMessage(cleanPhone, resumoMsg);
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // ── "cartões" command — show credit cards info ──
+    const cartoesMatch = /^\s*(cart[oõ]es|meus?\s*cart[oõ]es|cart[aã]o|meu\s*cart[aã]o|fatura|faturas)\s*$/i.test(effectiveText);
+    if (cartoesMatch) {
+      const { data: linkedForCards } = await supabaseAdmin
+        .from("whatsapp_links").select("user_id")
+        .eq("phone_number", cleanPhone).eq("verified", true).maybeSingle();
+      if (!linkedForCards) {
+        await sendWhatsAppMessage(cleanPhone, "❌ Nenhuma conta vinculada. Vincule pelo app Brave primeiro.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      const cardUserId = linkedForCards.user_id;
+      const nowC = getBrazilNow();
+      const cMonthStart = new Date(nowC.getFullYear(), nowC.getMonth(), 1).toISOString().slice(0, 10);
+      const cMonthEnd = new Date(nowC.getFullYear(), nowC.getMonth() + 1, 0).toISOString().slice(0, 10);
+      const [{ data: userCards }, { data: cardTxs }] = await Promise.all([
+        supabaseAdmin.from("cards").select("id, name, brand, last_4_digits, credit_limit, due_day, color")
+          .eq("user_id", cardUserId).order("created_at"),
+        supabaseAdmin.from("transactions").select("amount, type, card_id")
+          .eq("user_id", cardUserId).not("card_id", "is", null)
+          .eq("type", "expense").gte("date", cMonthStart).lte("date", cMonthEnd),
+      ]);
+      const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      if (!userCards || userCards.length === 0) {
+        await sendWhatsAppMessage(cleanPhone, "💳 Você não tem cartões cadastrados.\n\nAcesse o app Brave → Cartões para adicionar.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      const todayDay = nowC.getDate();
+      const lines: string[] = ["💳 *Seus Cartões de Crédito:*\n"];
+      userCards.forEach((card: any, i: number) => {
+        const bill = (cardTxs || []).filter((t: any) => t.card_id === card.id).reduce((s: number, t: any) => s + Number(t.amount), 0);
+        const limit = Number(card.credit_limit) || 0;
+        const available = Math.max(0, limit - bill);
+        const usagePct = limit > 0 ? Math.round((bill / limit) * 100) : 0;
+        const dueDay = card.due_day || 0;
+        const daysUntilDue = dueDay >= todayDay ? dueDay - todayDay : 30 - todayDay + dueDay;
+        const dueAlert = dueDay > 0 && daysUntilDue <= 3 ? " 🔴" : "";
+        const usageAlert = usagePct >= 80 ? " ⚠️" : "";
+        lines.push(
+          `${i + 1}. *${card.name}* ${card.brand || ""} (****${card.last_4_digits || "?"})\n` +
+          `   💸 Fatura: ${fmt(bill)}${usageAlert}\n` +
+          `   ✅ Disponível: ${fmt(available)}\n` +
+          (limit > 0 ? `   📊 ${usagePct}% do limite (${fmt(limit)})\n` : "") +
+          (dueDay > 0 ? `   📅 Vence dia ${dueDay}${dueAlert}${daysUntilDue <= 3 ? ` (em ${daysUntilDue} dia${daysUntilDue !== 1 ? "s" : ""})` : ""}\n` : "")
+        );
+      });
+      lines.push(`\n_Brave IA - Seu assessor financeiro 🤖_`);
+      await sendWhatsAppMessage(cleanPhone, lines.join("\n"));
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // ── "categorias" / "orçamentos" command — show category budgets ──
+    const categoriasMatch = /^\s*(categorias?|or[cç]amentos?|meus?\s*or[cç]amentos?|budget)\s*$/i.test(effectiveText);
+    if (categoriasMatch) {
+      const { data: linkedForCat } = await supabaseAdmin
+        .from("whatsapp_links").select("user_id")
+        .eq("phone_number", cleanPhone).eq("verified", true).maybeSingle();
+      if (!linkedForCat) {
+        await sendWhatsAppMessage(cleanPhone, "❌ Nenhuma conta vinculada. Vincule pelo app Brave primeiro.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      const catUserId = linkedForCat.user_id;
+      const nowCat = getBrazilNow();
+      const catMonthStart = new Date(nowCat.getFullYear(), nowCat.getMonth(), 1).toISOString().slice(0, 10);
+      const catMonthEnd = new Date(nowCat.getFullYear(), nowCat.getMonth() + 1, 0).toISOString().slice(0, 10);
+      const [{ data: userCats }, { data: catTxs }] = await Promise.all([
+        supabaseAdmin.from("categories").select("id, name, budget_limit").eq("user_id", catUserId).order("name"),
+        supabaseAdmin.from("transactions").select("amount, category_id")
+          .eq("user_id", catUserId).eq("type", "expense")
+          .gte("date", catMonthStart).lte("date", catMonthEnd),
+      ]);
+      const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      if (!userCats || userCats.length === 0) {
+        await sendWhatsAppMessage(cleanPhone, "🏷️ Nenhuma categoria encontrada.\n\nAcesse o app Brave → Categorias.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      const spentMap: Record<string, number> = {};
+      (catTxs || []).forEach((t: any) => {
+        if (t.category_id) spentMap[t.category_id] = (spentMap[t.category_id] || 0) + Number(t.amount);
+      });
+      const monthName = nowCat.toLocaleString("pt-BR", { month: "long" });
+      const lines: string[] = [`🏷️ *Categorias e Orçamentos — ${monthName.charAt(0).toUpperCase() + monthName.slice(1)}*\n`];
+      let totalSpent = 0;
+      let exceeded = 0;
+      userCats.forEach((cat: any) => {
+        const spent = spentMap[cat.id] || 0;
+        totalSpent += spent;
+        const limit = cat.budget_limit ? Number(cat.budget_limit) : null;
+        if (limit) {
+          const pct = Math.round((spent / limit) * 100);
+          const bar = "█".repeat(Math.floor(Math.min(pct, 100) / 10)) + "░".repeat(10 - Math.floor(Math.min(pct, 100) / 10));
+          const status = pct > 100 ? "🔴" : pct >= 80 ? "🟡" : "🟢";
+          if (pct > 100) exceeded++;
+          lines.push(`${status} *${cat.name}*\n   ${bar} ${pct}%\n   ${fmt(spent)} de ${fmt(limit)} ${pct > 100 ? `(⚠️ estourou ${fmt(spent - limit)})` : `(resta ${fmt(limit - spent)})`}\n`);
+        } else if (spent > 0) {
+          lines.push(`📋 *${cat.name}*: ${fmt(spent)} (sem limite definido)\n`);
+        }
+      });
+      if (totalSpent > 0) lines.push(`\n💸 *Total gasto no mês: ${fmt(totalSpent)}*`);
+      if (exceeded > 0) lines.push(`⚠️ ${exceeded} categoria(s) estourada(s)`);
+      lines.push(`\n_Brave IA - Seu assessor financeiro 🤖_`);
+      await sendWhatsAppMessage(cleanPhone, lines.join("\n"));
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // ── "mercado" / "cotações" / "investimentos" command — show market data ──
+    const mercadoMatch = /^\s*(mercado|cota[cç][oõ]es|investimentos?|d[oó]lar|bitcoin|ibovespa|bolsa)\s*$/i.test(effectiveText);
+    if (mercadoMatch) {
+      const { data: linkedForMercado } = await supabaseAdmin
+        .from("whatsapp_links").select("user_id")
+        .eq("phone_number", cleanPhone).eq("verified", true).maybeSingle();
+      if (!linkedForMercado) {
+        await sendWhatsAppMessage(cleanPhone, "❌ Nenhuma conta vinculada. Vincule pelo app Brave primeiro.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      try {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+        const marketResp = await fetch(`${supabaseUrl}/functions/v1/market-data`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${supabaseAnonKey}`,
+          },
+          body: JSON.stringify({}),
+        });
+        if (!marketResp.ok) throw new Error("Market data unavailable");
+        const marketData = await marketResp.json();
+        const items: any[] = marketData.market || [];
+        if (items.length === 0) {
+          await sendWhatsAppMessage(cleanPhone, "📈 Dados de mercado indisponíveis no momento. Tente novamente em alguns minutos.");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        const emojiMap: Record<string, string> = {
+          "DÓLAR": "🇺🇸", "EURO": "🇪🇺", "LIBRA (GBP)": "🇬🇧", "BITCOIN": "₿",
+          "IBOVESPA": "📊", "NASDAQ": "📈", "DOW JONES": "📉", "CDI": "💹",
+          "SELIC": "🏛️", "IFIX": "🏢", "EUR/USD": "💱",
+        };
+        const lines: string[] = ["📈 *Cotações do Mercado Hoje:*\n"];
+        items.forEach((item: any) => {
+          const emoji = emojiMap[item.label] || "📊";
+          const arrow = item.positive ? "↗️" : "↘️";
+          const changeStr = item.change ? ` ${arrow} ${item.change}` : "";
+          lines.push(`${emoji} *${item.label}:* ${item.value}${changeStr}`);
+        });
+        lines.push(`\n⏱️ Atualizado agora\n_Brave IA - Seu assessor financeiro 🤖_`);
+        await sendWhatsAppMessage(cleanPhone, lines.join("\n"));
+      } catch (e) {
+        console.error("Market data error:", e);
+        await sendWhatsAppMessage(cleanPhone, "📈 Não foi possível obter dados do mercado agora. Tente novamente mais tarde.");
+      }
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // ── "comportamento" / "saúde" command — financial health score ──
+    const comportamentoMatch = /^\s*(comportamento|sa[uú]de|sa[uú]de\s*financeira|perfil\s*financeiro|meu\s*perfil)\s*$/i.test(effectiveText);
+    if (comportamentoMatch) {
+      const { data: linkedForComp } = await supabaseAdmin
+        .from("whatsapp_links").select("user_id")
+        .eq("phone_number", cleanPhone).eq("verified", true).maybeSingle();
+      if (!linkedForComp) {
+        await sendWhatsAppMessage(cleanPhone, "❌ Nenhuma conta vinculada. Vincule pelo app Brave primeiro.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      const compUserId = linkedForComp.user_id;
+      const nowComp = getBrazilNow();
+      const compMonthStart = new Date(nowComp.getFullYear(), nowComp.getMonth(), 1).toISOString().slice(0, 10);
+      const compMonthEnd = new Date(nowComp.getFullYear(), nowComp.getMonth() + 1, 0).toISOString().slice(0, 10);
+      const comp3MoAgo = new Date(nowComp.getFullYear(), nowComp.getMonth() - 2, 1).toISOString().slice(0, 10);
+      const compPrevStart = new Date(nowComp.getFullYear(), nowComp.getMonth() - 1, 1).toISOString().slice(0, 10);
+      const compPrevEnd = new Date(nowComp.getFullYear(), nowComp.getMonth(), 0).toISOString().slice(0, 10);
+      const [{ data: compProfile }, { data: compTx }, { data: compGoals }] = await Promise.all([
+        supabaseAdmin.from("profiles").select("monthly_income").eq("id", compUserId).single(),
+        supabaseAdmin.from("transactions").select("amount, type, date, created_at, categories(name)")
+          .eq("user_id", compUserId).gte("date", comp3MoAgo).order("date"),
+        supabaseAdmin.from("financial_goals").select("id").eq("user_id", compUserId),
+      ]);
+      const income = Number(compProfile?.monthly_income) || 0;
+      const allExpenses = (compTx || []).filter((t: any) => t.type === "expense");
+      const currentExpenses = allExpenses.filter((t: any) => t.date >= compMonthStart && t.date <= compMonthEnd);
+      const prevExpenses = allExpenses.filter((t: any) => t.date >= compPrevStart && t.date <= compPrevEnd);
+      const totalExpense = currentExpenses.reduce((s: number, t: any) => s + Number(t.amount), 0);
+      const prevTotalExpense = prevExpenses.reduce((s: number, t: any) => s + Number(t.amount), 0);
+      // Small transactions (impulsivity)
+      const smallTx = currentExpenses.filter((t: any) => Number(t.amount) < 20).length;
+      const impulsivity = currentExpenses.length > 0 ? Math.round((smallTx / currentExpenses.length) * 100) : 0;
+      // Health scores
+      const controlScore = income > 0 ? Math.max(0, Math.min(100, 100 - (totalExpense / income * 100))) : 50;
+      const consistencyScore = allExpenses.length > 0 ? Math.min(100, allExpenses.length * 5) : 0;
+      const planningScore = (compGoals || []).length > 0 ? Math.min(100, (compGoals || []).length * 25) : 0;
+      const economyScore = income > 0 ? Math.max(0, Math.min(100, ((income - totalExpense) / income) * 100)) : 50;
+      const disciplineScore = 100 - impulsivity;
+      const healthScore = Math.round((controlScore + consistencyScore + planningScore + economyScore + disciplineScore) / 5);
+      // Month change
+      const monthChange = prevTotalExpense > 0 ? Math.round(((totalExpense - prevTotalExpense) / prevTotalExpense) * 100) : 0;
+      // Top category
+      const catMap: Record<string, number> = {};
+      currentExpenses.forEach((t: any) => {
+        const cat = (t as any).categories?.name || "Outros";
+        catMap[cat] = (catMap[cat] || 0) + Number(t.amount);
+      });
+      const topCats = Object.entries(catMap).sort((a, b) => b[1] - a[1]).slice(0, 3);
+      const fmtC = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      const statusEmoji = healthScore >= 70 ? "🟢" : healthScore >= 40 ? "🟡" : "🔴";
+      const statusLabel = healthScore >= 70 ? "Saudável" : healthScore >= 40 ? "Equilibrado" : "Atenção";
+      const bar = (v: number) => "█".repeat(Math.floor(v / 10)) + "░".repeat(10 - Math.floor(v / 10));
+      const lines: string[] = [
+        `🩺 *Saúde Financeira*\n`,
+        `${statusEmoji} *Status:* ${statusLabel} — *${healthScore}%*\n`,
+        `📊 *Indicadores:*`,
+        `🎯 Controle: ${bar(controlScore)} ${Math.round(controlScore)}%`,
+        `📈 Consistência: ${bar(consistencyScore)} ${Math.round(consistencyScore)}%`,
+        `🗓️ Planejamento: ${bar(planningScore)} ${Math.round(planningScore)}%`,
+        `💰 Economia: ${bar(economyScore)} ${Math.round(economyScore)}%`,
+        `🧠 Disciplina: ${bar(disciplineScore)} ${Math.round(disciplineScore)}%\n`,
+        `📋 *Mês atual:*`,
+        `💸 Gastos: ${fmtC(totalExpense)}`,
+        income > 0 ? `📊 ${Math.round((totalExpense / income) * 100)}% da renda comprometida` : "",
+        monthChange !== 0 ? `${monthChange > 0 ? "📈" : "📉"} ${monthChange > 0 ? "+" : ""}${monthChange}% vs mês anterior` : "",
+        `⚡ Impulsividade: ${impulsivity}%\n`,
+      ];
+      if (topCats.length > 0) {
+        lines.push(`🏷️ *Top categorias:*`);
+        topCats.forEach(([c, v], i) => lines.push(`  ${i + 1}. ${c}: ${fmtC(v)}`));
+        lines.push("");
+      }
+      lines.push(`_Brave IA - Seu assessor financeiro 🤖_`);
+      await sendWhatsAppMessage(cleanPhone, lines.filter(l => l !== "").join("\n"));
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // ── "aporte" command — deposit into a goal ──
+    const aporteMatch = /^\s*(aporte|depositar|depositar\s+na\s+meta|aporte\s+meta)\s*$/i.test(effectiveText);
+    if (aporteMatch) {
+      const { data: linkedForAporte } = await supabaseAdmin
+        .from("whatsapp_links").select("user_id")
+        .eq("phone_number", cleanPhone).eq("verified", true).maybeSingle();
+      if (!linkedForAporte) {
+        await sendWhatsAppMessage(cleanPhone, "❌ Nenhuma conta vinculada. Vincule pelo app Brave primeiro.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      const { data: aporteGoals } = await supabaseAdmin
+        .from("financial_goals").select("id, name, target_amount, current_amount, deadline")
+        .eq("user_id", linkedForAporte.user_id).order("created_at", { ascending: false }).limit(10);
+      const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      if (!aporteGoals || aporteGoals.length === 0) {
+        await sendWhatsAppButtons(cleanPhone,
+          "🎯 Você não tem metas cadastradas para depositar.\n\nCrie uma meta primeiro!",
+          [{ id: "CRIAR_META", text: "✨ Criar Meta" }],
+          "Ou envie: meta: Nome da Meta"
+        );
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      await supabaseAdmin.from("whatsapp_sessions").delete().eq("phone_number", cleanPhone);
+      await supabaseAdmin.from("whatsapp_sessions").insert({
+        phone_number: cleanPhone,
+        step: "aporte_select_goal",
+        context: { user_id: linkedForAporte.user_id, goalsList: aporteGoals },
+        expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+      });
+      const goalLines = aporteGoals.map((g: any, i: number) => {
+        const pct = Math.round((Number(g.current_amount) / Number(g.target_amount)) * 100);
+        return `${i + 1}. 🎯 *${g.name}* — ${pct}% (${fmt(Number(g.current_amount))} / ${fmt(Number(g.target_amount))})`;
+      }).join("\n");
+      await sendWhatsAppMessage(cleanPhone,
+        `💵 *Depositar em qual meta?*\n\n${goalLines}\n\nResponda com o *número* da meta. Ou envie *cancelar*.`
+      );
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
