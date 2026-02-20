@@ -52,10 +52,13 @@ serve(async (req) => {
 
     const linkedMap = new Map(links?.map(l => [l.user_id, l.phone_number]) ?? []);
 
-    const startDate = new Date();
+    // Use Brazil timezone (UTC-3) for date calculations
+    const nowBR = new Date(new Date().getTime() - 3 * 60 * 60 * 1000);
+    const todayBR = nowBR.toISOString().slice(0, 10);
+    const startDate = new Date(nowBR);
     startDate.setDate(1);
     const startStr = startDate.toISOString().slice(0, 10);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayBR;
 
     let sent = 0;
     let skipped = 0;
