@@ -53,7 +53,8 @@ serve(async (req) => {
 
     const linkedMap = new Map(links?.map(l => [l.user_id, l.phone_number]) ?? []);
 
-    const today = new Date();
+    // Use Brazil timezone (UTC-3)
+    const today = new Date(new Date().getTime() - 3 * 60 * 60 * 1000);
     const todayDay = today.getDate();
     // Target days ahead: 1 and 3
     const targetDays = [1, 3];

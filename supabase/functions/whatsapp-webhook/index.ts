@@ -234,6 +234,14 @@ async function downloadMediaFromUazapi(messageId: string, mediaType?: string, me
   return null;
 }
 
+// Helper: get current date/time in Brazil timezone (UTC-3)
+function getBrazilNow(): Date {
+  return new Date(new Date().getTime() - 3 * 60 * 60 * 1000);
+}
+function getBrazilTodayStr(): string {
+  return getBrazilNow().toISOString().slice(0, 10);
+}
+
 function guessMimeType(mediaType?: string): string {
   if (!mediaType) return "application/octet-stream";
   if (mediaType.includes("audio") || mediaType === "ptt") return "audio/ogg";
@@ -368,7 +376,7 @@ async function processWithNoxIA(userMessage: string, financialContext: string) {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-  const todayDayOfMonth = new Date().getDate();
+  const todayDayOfMonth = getBrazilNow().getDate();
 
   const systemPrompt = `Você é o Brave IA 🤖, assessor financeiro pessoal via WhatsApp. Responda SEMPRE em português brasileiro.
 
@@ -693,7 +701,7 @@ serve(async (req) => {
     }
     // ── Helper: parse date/time in pt-BR (fallback) ──
     function parseDateTimeBR(text: string): Date | null {
-      const now = new Date();
+      const now = getBrazilNow();
       const lower = text.toLowerCase().trim();
       // Match "12:00 PM/AM" format
       const timeAmPmMatch = lower.match(/(\d{1,2}):(\d{2})\s*(am|pm)/i);
@@ -1546,9 +1554,9 @@ Regras:
               `💳 *Saldo por carteira:*\n_"saldo"_ → ver saldo de cada carteira + total\n\n` +
               `🎯 *Metas financeiras:*\n_"metas"_ → ver e criar metas\n_"meta: Viagem"_ → criar meta diretamente\n\n` +
               `📊 *Resumo financeiro:*\n_"resumo"_ ou _"meu resumo"_\n\n` +
+              `💡 *Dica personalizada:*\n_"dica"_ → IA gera uma dica baseada no seu perfil de gastos\n\n` +
               `🔄 *Recorrentes:*\n_"recorrentes"_ → ver e cancelar transações fixas\n\n` +
-              `🔗 *Vincular WhatsApp:*\nEnvie o código BRAVE-XXXXXX do app\n\n` +
-              `💡 *Dica:*\nO Brave IA entende linguagem natural! Escreva como preferir e ele interpreta automaticamente.`,
+              `🔗 *Vincular WhatsApp:*\nEnvie o código BRAVE-XXXXXX do app`,
           };
 
           // Check which category was requested
@@ -1916,7 +1924,7 @@ Regras:
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      const today = new Date();
+      const today = getBrazilNow();
       const todayStr = today.toISOString().slice(0, 10);
       const futureDate = new Date(today);
       futureDate.setDate(today.getDate() + 30);
@@ -2252,6 +2260,129 @@ Regras:
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    // ── "dica" command — AI-generated personalized financial tip ──
+    const dicaMatch = /^\s*(dica|dica\s+financeira|me\s*d[aáê]\s*uma?\s*dica|tip|sugest[aã]o)\s*$/i.test(effectiveText);
+    if (dicaMatch) {
+      const { data: linkedForDica } = await supabaseAdmin
+        .from("whatsapp_links")
+        .select("user_id")
+        .eq("phone_number", cleanPhone)
+        .eq("verified", true)
+        .maybeSingle();
+
+      if (!linkedForDica) {
+        await sendWhatsAppMessage(cleanPhone, "❌ Nenhuma conta vinculada. Vincule pelo app Brave primeiro.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const dicaUserId = linkedForDica.user_id;
+      const nowDica = getBrazilNow();
+      const dicaFirstDay = new Date(Date.UTC(nowDica.getFullYear(), nowDica.getMonth(), 1)).toISOString().slice(0, 10);
+      const dicaLastDay = new Date(Date.UTC(nowDica.getFullYear(), nowDica.getMonth() + 1, 0)).toISOString().slice(0, 10);
+
+      const [
+        { data: dicaProfile },
+        { data: dicaWallets },
+        { data: dicaTx },
+        { data: dicaGoals },
+        { data: dicaRecurring },
+      ] = await Promise.all([
+        supabaseAdmin.from("profiles").select("display_name, monthly_income").eq("id", dicaUserId).single(),
+        supabaseAdmin.from("wallets").select("name, balance").eq("user_id", dicaUserId),
+        supabaseAdmin.from("transactions").select("amount, type, categories(name)")
+          .eq("user_id", dicaUserId).gte("date", dicaFirstDay).lte("date", dicaLastDay),
+        supabaseAdmin.from("financial_goals").select("name, target_amount, current_amount, deadline")
+          .eq("user_id", dicaUserId),
+        supabaseAdmin.from("recurring_transactions").select("description, amount, type, day_of_month")
+          .eq("user_id", dicaUserId).eq("is_active", true),
+      ]);
+
+      const fmtDica = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      const txList = dicaTx || [];
+      const totalSpent = txList.filter((t: any) => t.type === "expense").reduce((s: number, t: any) => s + Number(t.amount), 0);
+      const totalReceived = txList.filter((t: any) => t.type === "income").reduce((s: number, t: any) => s + Number(t.amount), 0);
+      const totalBal = (dicaWallets || []).reduce((s: number, w: any) => s + Number(w.balance), 0);
+      const monthlyIncome = Number(dicaProfile?.monthly_income) || 0;
+
+      // Group expenses by category
+      const catMap: Record<string, number> = {};
+      txList.filter((t: any) => t.type === "expense").forEach((t: any) => {
+        const cat = (t as any).categories?.name || "Outros";
+        catMap[cat] = (catMap[cat] || 0) + Number(t.amount);
+      });
+      const topCats = Object.entries(catMap).sort((a, b) => b[1] - a[1]).slice(0, 5);
+      const catSummary = topCats.map(([c, v]) => `${c}: ${fmtDica(v)}`).join(", ");
+
+      const goalsInfo = (dicaGoals || []).map((g: any) => {
+        const pct = Math.round((Number(g.current_amount) / Number(g.target_amount)) * 100);
+        return `${g.name} (${pct}% de ${fmtDica(Number(g.target_amount))})`;
+      }).join("; ") || "nenhuma";
+
+      const recurringTotal = (dicaRecurring || []).reduce((s: number, r: any) => s + Number(r.amount), 0);
+
+      const dicaContext = `
+Dados financeiros para gerar dica personalizada:
+- Nome: ${dicaProfile?.display_name || "Usuário"}
+- Renda mensal: ${monthlyIncome > 0 ? fmtDica(monthlyIncome) : "não informada"}
+- Saldo total: ${fmtDica(totalBal)}
+- Gastos este mês: ${fmtDica(totalSpent)}
+- Receitas este mês: ${fmtDica(totalReceived)}
+- % renda comprometida: ${monthlyIncome > 0 ? Math.round((totalSpent / monthlyIncome) * 100) + "%" : "?"}
+- Maiores categorias de gasto: ${catSummary || "sem dados"}
+- Total recorrências mensais: ${fmtDica(recurringTotal)} (${(dicaRecurring || []).length} itens)
+- Metas financeiras: ${goalsInfo}
+`;
+
+      const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+      if (!LOVABLE_API_KEY) {
+        await sendWhatsAppMessage(cleanPhone, "❌ Erro interno. Tente novamente mais tarde.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const dicaResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-3-flash-preview",
+          messages: [
+            {
+              role: "system",
+              content: `Você é o Brave IA, assessor financeiro pessoal. Gere UMA dica financeira personalizada e prática baseada nos dados do usuário abaixo.
+
+REGRAS:
+- Use emojis relevantes
+- Para negrito use APENAS *texto* (um asterisco). NUNCA use **texto**.
+- Máximo 600 caracteres
+- Seja específico: cite categorias, valores, metas reais do usuário
+- Dê uma ação concreta que ele pode fazer HOJE
+- Se ele gasta muito em uma categoria, sugira redução com valor específico
+- Se tem meta, calcule quanto precisa poupar por mês
+- Se renda comprometida > 70%, alerte sobre isso
+- Finalize com motivação curta
+
+${dicaContext}`,
+            },
+            { role: "user", content: "Me dê uma dica financeira personalizada." },
+          ],
+          temperature: 0.7,
+        }),
+      });
+
+      let dicaText = "💡 Não foi possível gerar a dica agora. Tente novamente!";
+      if (dicaResp.ok) {
+        const dicaData = await dicaResp.json();
+        dicaText = dicaData.choices?.[0]?.message?.content || dicaText;
+      }
+
+      await sendWhatsAppMessage(cleanPhone,
+        `💡 *Dica Financeira Personalizada*\n\n${dicaText}\n\n_Brave IA - Seu assessor financeiro 🤖_`
+      );
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     // ── "resumo" command — show monthly financial summary ──
     const resumoMatch = /^\s*(resumo|resumo\s*do\s*m[eê]s|r[eê]sumo\s*financeiro|extrato|extrato\s*mensal|summary)\s*$/i.test(effectiveText);
     if (resumoMatch) {
@@ -2268,9 +2399,9 @@ Regras:
       }
 
       const resumoUserId = linkedForResumo.user_id;
-      const now = new Date();
-      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-      const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+      const now = getBrazilNow();
+      const firstDay = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1)).toISOString().slice(0, 10);
+      const lastDay = new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 0)).toISOString().slice(0, 10);
 
       const [{ data: monthTx }, { data: resumoWallets }, { data: resumoProfile }] = await Promise.all([
         supabaseAdmin
@@ -2339,7 +2470,7 @@ Regras:
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      const today = new Date();
+      const today = getBrazilNow();
       const todayStr = today.toISOString().slice(0, 10);
       const futureDate = new Date(today);
       futureDate.setDate(today.getDate() + 7);
@@ -2429,9 +2560,9 @@ Regras:
     const userId = link.user_id;
 
     // Get financial context (unified — includes data created via website AND WhatsApp)
-    const now = new Date();
-    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-    const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+    const now = getBrazilNow();
+    const firstDayOfMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1)).toISOString().slice(0, 10);
+    const lastDayOfMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 0)).toISOString().slice(0, 10);
 
     const [
       { data: profile },
@@ -2646,7 +2777,7 @@ Metas financeiras: ${goalsCtx}`;
             type: pending.type,
             category_id: pending.category_id || null,
             wallet_id: defaultWallet?.id || null,
-            date: new Date().toISOString().split("T")[0],
+            date: getBrazilTodayStr(),
           });
 
           if (txError) {
