@@ -806,6 +806,7 @@ const Index = () => {
       <>
         <AuthModal open={authOpen} onOpenChange={setAuthOpen} />
         <QuizFunnel onOpenAuth={() => setAuthOpen(true)} />
+        <SocialProofToast />
       </>
     );
   }
