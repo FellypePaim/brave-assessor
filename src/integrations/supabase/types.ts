@@ -623,6 +623,24 @@ export type Database = {
         }
         Relationships: []
       }
+      whatsapp_rate_limits: {
+        Row: {
+          message_count: number
+          phone_number: string
+          window_start: string
+        }
+        Insert: {
+          message_count?: number
+          phone_number: string
+          window_start?: string
+        }
+        Update: {
+          message_count?: number
+          phone_number?: string
+          window_start?: string
+        }
+        Relationships: []
+      }
       whatsapp_sessions: {
         Row: {
           context: Json
@@ -657,6 +675,14 @@ export type Database = {
     Functions: {
       can_access_family_resource: {
         Args: { _requesting_user_id: string; _resource_user_id: string }
+        Returns: boolean
+      }
+      check_whatsapp_rate_limit: {
+        Args: {
+          _max_messages?: number
+          _phone: string
+          _window_minutes?: number
+        }
         Returns: boolean
       }
       has_role: {
