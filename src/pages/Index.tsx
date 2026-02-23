@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import QuizFunnel from "@/components/QuizFunnel";
 import { AuthModal } from "@/components/AuthModal";
 import SocialProofToast from "@/components/SocialProofToast";
 import { motion, useScroll, useTransform, useInView } from "framer-motion";
@@ -798,6 +799,16 @@ function Comparison() {
 /* ─── PAGE ─── */
 const Index = () => {
   const [authOpen, setAuthOpen] = useState(false);
+  const [showQuiz, setShowQuiz] = useState(true);
+
+  if (showQuiz) {
+    return (
+      <>
+        <AuthModal open={authOpen} onOpenChange={setAuthOpen} />
+        <QuizFunnel onOpenAuth={() => setAuthOpen(true)} />
+      </>
+    );
+  }
 
   return (
     <main className="overflow-x-hidden">
