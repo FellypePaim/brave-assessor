@@ -280,19 +280,19 @@ function HookToast({ hook }: { hook: { emoji: string; text: string; sub: string 
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -10, scale: 0.95 }}
       transition={{ duration: 0.4, ease: easeOut }}
-      className="fixed bottom-20 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 max-w-sm w-[90%]"
+      className="fixed bottom-20 sm:bottom-6 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-50 sm:max-w-sm sm:w-auto"
     >
-      <div className="flex items-center gap-3 rounded-2xl border border-border bg-card/90 backdrop-blur-xl p-4 shadow-xl shadow-primary/5">
+      <div className="flex items-center gap-3 rounded-2xl border border-border bg-card/90 backdrop-blur-xl p-3 sm:p-4 shadow-xl shadow-primary/5">
         <motion.span
-          className="text-2xl sm:text-3xl"
+          className="text-2xl sm:text-3xl shrink-0"
           animate={{ scale: [1, 1.2, 1] }}
           transition={{ duration: 0.5, delay: 0.2 }}
         >
           {hook.emoji}
         </motion.span>
-        <div className="min-w-0">
-          <p className="text-xs sm:text-sm font-semibold text-foreground leading-snug">{hook.text}</p>
-          <p className="text-[10px] sm:text-xs text-muted-foreground">{hook.sub}</p>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs sm:text-sm font-semibold text-foreground leading-snug break-words">{hook.text}</p>
+          <p className="text-[10px] sm:text-xs text-muted-foreground break-words">{hook.sub}</p>
         </div>
       </div>
     </motion.div>
