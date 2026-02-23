@@ -4,7 +4,8 @@ import {
   ArrowRight, ArrowLeft, User, DollarSign, TrendingDown,
   Target, CheckCircle2, MessageSquare, Sparkles, AlertTriangle,
   PiggyBank, CreditCard, Brain, Star, Shield, Users, Sun, Moon,
-  Flame, Lock, Zap
+  Flame, Lock, Zap, BarChart3, Bell, Wallet, Mic, Camera, Bot,
+  TrendingUp, Heart, ChevronRight
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,8 +51,8 @@ const GOAL_OPTIONS = [
 const HOOKS: Record<number, { emoji: string; text: string; sub: string }> = {
   1: { emoji: "🔥", text: "Ótimo começo!", sub: "Vamos personalizar tudo pra você" },
   2: { emoji: "💡", text: "Sabia que 78% dos brasileiros não sabem pra onde vai o dinheiro?", sub: "Você está no caminho certo" },
-  3: { emoji: "📊", text: "Quase lá! Faltam só 2 perguntas", sub: "Sua análise personalizada está sendo preparada" },
-  4: { emoji: "🎯", text: "Última pergunta!", sub: "Depois disso, seu plano personalizado estará pronto" },
+  4: { emoji: "📊", text: "Quase lá! Faltam só 2 perguntas", sub: "Sua análise personalizada está sendo preparada" },
+  6: { emoji: "🎯", text: "Última pergunta!", sub: "Depois disso, seu plano personalizado estará pronto" },
 };
 
 /* ─── ANIMATIONS ─── */
@@ -375,6 +376,187 @@ function OptionCard({
   );
 }
 
+/* ─── FEATURES SHOWCASE (Interstitial Step 3) ─── */
+const FEATURES = [
+  { icon: MessageSquare, title: "WhatsApp Inteligente", desc: "Registre gastos por texto, áudio ou foto direto no WhatsApp", color: "text-emerald-500", bg: "bg-emerald-500/10" },
+  { icon: Brain, title: "IA Personalizada", desc: "Análise de padrões e dicas sob medida pra seu perfil", color: "text-violet-500", bg: "bg-violet-500/10" },
+  { icon: BarChart3, title: "Relatórios Visuais", desc: "Gráficos claros de receitas, despesas e tendências", color: "text-blue-500", bg: "bg-blue-500/10" },
+  { icon: Bell, title: "Lembretes de Contas", desc: "Nunca mais pague juros por esquecimento", color: "text-amber-500", bg: "bg-amber-500/10" },
+  { icon: Target, title: "Metas Financeiras", desc: "Defina objetivos e acompanhe seu progresso", color: "text-primary", bg: "bg-primary/10" },
+  { icon: Wallet, title: "Multi-Carteiras", desc: "Controle banco, pix, dinheiro e cartões em um só lugar", color: "text-cyan-500", bg: "bg-cyan-500/10" },
+];
+
+function FeatureShowcase({ onContinue }: { onContinue: () => void }) {
+  return (
+    <motion.div
+      key="step-features"
+      custom={1}
+      variants={slideVariants}
+      initial="enter"
+      animate="center"
+      exit="exit"
+      className="space-y-5 sm:space-y-6"
+    >
+      <div className="text-center">
+        <motion.div
+          initial={{ scale: 0, rotate: -90 }}
+          animate={{ scale: 1, rotate: 0 }}
+          transition={{ type: "spring", stiffness: 200, damping: 12 }}
+          className="inline-flex items-center justify-center h-14 w-14 sm:h-16 sm:w-16 rounded-2xl bg-primary/10 text-primary mb-3 sm:mb-4"
+        >
+          <Sparkles className="h-7 w-7 sm:h-8 sm:w-8" />
+        </motion.div>
+        <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground">
+          Conheça o poder do Brave
+        </h2>
+        <p className="mt-2 text-sm sm:text-base text-muted-foreground">
+          Tudo que você precisa em um só lugar
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
+        {FEATURES.map((feat, i) => (
+          <motion.div
+            key={feat.title}
+            custom={i}
+            variants={fadeUp}
+            initial="hidden"
+            animate="visible"
+            className="flex items-start gap-3 p-3 sm:p-4 rounded-2xl border border-border bg-card/80 backdrop-blur-sm hover:border-primary/30 transition-colors"
+          >
+            <div className={`flex-shrink-0 h-9 w-9 sm:h-10 sm:w-10 rounded-xl ${feat.bg} flex items-center justify-center ${feat.color}`}>
+              <feat.icon className="h-4 w-4 sm:h-5 sm:w-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="font-semibold text-sm text-foreground">{feat.title}</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground leading-snug mt-0.5">{feat.desc}</p>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.5 }}
+        className="text-center pt-2"
+      >
+        <Button
+          onClick={onContinue}
+          className="rounded-full bg-primary text-primary-foreground hover:brightness-110 transition-all duration-200 px-6 sm:px-8"
+        >
+          Impressionante! Continuar <ChevronRight className="h-4 w-4 ml-1" />
+        </Button>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+/* ─── HOW WE HELP (Interstitial Step 5) ─── */
+function HowWeHelp({ answers, onContinue }: { answers: QuizAnswers; onContinue: () => void }) {
+  const painSolutions: Record<string, { icon: typeof Brain; title: string; desc: string }[]> = {
+    "sem-controle": [
+      { icon: Bot, title: "Categorização automática", desc: "A IA organiza cada gasto automaticamente pra você" },
+      { icon: BarChart3, title: "Visão clara do mês", desc: "Dashboard visual mostra exatamente pra onde vai seu dinheiro" },
+      { icon: Bell, title: "Alertas inteligentes", desc: "Notificações quando algo foge do padrão" },
+    ],
+    "gasto-demais": [
+      { icon: TrendingDown, title: "Limites por categoria", desc: "Defina tetos e receba avisos antes de estourar" },
+      { icon: Brain, title: "Análise de comportamento", desc: "Descubra seus gatilhos de consumo" },
+      { icon: Target, title: "Meta anti-gastos", desc: "Desafios personalizados pra reduzir despesas" },
+    ],
+    "sem-economia": [
+      { icon: PiggyBank, title: "Metas com progresso visual", desc: "Acompanhe cada real economizado até o objetivo" },
+      { icon: TrendingUp, title: "Dicas de economia da IA", desc: "Sugestões personalizadas baseadas no seu perfil" },
+      { icon: Wallet, title: "Separação automática", desc: "Reserve dinheiro para metas todo mês" },
+    ],
+    "contas-atrasadas": [
+      { icon: Bell, title: "Lembretes no WhatsApp", desc: "Nunca mais esqueça uma conta — aviso antes do vencimento" },
+      { icon: CreditCard, title: "Controle de faturas", desc: "Acompanhe todos os vencimentos em um só lugar" },
+      { icon: CheckCircle2, title: "Contas recorrentes", desc: "Cadastre uma vez, o sistema lembra pra sempre" },
+    ],
+  };
+
+  const solutions = painSolutions[answers.biggestPain] || painSolutions["sem-controle"];
+
+  return (
+    <motion.div
+      key="step-help"
+      custom={1}
+      variants={slideVariants}
+      initial="enter"
+      animate="center"
+      exit="exit"
+      className="space-y-5 sm:space-y-6"
+    >
+      <div className="text-center">
+        <motion.div
+          initial={{ scale: 0, rotate: -90 }}
+          animate={{ scale: 1, rotate: 0 }}
+          transition={{ type: "spring", stiffness: 200, damping: 12 }}
+          className="inline-flex items-center justify-center h-14 w-14 sm:h-16 sm:w-16 rounded-2xl bg-emerald-500/10 text-emerald-500 mb-3 sm:mb-4"
+        >
+          <Heart className="h-7 w-7 sm:h-8 sm:w-8" />
+        </motion.div>
+        <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground">
+          {answers.name}, veja como vamos te ajudar
+        </h2>
+        <p className="mt-2 text-sm sm:text-base text-muted-foreground">
+          Soluções pensadas pro seu desafio
+        </p>
+      </div>
+
+      <div className="space-y-2.5 sm:space-y-3">
+        {solutions.map((sol, i) => (
+          <motion.div
+            key={sol.title}
+            custom={i}
+            variants={fadeUp}
+            initial="hidden"
+            animate="visible"
+            className="flex items-start gap-3 p-3 sm:p-4 rounded-2xl border border-border bg-card/80 backdrop-blur-sm"
+          >
+            <motion.div
+              className="flex-shrink-0 h-10 w-10 sm:h-12 sm:w-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary"
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ delay: 0.2 + i * 0.1, type: "spring", stiffness: 200 }}
+            >
+              <sol.icon className="h-5 w-5 sm:h-6 sm:w-6" />
+            </motion.div>
+            <div className="min-w-0 pt-0.5">
+              <p className="font-semibold text-sm sm:text-base text-foreground">{sol.title}</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground leading-snug mt-0.5">{sol.desc}</p>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.5 }}
+        className="text-center pt-2"
+      >
+        <motion.div
+          animate={{ scale: [1, 1.03, 1] }}
+          transition={{ duration: 2, repeat: Infinity }}
+        >
+          <Button
+            onClick={onContinue}
+            className="rounded-full bg-primary text-primary-foreground hover:brightness-110 transition-all duration-200 px-6 sm:px-8"
+          >
+            Quero isso pra mim! <Zap className="h-4 w-4 ml-1" />
+          </Button>
+        </motion.div>
+        <p className="mt-3 text-[10px] sm:text-xs text-muted-foreground">
+          Falta só mais uma pergunta ✨
+        </p>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 /* ─── RESULT ─── */
 function QuizResult({ answers, onOpenAuth }: { answers: QuizAnswers; onOpenAuth: () => void }) {
   const painLabel = PAIN_OPTIONS.find(p => p.value === answers.biggestPain)?.label || "";
@@ -503,7 +685,7 @@ export default function QuizFunnel({ onOpenAuth }: { onOpenAuth: () => void }) {
   const [showHook, setShowHook] = useState(false);
   const [currentHook, setCurrentHook] = useState<{ emoji: string; text: string; sub: string } | null>(null);
 
-  const TOTAL_STEPS = 5;
+  const TOTAL_STEPS = 7;
 
   const handleThemeChoice = (theme: "light" | "dark") => {
     if (theme === "dark") document.documentElement.classList.add("dark");
@@ -546,8 +728,10 @@ export default function QuizFunnel({ onOpenAuth }: { onOpenAuth: () => void }) {
       case 0: return answers.name.trim().length >= 2;
       case 1: return !!answers.salary;
       case 2: return !!answers.biggestPain;
-      case 3: return !!answers.controlLevel;
-      case 4: return !!answers.goal;
+      case 3: return true; // features showcase
+      case 4: return !!answers.controlLevel;
+      case 5: return true; // how we help
+      case 6: return !!answers.goal;
       default: return false;
     }
   };
@@ -673,7 +857,11 @@ export default function QuizFunnel({ onOpenAuth }: { onOpenAuth: () => void }) {
                     )}
 
                     {step === 3 && (
-                      <motion.div key="step-3" custom={direction} variants={slideVariants} initial="enter" animate="center" exit="exit" className="space-y-5 sm:space-y-6">
+                      <FeatureShowcase onContinue={goNext} />
+                    )}
+
+                    {step === 4 && (
+                      <motion.div key="step-4" custom={direction} variants={slideVariants} initial="enter" animate="center" exit="exit" className="space-y-5 sm:space-y-6">
                         <div className="text-center">
                           <motion.div initial={{ scale: 0, rotate: -90 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: "spring", stiffness: 200, damping: 12 }} className="inline-flex items-center justify-center h-14 w-14 sm:h-16 sm:w-16 rounded-2xl bg-blue-500/10 text-blue-500 mb-3 sm:mb-4">
                             <Target className="h-7 w-7 sm:h-8 sm:w-8" />
@@ -698,8 +886,12 @@ export default function QuizFunnel({ onOpenAuth }: { onOpenAuth: () => void }) {
                       </motion.div>
                     )}
 
-                    {step === 4 && (
-                      <motion.div key="step-4" custom={direction} variants={slideVariants} initial="enter" animate="center" exit="exit" className="space-y-5 sm:space-y-6">
+                    {step === 5 && (
+                      <HowWeHelp answers={answers} onContinue={goNext} />
+                    )}
+
+                    {step === 6 && (
+                      <motion.div key="step-6" custom={direction} variants={slideVariants} initial="enter" animate="center" exit="exit" className="space-y-5 sm:space-y-6">
                         <div className="text-center">
                           <motion.div initial={{ scale: 0, rotate: -90 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: "spring", stiffness: 200, damping: 12 }} className="inline-flex items-center justify-center h-14 w-14 sm:h-16 sm:w-16 rounded-2xl bg-emerald-500/10 text-emerald-500 mb-3 sm:mb-4">
                             <Sparkles className="h-7 w-7 sm:h-8 sm:w-8" />
