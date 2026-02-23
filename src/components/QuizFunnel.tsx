@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   ArrowRight, ArrowLeft, User, DollarSign, TrendingDown,
   Target, CheckCircle2, MessageSquare, Sparkles, AlertTriangle,
@@ -72,101 +73,93 @@ const fadeUp = {
   }),
 };
 
-/* ─── ANIMATED GRADIENT BACKGROUND ─── */
+/* ─── ANIMATED GRADIENT BACKGROUND (optimized for mobile) ─── */
 function AnimatedBackground() {
+  const isMobile = useIsMobile();
+  const prefersReduced = useReducedMotion();
+
+  // Fewer blobs on mobile, skip particles entirely
+  const blobCount = isMobile ? 3 : 6;
   const blobs = useMemo(() =>
-    Array.from({ length: 6 }).map((_, i) => ({
+    Array.from({ length: blobCount }).map((_, i) => ({
       id: i,
-      size: 200 + Math.random() * 400,
+      size: isMobile ? 150 + Math.random() * 200 : 200 + Math.random() * 400,
       x: Math.random() * 100,
       y: Math.random() * 100,
       delay: Math.random() * 4,
-      duration: 12 + Math.random() * 10,
-    })), []
+      duration: 18 + Math.random() * 12,
+    })), [blobCount, isMobile]
   );
+
+  // Skip all animations if user prefers reduced motion
+  if (prefersReduced) {
+    return (
+      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-accent/10" />
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
       {/* Base gradient mesh */}
       <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-accent/10" />
 
-      {/* Animated gradient blobs */}
+      {/* Animated gradient blobs — CSS animations on mobile for GPU compositing */}
       {blobs.map((blob) => (
-        <motion.div
+        <div
           key={blob.id}
-          className="absolute rounded-full blur-3xl"
+          className="absolute rounded-full will-change-transform"
           style={{
             width: blob.size,
             height: blob.size,
             left: `${blob.x}%`,
             top: `${blob.y}%`,
+            filter: isMobile ? 'blur(40px)' : 'blur(64px)',
             background: blob.id % 3 === 0
-              ? "hsl(var(--primary) / 0.08)"
+              ? "hsl(var(--primary) / 0.06)"
               : blob.id % 3 === 1
-              ? "hsl(var(--accent) / 0.12)"
-              : "hsl(var(--ring) / 0.06)",
-          }}
-          animate={{
-            x: [0, 60 * (blob.id % 2 === 0 ? 1 : -1), -40, 0],
-            y: [0, -50, 30 * (blob.id % 2 === 0 ? -1 : 1), 0],
-            scale: [1, 1.2, 0.9, 1],
-            opacity: [0.5, 0.8, 0.4, 0.5],
-          }}
-          transition={{
-            duration: blob.duration,
-            repeat: Infinity,
-            delay: blob.delay,
-            ease: "easeInOut",
+              ? "hsl(var(--accent) / 0.08)"
+              : "hsl(var(--ring) / 0.05)",
+            opacity: 0.5,
+            animation: `blob-float-${blob.id % 3} ${blob.duration}s ease-in-out ${blob.delay}s infinite`,
           }}
         />
       ))}
 
-      {/* Grid overlay */}
-      <div
-        className="absolute inset-0 opacity-[0.03]"
-        style={{
-          backgroundImage:
-            "linear-gradient(hsl(var(--foreground)) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--foreground)) 1px, transparent 1px)",
-          backgroundSize: "60px 60px",
-        }}
-      />
+      {/* Grid overlay — static, no perf cost */}
+      {!isMobile && (
+        <div
+          className="absolute inset-0 opacity-[0.03]"
+          style={{
+            backgroundImage:
+              "linear-gradient(hsl(var(--foreground)) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--foreground)) 1px, transparent 1px)",
+            backgroundSize: "60px 60px",
+          }}
+        />
+      )}
 
-      {/* Floating particles */}
-      {Array.from({ length: 20 }).map((_, i) => (
-        <motion.div
+      {/* Floating particles — desktop only */}
+      {!isMobile && Array.from({ length: 10 }).map((_, i) => (
+        <div
           key={`p-${i}`}
           className="absolute rounded-full bg-primary/20"
           style={{
-            width: 2 + Math.random() * 4,
-            height: 2 + Math.random() * 4,
+            width: 2 + Math.random() * 3,
+            height: 2 + Math.random() * 3,
             left: `${Math.random() * 100}%`,
             top: `${Math.random() * 100}%`,
-          }}
-          animate={{
-            y: [0, -(40 + Math.random() * 60), 0],
-            x: [0, (Math.random() - 0.5) * 30, 0],
-            opacity: [0, 0.8, 0],
-          }}
-          transition={{
-            duration: 5 + Math.random() * 5,
-            repeat: Infinity,
-            delay: Math.random() * 5,
-            ease: "easeInOut",
+            animation: `particle-float ${6 + Math.random() * 6}s ease-in-out ${Math.random() * 5}s infinite`,
           }}
         />
       ))}
 
-      {/* Radial glow at center */}
-      <motion.div
-        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] md:w-[900px] md:h-[900px] rounded-full"
+      {/* Radial glow at center — static on mobile */}
+      <div
+        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] md:w-[900px] md:h-[900px] rounded-full"
         style={{
           background: "radial-gradient(circle, hsl(var(--primary) / 0.06) 0%, transparent 70%)",
         }}
-        animate={{
-          scale: [1, 1.15, 1],
-          opacity: [0.6, 1, 0.6],
-        }}
-        transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
       />
     </div>
   );
@@ -189,25 +182,13 @@ function ThemePicker({ onChoose }: { onChoose: (theme: "light" | "dark") => void
         className="relative z-10 text-center px-6 max-w-md w-full"
       >
         {/* Logo with pulse */}
-        <motion.div
-          initial={{ scale: 0, rotate: -90 }}
-          animate={{ scale: 1, rotate: 0 }}
-          transition={{ type: "spring", stiffness: 200, damping: 15, delay: 0.2 }}
-          className="inline-block mb-6"
-        >
-          <div className="relative">
-            <img
-              src={braveLogoImg}
-              alt="Brave"
-              className="w-20 h-20 rounded-3xl object-cover shadow-xl shadow-primary/20"
-            />
-            <motion.div
-              className="absolute -inset-2 rounded-[1.75rem] border-2 border-primary/30"
-              animate={{ scale: [1, 1.1, 1], opacity: [0.5, 0, 0.5] }}
-              transition={{ duration: 2, repeat: Infinity }}
-            />
-          </div>
-        </motion.div>
+        <div className="inline-block mb-6">
+          <img
+            src={braveLogoImg}
+            alt="Brave"
+            className="w-20 h-20 rounded-3xl object-cover shadow-xl shadow-primary/20"
+          />
+        </div>
 
         <motion.h1
           initial={{ opacity: 0, y: 15 }}
@@ -283,14 +264,8 @@ function HookToast({ hook }: { hook: { emoji: string; text: string; sub: string 
       transition={{ duration: 0.4, ease: easeOut }}
       className="fixed bottom-20 sm:bottom-6 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-50 sm:max-w-sm sm:w-auto"
     >
-      <div className="flex items-center gap-3 rounded-2xl border border-border bg-card/90 backdrop-blur-xl p-3 sm:p-4 shadow-xl shadow-primary/5">
-        <motion.span
-          className="text-2xl sm:text-3xl shrink-0"
-          animate={{ scale: [1, 1.2, 1] }}
-          transition={{ duration: 0.5, delay: 0.2 }}
-        >
-          {hook.emoji}
-        </motion.span>
+      <div className="flex items-center gap-3 rounded-2xl border border-border bg-card/95 p-3 sm:p-4 shadow-xl shadow-primary/5 sm:backdrop-blur-xl">
+        <span className="text-2xl sm:text-3xl shrink-0">{hook.emoji}</span>
         <div className="min-w-0 flex-1">
           <p className="text-xs sm:text-sm font-semibold text-foreground leading-snug break-words">{hook.text}</p>
           <p className="text-[10px] sm:text-xs text-muted-foreground break-words">{hook.sub}</p>
@@ -327,22 +302,16 @@ function ProgressBar({ current, total }: { current: number; total: number }) {
           transition={{ duration: 0.6, ease: easeOut }}
         />
       </div>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        className="mt-2 flex items-center justify-center gap-1"
-      >
+      <div className="mt-2 flex items-center justify-center gap-1">
         {Array.from({ length: total }).map((_, i) => (
-          <motion.div
+          <div
             key={i}
             className={`h-1.5 rounded-full transition-all duration-300 ${
               i <= current ? "w-6 bg-primary" : "w-1.5 bg-muted-foreground/20"
             }`}
-            animate={i === current ? { scale: [1, 1.2, 1] } : {}}
-            transition={{ duration: 0.5, repeat: i === current ? Infinity : 0, repeatDelay: 1 }}
           />
         ))}
-      </motion.div>
+      </div>
     </div>
   );
 }
@@ -366,9 +335,8 @@ function OptionCard({
       className={`w-full text-left p-3 sm:p-4 rounded-2xl border-2 transition-all duration-200 ${
         selected
           ? "border-primary bg-primary/5 shadow-md shadow-primary/10"
-          : "border-border bg-card/80 backdrop-blur-sm hover:border-primary/30 hover:shadow-sm"
+          : "border-border bg-card/80 hover:border-primary/30 hover:shadow-sm"
       }`}
-      whileHover={{ scale: 1.02, y: -2 }}
       whileTap={{ scale: 0.97 }}
     >
       {children}
@@ -398,14 +366,9 @@ function FeatureShowcase({ onContinue }: { onContinue: () => void }) {
       className="space-y-5 sm:space-y-6"
     >
       <div className="text-center">
-        <motion.div
-          initial={{ scale: 0, rotate: -90 }}
-          animate={{ scale: 1, rotate: 0 }}
-          transition={{ type: "spring", stiffness: 200, damping: 12 }}
-          className="inline-flex items-center justify-center h-14 w-14 sm:h-16 sm:w-16 rounded-2xl bg-primary/10 text-primary mb-3 sm:mb-4"
-        >
+        <div className="inline-flex items-center justify-center h-14 w-14 sm:h-16 sm:w-16 rounded-2xl bg-primary/10 text-primary mb-3 sm:mb-4">
           <Sparkles className="h-7 w-7 sm:h-8 sm:w-8" />
-        </motion.div>
+        </div>
         <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground">
           Conheça o poder do Brave
         </h2>
@@ -422,7 +385,7 @@ function FeatureShowcase({ onContinue }: { onContinue: () => void }) {
             variants={fadeUp}
             initial="hidden"
             animate="visible"
-            className="flex items-start gap-3 p-3 sm:p-4 rounded-2xl border border-border bg-card/80 backdrop-blur-sm hover:border-primary/30 transition-colors"
+            className="flex items-start gap-3 p-3 sm:p-4 rounded-2xl border border-border bg-card/80 hover:border-primary/30 transition-colors"
           >
             <div className={`flex-shrink-0 h-9 w-9 sm:h-10 sm:w-10 rounded-xl ${feat.bg} flex items-center justify-center ${feat.color}`}>
               <feat.icon className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -490,14 +453,9 @@ function HowWeHelp({ answers, onContinue }: { answers: QuizAnswers; onContinue: 
       className="space-y-5 sm:space-y-6"
     >
       <div className="text-center">
-        <motion.div
-          initial={{ scale: 0, rotate: -90 }}
-          animate={{ scale: 1, rotate: 0 }}
-          transition={{ type: "spring", stiffness: 200, damping: 12 }}
-          className="inline-flex items-center justify-center h-14 w-14 sm:h-16 sm:w-16 rounded-2xl bg-emerald-500/10 text-emerald-500 mb-3 sm:mb-4"
-        >
+        <div className="inline-flex items-center justify-center h-14 w-14 sm:h-16 sm:w-16 rounded-2xl bg-emerald-500/10 text-emerald-500 mb-3 sm:mb-4">
           <Heart className="h-7 w-7 sm:h-8 sm:w-8" />
-        </motion.div>
+        </div>
         <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground">
           {answers.name}, veja como vamos te ajudar
         </h2>
@@ -514,16 +472,11 @@ function HowWeHelp({ answers, onContinue }: { answers: QuizAnswers; onContinue: 
             variants={fadeUp}
             initial="hidden"
             animate="visible"
-            className="flex items-start gap-3 p-3 sm:p-4 rounded-2xl border border-border bg-card/80 backdrop-blur-sm"
+            className="flex items-start gap-3 p-3 sm:p-4 rounded-2xl border border-border bg-card/80"
           >
-            <motion.div
-              className="flex-shrink-0 h-10 w-10 sm:h-12 sm:w-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary"
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ delay: 0.2 + i * 0.1, type: "spring", stiffness: 200 }}
-            >
+            <div className="flex-shrink-0 h-10 w-10 sm:h-12 sm:w-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
               <sol.icon className="h-5 w-5 sm:h-6 sm:w-6" />
-            </motion.div>
+            </div>
             <div className="min-w-0 pt-0.5">
               <p className="font-semibold text-sm sm:text-base text-foreground">{sol.title}</p>
               <p className="text-[10px] sm:text-xs text-muted-foreground leading-snug mt-0.5">{sol.desc}</p>
@@ -532,27 +485,17 @@ function HowWeHelp({ answers, onContinue }: { answers: QuizAnswers; onContinue: 
         ))}
       </div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.5 }}
-        className="text-center pt-2"
-      >
-        <motion.div
-          animate={{ scale: [1, 1.03, 1] }}
-          transition={{ duration: 2, repeat: Infinity }}
+      <div className="text-center pt-2">
+        <Button
+          onClick={onContinue}
+          className="rounded-full bg-primary text-primary-foreground hover:brightness-110 transition-all duration-200 px-6 sm:px-8"
         >
-          <Button
-            onClick={onContinue}
-            className="rounded-full bg-primary text-primary-foreground hover:brightness-110 transition-all duration-200 px-6 sm:px-8"
-          >
-            Quero isso pra mim! <Zap className="h-4 w-4 ml-1" />
-          </Button>
-        </motion.div>
+          Quero isso pra mim! <Zap className="h-4 w-4 ml-1" />
+        </Button>
         <p className="mt-3 text-[10px] sm:text-xs text-muted-foreground">
           Falta só mais uma pergunta ✨
         </p>
-      </motion.div>
+      </div>
     </motion.div>
   );
 }
@@ -598,12 +541,7 @@ function QuizResult({ answers, onOpenAuth }: { answers: QuizAnswers; onOpenAuth:
         O Brave te ajuda com isso — direto no WhatsApp, em menos de 2 minutos por dia.
       </motion.p>
 
-      <motion.div
-        initial={{ opacity: 0, y: 15 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.5, duration: 0.5 }}
-        className="mt-6 sm:mt-8 space-y-3 text-left"
-      >
+      <div className="mt-6 sm:mt-8 space-y-3 text-left">
         {[
           { icon: Brain, text: "IA vai analisar seus padrões e dar dicas personalizadas" },
           { icon: MessageSquare, text: "Registre gastos por texto, áudio ou foto no WhatsApp" },
@@ -613,8 +551,8 @@ function QuizResult({ answers, onOpenAuth }: { answers: QuizAnswers; onOpenAuth:
             key={i}
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.6 + i * 0.1, duration: 0.4 }}
-            className="flex items-center gap-3 p-3 rounded-xl bg-card/80 backdrop-blur-sm border border-border"
+            transition={{ delay: 0.4 + i * 0.1, duration: 0.4 }}
+            className="flex items-center gap-3 p-3 rounded-xl bg-card/80 border border-border"
           >
             <div className="flex-shrink-0 h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
               <item.icon className="h-4 w-4" />
@@ -622,7 +560,7 @@ function QuizResult({ answers, onOpenAuth }: { answers: QuizAnswers; onOpenAuth:
             <span className="text-xs sm:text-sm text-foreground">{item.text}</span>
           </motion.div>
         ))}
-      </motion.div>
+      </div>
 
       <motion.div
         initial={{ opacity: 0 }}
@@ -630,15 +568,15 @@ function QuizResult({ answers, onOpenAuth }: { answers: QuizAnswers; onOpenAuth:
         transition={{ delay: 0.9, duration: 0.5 }}
         className="mt-5 sm:mt-6 flex flex-wrap justify-center gap-2 sm:gap-3"
       >
-        <div className="flex items-center gap-1.5 rounded-full border border-border bg-card/80 backdrop-blur-sm px-3 py-1.5 text-[10px] sm:text-xs shadow-sm">
+        <div className="flex items-center gap-1.5 rounded-full border border-border bg-card/80 px-3 py-1.5 text-[10px] sm:text-xs shadow-sm">
           <Users className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-primary" />
           <span className="font-semibold text-foreground">+2.000 usuários</span>
         </div>
-        <div className="flex items-center gap-1.5 rounded-full border border-border bg-card/80 backdrop-blur-sm px-3 py-1.5 text-[10px] sm:text-xs shadow-sm">
+        <div className="flex items-center gap-1.5 rounded-full border border-border bg-card/80 px-3 py-1.5 text-[10px] sm:text-xs shadow-sm">
           <Star className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-amber-500 fill-amber-500" />
           <span className="font-semibold text-foreground">4.9 estrelas</span>
         </div>
-        <div className="flex items-center gap-1.5 rounded-full border border-border bg-card/80 backdrop-blur-sm px-3 py-1.5 text-[10px] sm:text-xs shadow-sm">
+        <div className="flex items-center gap-1.5 rounded-full border border-border bg-card/80 px-3 py-1.5 text-[10px] sm:text-xs shadow-sm">
           <Shield className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-primary" />
           <span className="font-semibold text-foreground">100% seguro</span>
         </div>
@@ -650,21 +588,15 @@ function QuizResult({ answers, onOpenAuth }: { answers: QuizAnswers; onOpenAuth:
         transition={{ delay: 1, duration: 0.5 }}
         className="mt-6 sm:mt-8"
       >
-        <motion.div
-          animate={{ boxShadow: ["0 0 0 0 hsl(var(--primary) / 0)", "0 0 0 12px hsl(var(--primary) / 0.1)", "0 0 0 0 hsl(var(--primary) / 0)"] }}
-          transition={{ duration: 2, repeat: Infinity }}
-          className="inline-block rounded-full"
+        <Button
+          size="lg"
+          onClick={onOpenAuth}
+          className="rounded-full bg-primary text-primary-foreground hover:brightness-110 hover:shadow-lg hover:shadow-primary/25 transition-all duration-200 text-sm sm:text-base px-6 sm:px-8 py-5 sm:py-6"
         >
-          <Button
-            size="lg"
-            onClick={onOpenAuth}
-            className="rounded-full bg-primary text-primary-foreground hover:brightness-110 hover:shadow-lg hover:shadow-primary/25 transition-all duration-200 text-sm sm:text-base px-6 sm:px-8 py-5 sm:py-6"
-          >
-            <span className="flex items-center gap-2">
-              <Zap className="h-4 w-4 sm:h-5 sm:w-5" /> Quero organizar minhas finanças
-            </span>
-          </Button>
-        </motion.div>
+          <span className="flex items-center gap-2">
+            <Zap className="h-4 w-4 sm:h-5 sm:w-5" /> Quero organizar minhas finanças
+          </span>
+        </Button>
         <p className="mt-3 text-[10px] sm:text-xs text-muted-foreground flex items-center justify-center gap-1">
           <Lock className="h-3 w-3" /> Teste grátis • Sem cartão • Cancele quando quiser
         </p>
@@ -749,7 +681,7 @@ export default function QuizFunnel({ onOpenAuth }: { onOpenAuth: () => void }) {
       </AnimatePresence>
 
       {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 bg-background/60 backdrop-blur-xl border-b border-border/50">
+      <header className="fixed top-0 left-0 right-0 z-50 bg-background/90 sm:bg-background/60 sm:backdrop-blur-xl border-b border-border/50">
         <div className="container mx-auto flex items-center justify-between h-14 px-4">
           <a href="#" className="flex items-center gap-2 font-bold text-base sm:text-lg text-foreground">
             <img src={braveLogoImg} alt="Brave" className="w-7 h-7 rounded-lg object-cover" />
@@ -944,7 +876,7 @@ export default function QuizFunnel({ onOpenAuth }: { onOpenAuth: () => void }) {
 
       {/* Footer */}
       {!showThemePicker && (
-        <footer className="py-4 text-center border-t border-border/50 relative z-10 bg-background/60 backdrop-blur-sm">
+        <footer className="py-4 text-center border-t border-border/50 relative z-10 bg-background/90 sm:bg-background/60 sm:backdrop-blur-sm">
           <p className="text-[10px] sm:text-xs text-muted-foreground">
             © 2026 Brave Assessor · Hubflows Tecnologia Ltda
           </p>
