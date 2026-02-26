@@ -1,4 +1,4 @@
-import braveLogoImg from "@/assets/brave-logo-full.png";
+import braveLogoImg from "@/assets/brave-logo-new.png";
 import {
   LayoutDashboard, Wallet, Tag, CreditCard, CalendarCheck,
   Target, TrendingUp, Brain, FileText, HeadphonesIcon,

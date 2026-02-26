@@ -5,7 +5,7 @@ import SocialProofToast from "@/components/SocialProofToast";
 import { motion, useScroll, useTransform, useInView } from "framer-motion";
 import heroImage from "@/assets/hero-woman.jpg";
 import benefitsImage from "@/assets/hero-benefits.jpg";
-import braveLogoImg from "@/assets/brave-logo-full.png";
+import braveLogoImg from "@/assets/brave-logo-new.png";
 import {
   MessageSquare, Mic, Camera, Brain, CreditCard, Target, Wallet,
   Users, FileText, Bell, TrendingUp, ChevronRight, Star, Shield,
