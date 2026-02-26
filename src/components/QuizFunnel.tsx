@@ -181,19 +181,14 @@ function ThemePicker({ onChoose }: { onChoose: (theme: "light" | "dark") => void
         transition={{ duration: 0.6, ease: easeOut }}
         className="relative z-10 text-center px-6 max-w-md w-full"
       >
-        {/* Logo with glassmorphism card */}
-        <motion.div
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ duration: 0.5, ease: easeOut }}
-          className="inline-flex items-center justify-center mb-6 p-5 rounded-[2rem] bg-gradient-to-br from-card/80 to-card/40 backdrop-blur-xl border border-border/50 shadow-2xl shadow-primary/10"
-        >
+        {/* Logo */}
+        <div className="inline-block mb-6">
           <img
             src={braveLogoImg}
             alt="Brave Assessor"
-            className="w-28 h-28 object-contain drop-shadow-lg"
+            className="w-32 h-32 object-contain drop-shadow-md"
           />
-        </motion.div>
+        </div>
 
         <motion.h1
           initial={{ opacity: 0, y: 15 }}
