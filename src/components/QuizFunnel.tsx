@@ -186,7 +186,7 @@ function ThemePicker({ onChoose }: { onChoose: (theme: "light" | "dark") => void
           <img
             src={braveLogoImg}
             alt="Brave Assessor"
-            className="w-28 h-28 rounded-3xl object-cover shadow-xl shadow-primary/20"
+            className="w-36 h-36 rounded-3xl object-contain shadow-xl shadow-primary/20"
           />
         </div>
 
