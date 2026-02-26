@@ -77,11 +77,11 @@ export function AppSidebar() {
       <SidebarContent>
         {/* Logo */}
         <div className="px-4 pt-5 pb-2 group-data-[collapsible=icon]:px-2">
-          <div className="flex items-center gap-2.5">
-            <img src={braveLogoIcon} alt="Brave Assessor" className="h-12 w-12 rounded-xl object-contain shrink-0" />
+          <div className="flex items-center gap-3">
+            <img src={braveLogoIcon} alt="Brave Assessor" className="h-14 w-14 rounded-xl object-contain shrink-0" />
             <div className="group-data-[collapsible=icon]:hidden">
-              <span className="font-bold text-base text-primary leading-none">Brave Assessor</span>
-              <p className="text-[11px] text-muted-foreground leading-tight">Finanças inteligentes</p>
+              <span className="font-bold text-lg text-primary leading-none">Brave Assessor</span>
+              <p className="text-xs text-muted-foreground leading-tight mt-0.5">Finanças inteligentes</p>
             </div>
           </div>
         </div>
