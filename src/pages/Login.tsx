@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { LogIn, Eye, EyeOff } from "lucide-react";
-import braveLogoImg from "@/assets/brave-logo-new.png";
+import braveLogoImg from "@/assets/brave-logo-cropped.png";
 
 export default function Login() {
   const { signIn } = useAuth();
