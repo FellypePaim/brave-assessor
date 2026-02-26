@@ -36,7 +36,7 @@ export default function Login() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="mx-auto mb-4">
-            <img src={braveLogoImg} alt="Brave Assessor" className="h-20 w-auto object-contain" />
+            <img src={braveLogoImg} alt="Brave Assessor" className="h-32 w-auto object-contain" />
           </div>
           <CardTitle className="text-2xl">Entrar no Brave</CardTitle>
           <CardDescription>Digite seu email e senha para acessar</CardDescription>
