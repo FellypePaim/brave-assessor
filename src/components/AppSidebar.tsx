@@ -78,7 +78,7 @@ export function AppSidebar() {
         {/* Logo */}
         <div className="px-4 pt-5 pb-2 group-data-[collapsible=icon]:px-2">
           <div className="flex items-center gap-2.5">
-            <img src={braveLogoImg} alt="Brave Assessor" className="h-9 w-9 rounded-lg object-cover shrink-0" />
+            <img src={braveLogoImg} alt="Brave Assessor" className="h-10 w-10 rounded-xl object-cover shrink-0" />
             <div className="group-data-[collapsible=icon]:hidden">
               <span className="font-bold text-base text-primary leading-none">Brave Assessor</span>
               <p className="text-[11px] text-muted-foreground leading-tight">Finanças inteligentes</p>

@@ -29,7 +29,7 @@ export default function DashboardLayout() {
           <header className="h-14 flex items-center justify-between border-b border-border px-4 bg-background shrink-0">
             <div className="flex items-center gap-2">
               <SidebarTrigger className="hidden md:flex" />
-              <img src={braveLogoImg} alt="Brave Assessor" className="md:hidden h-7 w-auto object-contain" />
+              <img src={braveLogoImg} alt="Brave Assessor" className="md:hidden h-9 w-auto object-contain" />
             </div>
             <Button
               variant="ghost"
