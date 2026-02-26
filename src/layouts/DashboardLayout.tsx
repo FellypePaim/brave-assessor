@@ -1,4 +1,4 @@
-import braveLogoImg from "@/assets/brave-logo-full.png";
+import braveLogoImg from "@/assets/brave-logo-new.png";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { MobileBottomNav } from "@/components/MobileBottomNav";

@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import braveLogoImg from "@/assets/brave-logo-full.png";
+import braveLogoImg from "@/assets/brave-logo-new.png";
 
 /* ─── TYPES ─── */
 interface QuizAnswers {
