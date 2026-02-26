@@ -39,7 +39,7 @@ export default defineConfig(({ mode }) => ({
         name: "Brave Assessor",
         short_name: "Brave",
         description: "Seu assessor financeiro pessoal com IA no WhatsApp",
-        theme_color: "#7c3aed",
+        theme_color: "#e03020",
         background_color: "#09090b",
         display: "standalone",
         orientation: "portrait",
