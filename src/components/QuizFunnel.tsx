@@ -185,8 +185,8 @@ function ThemePicker({ onChoose }: { onChoose: (theme: "light" | "dark") => void
         <div className="inline-block mb-6">
           <img
             src={braveLogoImg}
-            alt="Brave"
-            className="w-20 h-20 rounded-3xl object-cover shadow-xl shadow-primary/20"
+            alt="Brave Assessor"
+            className="w-28 h-28 rounded-3xl object-cover shadow-xl shadow-primary/20"
           />
         </div>
 
@@ -684,8 +684,8 @@ export default function QuizFunnel({ onOpenAuth }: { onOpenAuth: () => void }) {
       <header className="fixed top-0 left-0 right-0 z-50 bg-background/90 sm:bg-background/60 sm:backdrop-blur-xl border-b border-border/50">
         <div className="container mx-auto flex items-center justify-between h-14 px-4">
           <a href="#" className="flex items-center gap-2 font-bold text-base sm:text-lg text-foreground">
-            <img src={braveLogoImg} alt="Brave" className="w-7 h-7 rounded-lg object-cover" />
-            Brave
+            <img src={braveLogoImg} alt="Brave Assessor" className="w-9 h-9 rounded-lg object-cover" />
+            Brave Assessor
           </a>
           <button
             onClick={onOpenAuth}

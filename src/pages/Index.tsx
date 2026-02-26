@@ -18,12 +18,12 @@ import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger,
 } from "@/components/ui/accordion";
 
-function BraveLogo({ size = 32 }: { size?: number }) {
+function BraveLogo({ size = 36 }: { size?: number }) {
   return (
     <img
       src={braveLogoImg}
       alt="Brave Assessor Logo"
-      style={{ width: size, height: size, borderRadius: 8, objectFit: "cover" }}
+      style={{ width: size, height: size, borderRadius: 10, objectFit: "cover" }}
     />
   );
 }
@@ -90,8 +90,8 @@ function Header({ onOpenAuth }: { onOpenAuth: () => void }) {
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border">
       <div className="container mx-auto flex items-center justify-between h-16 px-4">
-        <a href="#" className="flex items-center gap-2 font-bold text-xl text-foreground">
-          <BraveLogo size={32} />
+        <a href="#" className="flex items-center gap-2.5 font-bold text-xl text-foreground">
+          <BraveLogo size={38} />
           Brave Assessor
         </a>
         <nav className="hidden md:flex items-center gap-6">
