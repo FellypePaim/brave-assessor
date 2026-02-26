@@ -1,3 +1,4 @@
+import braveLogoImg from "@/assets/brave-logo-full.png";
 import {
   LayoutDashboard, Wallet, Tag, CreditCard, CalendarCheck,
   Target, TrendingUp, Brain, FileText, HeadphonesIcon,
@@ -77,9 +78,7 @@ export function AppSidebar() {
         {/* Logo */}
         <div className="px-4 pt-5 pb-2 group-data-[collapsible=icon]:px-2">
           <div className="flex items-center gap-2.5">
-            <div className="h-9 w-9 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-sm font-extrabold shrink-0">
-              N
-            </div>
+            <img src={braveLogoImg} alt="Brave Assessor" className="h-9 w-9 rounded-lg object-cover shrink-0" />
             <div className="group-data-[collapsible=icon]:hidden">
               <span className="font-bold text-base text-primary leading-none">Brave Assessor</span>
               <p className="text-[11px] text-muted-foreground leading-tight">Finanças inteligentes</p>
