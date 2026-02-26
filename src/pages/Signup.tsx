@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { UserPlus, Eye, EyeOff, Moon, Sun } from "lucide-react";
+import braveLogoImg from "@/assets/brave-logo-cropped.png";
 
 export default function Signup() {
   const { signUp } = useAuth();
@@ -57,8 +58,8 @@ export default function Signup() {
       </Button>
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-4 h-12 w-12 rounded-xl bg-primary flex items-center justify-center text-primary-foreground text-xl font-extrabold">
-            N
+          <div className="mx-auto mb-4">
+            <img src={braveLogoImg} alt="Brave Assessor" className="h-32 w-auto object-contain" />
           </div>
           <CardTitle className="text-2xl">Criar conta</CardTitle>
           <CardDescription>Preencha os dados para começar</CardDescription>
