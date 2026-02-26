@@ -204,10 +204,10 @@ export default function Dashboard() {
   const mood = getMood();
 
   const summaryCards = [
-    { label: "Valores Pagos", value: fmt(paidExpenses), subtitle: "Período selecionado", icon: TrendingDown, iconBg: "bg-destructive", iconColor: "text-destructive-foreground", borderColor: "border-destructive/30" },
-    { label: "Valores Recebidos", value: fmt(receivedIncome), subtitle: "Período selecionado", icon: TrendingUp, iconBg: "bg-emerald-500", iconColor: "text-white", borderColor: "border-emerald-500/30" },
-    { label: "Saldo Carteiras", value: fmt(totalBalance), subtitle: `${wallets.length} carteira(s)`, icon: Clock, iconBg: "bg-orange-500", iconColor: "text-white", borderColor: "border-orange-500/30" },
-    { label: "Balanço do Período", value: fmt(balance), subtitle: balance >= 0 ? "Positivo" : "Negativo", icon: DollarSign, iconBg: "bg-blue-500", iconColor: "text-white", borderColor: "border-blue-500/30" },
+    { label: "Valores Pagos", value: fmt(paidExpenses), subtitle: "Período selecionado", icon: TrendingDown, iconBg: "bg-destructive", iconColor: "text-destructive-foreground", borderColor: "border-destructive/30", valueColor: "text-destructive" },
+    { label: "Valores Recebidos", value: fmt(receivedIncome), subtitle: "Período selecionado", icon: TrendingUp, iconBg: "bg-emerald-500", iconColor: "text-white", borderColor: "border-emerald-500/30", valueColor: "text-emerald-500" },
+    { label: "Saldo Carteiras", value: fmt(totalBalance), subtitle: `${wallets.length} carteira(s)`, icon: Clock, iconBg: "bg-orange-500", iconColor: "text-white", borderColor: "border-orange-500/30", valueColor: totalBalance < 0 ? "text-destructive" : "text-orange-500" },
+    { label: "Balanço do Período", value: fmt(balance), subtitle: balance >= 0 ? "Positivo" : "Negativo", icon: DollarSign, iconBg: "bg-blue-500", iconColor: "text-white", borderColor: "border-blue-500/30", valueColor: balance < 0 ? "text-destructive" : "text-blue-500" },
   ];
 
   // Category color map
@@ -291,7 +291,7 @@ export default function Dashboard() {
             <CardContent className="p-4 flex items-center justify-between">
               <div>
                 <p className="text-xs text-muted-foreground">{card.label}</p>
-                <p className="text-xl font-bold text-primary mt-1">{card.value}</p>
+                <p className={`text-xl font-bold mt-1 ${card.valueColor}`}>{card.value}</p>
                 <p className="text-[11px] text-muted-foreground mt-0.5">{card.subtitle}</p>
               </div>
               <div className={`h-10 w-10 rounded-full ${card.iconBg} ${card.iconColor} flex items-center justify-center shrink-0`}>
