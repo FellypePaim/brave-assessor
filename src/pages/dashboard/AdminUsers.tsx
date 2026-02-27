@@ -470,7 +470,7 @@ export default function AdminUsers() {
                         <Button variant="ghost" size="sm" onClick={() => openEdit(u)} className="h-8 px-2">
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
-                        {currentUserIsAdmin && u.role !== "admin" && (
+                        {currentUserIsAdmin && (
                           <>
                             <Button
                               variant="ghost"
@@ -482,15 +482,17 @@ export default function AdminUsers() {
                             >
                               <RefreshCw className={`h-3.5 w-3.5 ${resettingId === u.id ? "animate-spin" : ""}`} />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setConfirmDeleteUser(u)}
-                              className="h-8 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
-                              disabled={deletingId === u.id}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
+                            {u.role !== "admin" && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setConfirmDeleteUser(u)}
+                                className="h-8 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                disabled={deletingId === u.id}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
                           </>
                         )}
                       </div>
