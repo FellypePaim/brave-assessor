@@ -1,5 +1,6 @@
 import { getBrazilNow } from "./whatsapp-utils.ts";
 import { callPollinations, transcribeAudio } from "./pollinations-client.ts";
+import { callGemini } from "./gemini-client.ts";
 import { stripMarkdownFences, safeJsonParse, postProcessReminder } from "./ai-response-parser.ts";
 
 // ── Shared NLP rules used across all prompts ──
@@ -272,8 +273,9 @@ Para perguntas normais, responda em texto formatado com emojis e parágrafos.`;
 export async function processWithNoxIA(userMessage: string, financialContext: string) {
   const systemPrompt = buildCapabilitiesPrompt(financialContext);
 
-  return await callPollinations({
-    model: "openai",
+  // Use Gemini directly for better accuracy with lists and complex parsing
+  return await callGemini({
+    model: "gemini-2.5-flash",
     systemPrompt,
     messages: [{ role: "user", content: userMessage }],
     temperature: 0.3,
