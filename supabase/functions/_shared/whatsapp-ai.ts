@@ -162,9 +162,73 @@ Exemplos:
 Para EXCLUIR uma transação recente: {"action":"delete_transaction","search":"Almoço"}
 Busca pela descrição mais recente.
 
+✏️ EDITAR TRANSAÇÃO:
+Para EDITAR uma transação recente: {"action":"edit_transaction","search":"Almoço","field":"amount","new_value":60}
+Campos editáveis: "amount", "description", "category", "type"
+
 Exemplos:
 - "excluir transação do almoço" → delete_transaction
 - "remover o gasto de gasolina" → delete_transaction
+- "mudar valor do almoço para 60" → edit_transaction
+- "trocar categoria do uber para Transporte" → edit_transaction
+
+📋 LISTAR TRANSAÇÕES RECENTES:
+Para LISTAR as últimas transações: {"action":"list_transactions"}
+Exemplos:
+- "minhas transações" → list_transactions
+- "últimos gastos" → list_transactions
+- "extrato recente" → list_transactions
+
+🔄 RECORRÊNCIAS (CRUD completo):
+Para LISTAR recorrências ativas: {"action":"list_recurring"}
+Para EDITAR uma recorrência: {"action":"edit_recurring","search":"Netflix","field":"amount","new_value":45}
+Campos editáveis: "amount", "description", "day_of_month", "is_active"
+Para EXCLUIR/DESATIVAR uma recorrência: {"action":"delete_recurring","search":"Netflix"}
+
+Exemplos:
+- "minhas recorrências" → list_recurring
+- "mudar valor da Netflix para 45" → edit_recurring
+- "cancelar recorrência Netflix" → delete_recurring
+
+💸 TRANSFERIR ENTRE CARTEIRAS:
+Para transferir dinheiro entre carteiras: {"action":"transfer_wallet","from":"Nubank","to":"Inter","amount":500}
+
+Exemplos:
+- "transferir 500 de Nubank para Inter" → transfer_wallet
+- "mover 200 da poupança para corrente" → transfer_wallet
+
+👤 ATUALIZAR PERFIL:
+Para atualizar dados do perfil: {"action":"update_profile","field":"monthly_income","new_value":5000}
+Campos editáveis: "display_name" (nome), "monthly_income" (renda mensal)
+
+Exemplos:
+- "minha renda é 5000" → update_profile com field=monthly_income
+- "mudar meu nome para João" → update_profile com field=display_name
+
+💳 MARCAR CONTA COMO PAGA:
+Para marcar uma conta/boleto como pago: {"action":"pay_bill","search":"Energia"}
+
+Exemplos:
+- "paguei a conta de luz" → pay_bill
+- "marcar energia como pago" → pay_bill
+
+📋 LISTAR CONTAS A PAGAR:
+Para listar contas pendentes: {"action":"list_bills"}
+
+Exemplos:
+- "minhas contas a pagar" → list_bills
+- "contas pendentes" → list_bills
+
+🎯 TRANSAÇÃO COM CARTEIRA/CARTÃO ESPECÍFICO:
+Quando o usuário mencionar uma carteira ou cartão na transação, inclua o campo no JSON:
+{"action":"add_transaction","amount":50,"description":"Almoço","category":"Alimentação","type":"expense","wallet":"Nubank"}
+ou
+{"action":"add_transaction","amount":50,"description":"Almoço","category":"Alimentação","type":"expense","card":"Visa"}
+
+📅 TRANSAÇÃO COM DATA ESPECÍFICA:
+Quando o usuário mencionar uma data passada ("ontem", "dia 15", "semana passada"), inclua:
+{"action":"add_transaction","amount":50,"description":"Almoço","category":"Alimentação","type":"expense","date":"2026-02-26"}
+Se não mencionar data, NÃO inclua o campo date (usa data atual).
 
 🔔 LEMBRETES (PRIORIDADE ALTA):
 Quando o usuário pedir para criar um lembrete (ex: "lembrete: reunião amanhã 15h", "me lembra de pagar a conta dia 10", "adicione um lembrete para amanhã 11:00 para atualizar o SIA"), responda SOMENTE com JSON:

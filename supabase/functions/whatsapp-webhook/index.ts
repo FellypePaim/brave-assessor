@@ -3399,6 +3399,208 @@ Metas financeiras: ${goalsCtx}`;
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
+      // ── Detect edit_transaction action ──
+      const editTransactionMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"edit_transaction"[\s\S]*\}/);
+      if (editTransactionMatch) {
+        const action = JSON.parse(editTransactionMatch[0]);
+        const searchTerm = (action.search || "").toLowerCase();
+        const { data: txList } = await supabaseAdmin.from("transactions").select("id, description, amount, type, date, wallet_id, category_id")
+          .eq("user_id", userId).order("date", { ascending: false }).limit(20);
+        const matched = (txList || []).find((t: any) => t.description.toLowerCase().includes(searchTerm));
+        if (!matched) {
+          await sendWhatsAppMessage(cleanPhone, `❓ Não encontrei a transação "${action.search}".`);
+        } else {
+          const updateData: any = {};
+          if (action.field === "amount") {
+            const oldAmount = Number(matched.amount);
+            const newAmount = Number(action.new_value);
+            updateData.amount = newAmount;
+            if (matched.wallet_id) {
+              const { data: w } = await supabaseAdmin.from("wallets").select("id, balance").eq("id", matched.wallet_id).maybeSingle();
+              if (w) {
+                const diff = matched.type === "income" ? (newAmount - oldAmount) : (oldAmount - newAmount);
+                await supabaseAdmin.from("wallets").update({ balance: Number(w.balance) + diff }).eq("id", w.id);
+              }
+            }
+          } else if (action.field === "description") updateData.description = action.new_value;
+          else if (action.field === "category") {
+            const matchedCat = (categories || []).find((c: any) => c.name.toLowerCase().includes(String(action.new_value).toLowerCase()));
+            if (matchedCat) updateData.category_id = (matchedCat as any).id;
+          } else if (action.field === "type") updateData.type = action.new_value;
+          if (Object.keys(updateData).length > 0) {
+            await supabaseAdmin.from("transactions").update(updateData).eq("id", matched.id);
+            await sendWhatsAppMessage(cleanPhone, `✅ Transação *${matched.description}* atualizada!\n\n_Brave IA 🤖_`);
+          }
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ── Detect list_transactions action ──
+      const listTransactionsMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"list_transactions"[\s\S]*\}/);
+      if (listTransactionsMatch) {
+        const { data: txList } = await supabaseAdmin.from("transactions").select("description, amount, type, date, categories(name)")
+          .eq("user_id", userId).order("date", { ascending: false }).limit(10);
+        if (!txList || txList.length === 0) {
+          await sendWhatsAppMessage(cleanPhone, "📭 Nenhuma transação recente.\n\n_Brave IA 🤖_");
+        } else {
+          const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
+          const list = txList.map((t: any, i: number) => {
+            const emoji = t.type === "income" ? "💰" : "💸";
+            const cat = (t as any).categories?.name || "";
+            const dt = new Date(t.date + "T12:00:00").toLocaleDateString("pt-BR");
+            return `${i + 1}. ${emoji} *${t.description}* — ${fmt(Number(t.amount))} · ${dt}${cat ? ` · ${cat}` : ""}`;
+          }).join("\n");
+          await sendWhatsAppMessage(cleanPhone, `📋 *Últimas transações:*\n\n${list}\n\n_Brave IA 🤖_`);
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ── Detect list_recurring action ──
+      const listRecurringMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"list_recurring"[\s\S]*\}/);
+      if (listRecurringMatch) {
+        const { data: recList } = await supabaseAdmin.from("recurring_transactions").select("*").eq("user_id", userId).eq("is_active", true).order("day_of_month");
+        if (!recList || recList.length === 0) {
+          await sendWhatsAppMessage(cleanPhone, "📭 Nenhuma recorrência ativa.\n\n_Brave IA 🤖_");
+        } else {
+          const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
+          const total = recList.reduce((s: number, r: any) => s + Number(r.amount), 0);
+          const list = recList.map((r: any, i: number) => {
+            const emoji = r.type === "income" ? "💰" : "💸";
+            return `${i + 1}. ${emoji} *${r.description}* — ${fmt(Number(r.amount))} · dia ${r.day_of_month}`;
+          }).join("\n");
+          await sendWhatsAppMessage(cleanPhone, `🔄 *Recorrências ativas (${recList.length}):*\n\n${list}\n\n💸 *Total mensal: ${fmt(total)}*\n\n_Brave IA 🤖_`);
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ── Detect edit_recurring action ──
+      const editRecurringMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"edit_recurring"[\s\S]*\}/);
+      if (editRecurringMatch) {
+        const action = JSON.parse(editRecurringMatch[0]);
+        const searchTerm = (action.search || "").toLowerCase();
+        const { data: recList } = await supabaseAdmin.from("recurring_transactions").select("*").eq("user_id", userId).eq("is_active", true);
+        const matched = (recList || []).find((r: any) => r.description.toLowerCase().includes(searchTerm));
+        if (!matched) {
+          await sendWhatsAppMessage(cleanPhone, `❓ Não encontrei a recorrência "${action.search}".`);
+        } else {
+          const updateData: any = {};
+          if (action.field === "amount") updateData.amount = Number(action.new_value);
+          else if (action.field === "description") updateData.description = action.new_value;
+          else if (action.field === "day_of_month") updateData.day_of_month = Number(action.new_value);
+          if (Object.keys(updateData).length > 0) {
+            await supabaseAdmin.from("recurring_transactions").update(updateData).eq("id", matched.id);
+            await sendWhatsAppMessage(cleanPhone, `✅ Recorrência *${matched.description}* atualizada!\n\n_Brave IA 🤖_`);
+          }
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ── Detect delete_recurring action ──
+      const deleteRecurringMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"delete_recurring"[\s\S]*\}/);
+      if (deleteRecurringMatch) {
+        const action = JSON.parse(deleteRecurringMatch[0]);
+        const searchTerm = (action.search || "").toLowerCase();
+        const { data: recList } = await supabaseAdmin.from("recurring_transactions").select("*").eq("user_id", userId).eq("is_active", true);
+        const matched = (recList || []).find((r: any) => r.description.toLowerCase().includes(searchTerm));
+        if (!matched) {
+          await sendWhatsAppMessage(cleanPhone, `❓ Não encontrei a recorrência "${action.search}".`);
+        } else {
+          await supabaseAdmin.from("recurring_transactions").update({ is_active: false }).eq("id", matched.id);
+          await sendWhatsAppMessage(cleanPhone, `🗑️ Recorrência *${matched.description}* desativada!\n\n_Ela não será mais gerada nos próximos meses._\n\n_Brave IA 🤖_`);
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ── Detect transfer_wallet action ──
+      const transferWalletMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"transfer_wallet"[\s\S]*\}/);
+      if (transferWalletMatch) {
+        const action = JSON.parse(transferWalletMatch[0]);
+        const { data: wList } = await supabaseAdmin.from("wallets").select("*").eq("user_id", userId);
+        const from = (wList || []).find((w: any) => w.name.toLowerCase().includes((action.from || "").toLowerCase()));
+        const to = (wList || []).find((w: any) => w.name.toLowerCase().includes((action.to || "").toLowerCase()));
+        const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
+        if (!from) {
+          await sendWhatsAppMessage(cleanPhone, `❓ Carteira de origem "${action.from}" não encontrada.`);
+        } else if (!to) {
+          await sendWhatsAppMessage(cleanPhone, `❓ Carteira de destino "${action.to}" não encontrada.`);
+        } else {
+          const amount = Number(action.amount);
+          if (Number(from.balance) < amount) {
+            await sendWhatsAppMessage(cleanPhone, `❌ Saldo insuficiente em *${from.name}* (${fmt(Number(from.balance))}).`);
+          } else {
+            await supabaseAdmin.from("wallets").update({ balance: Number(from.balance) - amount }).eq("id", from.id);
+            await supabaseAdmin.from("wallets").update({ balance: Number(to.balance) + amount }).eq("id", to.id);
+            await sendWhatsAppMessage(cleanPhone,
+              `🔄 *Transferência realizada!*\n\n` +
+              `💳 ${from.name} → ${to.name}\n` +
+              `💵 ${fmt(amount)}\n\n` +
+              `📊 *${from.name}:* ${fmt(Number(from.balance) - amount)}\n` +
+              `📊 *${to.name}:* ${fmt(Number(to.balance) + amount)}\n\n_Brave IA 🤖_`
+            );
+          }
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ── Detect update_profile action ──
+      const updateProfileMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"update_profile"[\s\S]*\}/);
+      if (updateProfileMatch) {
+        const action = JSON.parse(updateProfileMatch[0]);
+        const updateData: any = {};
+        if (action.field === "monthly_income") updateData.monthly_income = Number(action.new_value);
+        else if (action.field === "display_name") updateData.display_name = action.new_value;
+        if (Object.keys(updateData).length > 0) {
+          await supabaseAdmin.from("profiles").update(updateData).eq("id", userId);
+          const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
+          const label = action.field === "monthly_income" 
+            ? `Renda mensal atualizada para *${fmt(Number(action.new_value))}*` 
+            : `Nome atualizado para *${action.new_value}*`;
+          await sendWhatsAppMessage(cleanPhone, `✅ ${label}\n\n_Brave IA 🤖_`);
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ── Detect pay_bill action ──
+      const payBillMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"pay_bill"[\s\S]*\}/);
+      if (payBillMatch) {
+        const action = JSON.parse(payBillMatch[0]);
+        const searchTerm = (action.search || "").toLowerCase();
+        const { data: bills } = await supabaseAdmin.from("transactions").select("id, description, amount, type, wallet_id, due_date")
+          .eq("user_id", userId).eq("is_paid", false).eq("type", "expense").order("due_date").limit(20);
+        const matched = (bills || []).find((t: any) => t.description.toLowerCase().includes(searchTerm));
+        if (!matched) {
+          await sendWhatsAppMessage(cleanPhone, `❓ Não encontrei a conta "${action.search}" entre as pendentes.`);
+        } else {
+          await supabaseAdmin.from("transactions").update({ is_paid: true }).eq("id", matched.id);
+          if (matched.wallet_id) {
+            const { data: w } = await supabaseAdmin.from("wallets").select("id, balance").eq("id", matched.wallet_id).maybeSingle();
+            if (w) await supabaseAdmin.from("wallets").update({ balance: Number(w.balance) - Number(matched.amount) }).eq("id", w.id);
+          }
+          const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
+          await sendWhatsAppMessage(cleanPhone, `✅ Conta *${matched.description}* (${fmt(Number(matched.amount))}) marcada como paga!\n\n_Brave IA 🤖_`);
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ── Detect list_bills action ──
+      const listBillsMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"list_bills"[\s\S]*\}/);
+      if (listBillsMatch) {
+        const { data: bills } = await supabaseAdmin.from("transactions").select("description, amount, due_date, categories(name)")
+          .eq("user_id", userId).eq("is_paid", false).eq("type", "expense").order("due_date").limit(15);
+        if (!bills || bills.length === 0) {
+          await sendWhatsAppMessage(cleanPhone, "✅ Nenhuma conta pendente! Tudo em dia! 🎉\n\n_Brave IA 🤖_");
+        } else {
+          const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
+          const total = bills.reduce((s: number, t: any) => s + Number(t.amount), 0);
+          const list = bills.map((t: any, i: number) => {
+            const due = t.due_date ? new Date(t.due_date + "T12:00:00").toLocaleDateString("pt-BR") : "sem vencimento";
+            return `${i + 1}. 📋 *${t.description}* — ${fmt(Number(t.amount))} · vence ${due}`;
+          }).join("\n");
+          await sendWhatsAppMessage(cleanPhone, `📋 *Contas a pagar:*\n\n${list}\n\n💸 *Total: ${fmt(total)}*\n\n_Brave IA 🤖_`);
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
     } catch (parseErr) {
       console.log("Response is text, not action");
     }
