@@ -31,6 +31,7 @@ import NyloChat from "./pages/dashboard/NyloChat";
 import Reminders from "./pages/dashboard/Reminders";
 import NotFound from "./pages/NotFound";
 import Install from "./pages/Install";
+import { PWASplashScreen } from "./components/PWASplashScreen";
 
 const queryClient = new QueryClient();
 
@@ -43,6 +44,7 @@ function IndexRoute() {
 }
 
 const App = () => (
+  <PWASplashScreen>
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
@@ -109,6 +111,7 @@ const App = () => (
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
+  </PWASplashScreen>
 );
 
 export default App;
