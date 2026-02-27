@@ -1,5 +1,5 @@
 import { getBrazilNow } from "./whatsapp-utils.ts";
-import { callGemini } from "./gemini-client.ts";
+import { callPollinations, transcribeAudio } from "./pollinations-client.ts";
 import { stripMarkdownFences, safeJsonParse, postProcessReminder } from "./ai-response-parser.ts";
 
 // ── Shared NLP rules used across all prompts ──
@@ -194,8 +194,8 @@ Responda SOMENTE com JSON quando identificar uma transação:
 
 Se não conseguir identificar os dados, responda em texto explicando o que viu.`;
 
-  return await callGemini({
-    model: "gemini-2.5-flash",
+  return await callPollinations({
+    model: "openai",
     systemPrompt,
     messages: [
       {
@@ -210,35 +210,37 @@ Se não conseguir identificar os dados, responda em texto explicando o que viu.`
 }
 
 export async function processAudioWithAI(audioBase64: string, mimeType: string, financialContext: string) {
+  // Step 1: Transcribe audio using Pollinations transcription API
+  console.log("Transcribing audio via Pollinations...");
+  const transcribedText = await transcribeAudio(audioBase64, mimeType);
+  console.log("Transcribed audio text:", transcribedText);
+
+  if (!transcribedText || transcribedText.trim().length === 0) {
+    return "Não consegui entender o áudio 😕 Pode tentar enviar novamente ou digitar sua mensagem?";
+  }
+
+  // Step 2: Process transcribed text through the AI as a normal text message
   const systemPrompt = buildCapabilitiesPrompt(financialContext) + `
 
-🎙️ ÁUDIO RECEBIDO (CONTEXTO ADICIONAL):
-Transcreva o áudio e interprete o que foi dito.
+🎙️ ÁUDIO TRANSCRITO (CONTEXTO ADICIONAL):
+O texto abaixo foi transcrito de um áudio enviado pelo usuário.
+Interprete como se fosse uma mensagem de texto normal.
 Se for um comando (transação, lembrete, meta, carteira, etc.), responda SOMENTE com o JSON correspondente.
 Para perguntas normais, responda em texto formatado com emojis e parágrafos.`;
 
-  const audioFormat = mimeType.includes("ogg") ? "audio/ogg" : mimeType.includes("mp4") ? "audio/mp4" : "audio/mpeg";
-
-  return await callGemini({
-    model: "gemini-2.5-flash",
+  return await callPollinations({
+    model: "openai",
     systemPrompt,
-    messages: [
-      {
-        role: "user",
-        content: [
-          { type: "image_url", image_url: { url: `data:${audioFormat};base64,${audioBase64}` } },
-          { type: "text", text: "Transcreva e interprete este áudio. Se for um comando financeiro (gasto, receita, lembrete, meta, etc.), retorne o JSON da ação correspondente." },
-        ],
-      },
-    ],
+    messages: [{ role: "user", content: transcribedText }],
+    temperature: 0.3,
   });
 }
 
 export async function processWithNoxIA(userMessage: string, financialContext: string) {
   const systemPrompt = buildCapabilitiesPrompt(financialContext);
 
-  return await callGemini({
-    model: "gemini-2.5-flash",
+  return await callPollinations({
+    model: "openai",
     systemPrompt,
     messages: [{ role: "user", content: userMessage }],
     temperature: 0.3,
@@ -306,8 +308,8 @@ REGRAS PARA NOTIFY_MINUTES_BEFORE:
 NUNCA adicione texto extra fora do JSON.`;
 
   try {
-    const content = await callGemini({
-      model: "gemini-2.5-flash",
+    const content = await callPollinations({
+      model: "openai",
       systemPrompt,
       messages: [{ role: "user", content: text }],
       temperature: 0,
