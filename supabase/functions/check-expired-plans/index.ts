@@ -62,9 +62,9 @@ serve(async (req) => {
       const name = profile.display_name || "Usuário";
       const expiryDate = new Date(profile.subscription_expires_at!).toLocaleDateString("pt-BR");
       const planNames: Record<string, string> = {
-        mensal: "Nox Mensal",
-        anual: "Nox Anual",
-        trimestral: "Nox Trimestral",
+        mensal: "Brave Mensal",
+        anual: "Brave Anual",
+        trimestral: "Brave Trimestral",
       };
 
       const message =
@@ -76,8 +76,8 @@ serve(async (req) => {
         `• Análise comportamental\n` +
         `• WhatsApp conectado\n\n` +
         `💳 *Renove agora:*\n` +
-        `Abra o app Nox → Configurações → Planos e Assinatura\n\n` +
-        `_Nox IA - Seu assessor financeiro 🤖_`;
+        `Abra o app Brave → Configurações → Planos e Assinatura\n\n` +
+        `_Brave IA - Seu assessor financeiro 🤖_`;
 
       await sendWhatsAppMessage(waLink.phone_number, message);
       reminders++;
@@ -150,15 +150,15 @@ serve(async (req) => {
 
         if (waLink?.phone_number) {
           const message =
-            `⚠️ *Seu plano Nox expirou, ${name}!*\n\n` +
+            `⚠️ *Seu plano Brave expirou, ${name}!*\n\n` +
             `Infelizmente seu acesso premium foi encerrado e você foi removido dos grupos familiares.\n\n` +
             `🔒 *O que mudou:*\n` +
             `• Acesso ao Modo Família removido\n` +
             `• Análise comportamental desativada\n` +
             `• Grupos dos quais você era dono foram encerrados\n\n` +
             `💳 *Renove agora e recupere tudo:*\n` +
-            `Abra o app Nox → Configurações → Planos e Assinatura\n\n` +
-            `_Nox IA - Seu assessor financeiro 🤖_`;
+            `Abra o app Brave → Configurações → Planos e Assinatura\n\n` +
+            `_Brave IA - Seu assessor financeiro 🤖_`;
 
           await sendWhatsAppMessage(waLink.phone_number, message);
           console.log(`Expiry notification sent to ${waLink.phone_number}`);
