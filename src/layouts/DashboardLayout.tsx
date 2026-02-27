@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import PlanExpiredModal from "@/components/PlanExpiredModal";
 import WhatsAppBanner from "@/components/WhatsAppBanner";
 import PWAInstallBanner from "@/components/PWAInstallBanner";
+import TestPlanBanner from "@/components/TestPlanBanner";
 
 export default function DashboardLayout() {
   const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
@@ -41,6 +42,7 @@ export default function DashboardLayout() {
               {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
           </header>
+          <TestPlanBanner />
           <WhatsAppBanner />
           <PWAInstallBanner />
           <main className="flex-1 p-4 md:p-6 overflow-auto pb-20 md:pb-6">
