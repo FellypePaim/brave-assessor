@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Clock } from "lucide-react";
 
 export default function TestPlanBanner() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [remaining, setRemaining] = useState<number | null>(null);
 
   useEffect(() => {
@@ -21,7 +23,12 @@ export default function TestPlanBanner() {
       if (data?.subscription_plan === "teste" && data.subscription_expires_at) {
         const update = () => {
           const diff = new Date(data.subscription_expires_at!).getTime() - Date.now();
-          setRemaining(Math.max(0, diff));
+          const val = Math.max(0, diff);
+          setRemaining(val);
+          if (val <= 0) {
+            clearInterval(interval);
+            navigate("/planos");
+          }
         };
         update();
         interval = setInterval(update, 1000);
