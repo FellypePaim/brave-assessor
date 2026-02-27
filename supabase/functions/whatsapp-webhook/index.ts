@@ -532,6 +532,34 @@ serve(async (req) => {
           }
 
           if (isConfirm) {
+            // Check if user has multiple wallets before saving
+            const { data: userWallets } = await supabaseAdmin
+              .from("wallets")
+              .select("id, name, balance")
+              .eq("user_id", ctx.user_id)
+              .order("created_at", { ascending: true });
+
+            if (userWallets && userWallets.length > 1) {
+              // Ask which wallet to use
+              const walletLines = userWallets.map((w: any, idx: number) =>
+                `${idx + 1}. *${w.name}* — ${fmt(Number(w.balance))}`
+              );
+              await supabaseAdmin.from("whatsapp_sessions").update({
+                step: "ask_wallet_for_list",
+                context: { ...ctx, wallets: userWallets },
+                expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+              }).eq("id", session.id);
+              await sendWhatsAppMessage(
+                cleanPhone,
+                `🏦 *De qual conta saem essas transações?*\n\n` +
+                walletLines.join("\n") +
+                `\n\nEnvie o número da conta (ex: _"1"_)`
+              );
+              return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            }
+
+            // Single or no wallet — save directly
+            const walletId = userWallets && userWallets.length === 1 ? userWallets[0].id : null;
             await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
             const todayStr = getBrazilTodayStr();
             const inserts = items.map((item: any) => ({
@@ -542,7 +570,7 @@ serve(async (req) => {
               category_id: item.category_id || null,
               date: todayStr,
               is_paid: true,
-              wallet_id: null,
+              wallet_id: walletId,
               card_id: null,
               recurring_id: null,
             }));
@@ -551,6 +579,18 @@ serve(async (req) => {
             if (txErr) {
               await sendWhatsAppMessage(cleanPhone, `❌ Erro ao registrar transações: ${txErr.message}`);
             } else {
+              // Update wallet balance if single wallet
+              if (walletId) {
+                const totalExpense = items.filter((i: any) => (i.type || "expense") === "expense").reduce((s: number, i: any) => s + Number(i.amount), 0);
+                const totalIncome = items.filter((i: any) => i.type === "income").reduce((s: number, i: any) => s + Number(i.amount), 0);
+                const delta = totalIncome - totalExpense;
+                if (delta !== 0) {
+                  const { data: wData } = await supabaseAdmin.from("wallets").select("balance").eq("id", walletId).single();
+                  if (wData) {
+                    await supabaseAdmin.from("wallets").update({ balance: Number(wData.balance) + delta }).eq("id", walletId);
+                  }
+                }
+              }
               const total = items.reduce((s: number, i: any) => s + Number(i.amount), 0);
               const savedList = items.map((i: any, idx: number) =>
                 `${idx + 1}. ✅ *${i.description}* — ${fmt(Number(i.amount))}`
@@ -566,6 +606,78 @@ serve(async (req) => {
           }
 
           await showList(items);
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // ── Step: ask wallet for one-time list ──
+        if (session.step === "ask_wallet_for_list") {
+          const items: any[] = ctx.items || [];
+          const userWallets: any[] = ctx.wallets || [];
+          const isCancel = /^(cancelar|cancel|não|nao|n|❌)$/i.test(effectiveText);
+
+          if (isCancel) {
+            await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
+            await sendWhatsAppMessage(cleanPhone, "❌ Cadastro cancelado.");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          const numMatch = effectiveText.match(/^(\d+)$/);
+          if (numMatch) {
+            const idx = parseInt(numMatch[1]) - 1;
+            if (idx >= 0 && idx < userWallets.length) {
+              const chosenWallet = userWallets[idx];
+              await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
+              const todayStr = getBrazilTodayStr();
+              const inserts = items.map((item: any) => ({
+                user_id: ctx.user_id,
+                description: item.description,
+                amount: Number(item.amount),
+                type: item.type || "expense",
+                category_id: item.category_id || null,
+                date: todayStr,
+                is_paid: true,
+                wallet_id: chosenWallet.id,
+                card_id: null,
+                recurring_id: null,
+              }));
+
+              const { error: txErr } = await supabaseAdmin.from("transactions").insert(inserts);
+              if (txErr) {
+                await sendWhatsAppMessage(cleanPhone, `❌ Erro ao registrar: ${txErr.message}`);
+              } else {
+                // Update wallet balance
+                const totalExpense = items.filter((i: any) => (i.type || "expense") === "expense").reduce((s: number, i: any) => s + Number(i.amount), 0);
+                const totalIncome = items.filter((i: any) => i.type === "income").reduce((s: number, i: any) => s + Number(i.amount), 0);
+                const delta = totalIncome - totalExpense;
+                if (delta !== 0) {
+                  const { data: wData } = await supabaseAdmin.from("wallets").select("balance").eq("id", chosenWallet.id).single();
+                  if (wData) {
+                    await supabaseAdmin.from("wallets").update({ balance: Number(wData.balance) + delta }).eq("id", chosenWallet.id);
+                  }
+                }
+                const total = items.reduce((s: number, i: any) => s + Number(i.amount), 0);
+                const savedList = items.map((i: any, idx2: number) =>
+                  `${idx2 + 1}. ✅ *${i.description}* — ${fmt(Number(i.amount))}`
+                ).join("\n");
+                await sendWhatsAppMessage(cleanPhone,
+                  `🎉 *${items.length} transações registradas na conta ${chosenWallet.name}!*\n\n` +
+                  savedList +
+                  `\n\n💵 *Total: ${fmt(total)}*\n\n` +
+                  `_Brave IA - Seu assessor financeiro 🤖_`
+                );
+              }
+              return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            }
+          }
+
+          // Invalid input - repeat
+          const walletLines = userWallets.map((w: any, idx: number) =>
+            `${idx + 1}. *${w.name}* — ${fmt(Number(w.balance))}`
+          );
+          await sendWhatsAppMessage(
+            cleanPhone,
+            `❓ Envie o número da conta:\n\n` + walletLines.join("\n")
+          );
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
