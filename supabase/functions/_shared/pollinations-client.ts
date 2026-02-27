@@ -79,7 +79,7 @@ export async function callPollinations(opts: CallAIOptions): Promise<string> {
   console.log("Falling back to Gemini API...");
   try {
     return await callGemini({
-      model: "gemini-2.0-flash",
+      model: "gemini-2.5-flash",
       systemPrompt: opts.systemPrompt,
       messages: opts.messages,
       temperature: opts.temperature,
@@ -114,7 +114,7 @@ export async function transcribeAudio(audioBase64: string, mimeType: string): Pr
   try {
     const audioFormat = mimeType.includes("ogg") ? "audio/ogg" : mimeType.includes("mp4") ? "audio/mp4" : "audio/mpeg";
     const result = await callGemini({
-      model: "gemini-2.0-flash",
+      model: "gemini-2.5-flash",
       systemPrompt: "Transcreva o áudio a seguir para texto em português brasileiro. Retorne APENAS o texto transcrito, sem explicações.",
       messages: [
         {
