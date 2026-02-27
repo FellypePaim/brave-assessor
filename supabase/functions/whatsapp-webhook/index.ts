@@ -3320,6 +3320,85 @@ Metas financeiras: ${goalsCtx}`;
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
+      // ── Detect delete_wallet action ──
+      const deleteWalletMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"delete_wallet"[\s\S]*\}/);
+      if (deleteWalletMatch) {
+        const action = JSON.parse(deleteWalletMatch[0]);
+        const searchTerm = (action.search || "").toLowerCase();
+        const { data: wList } = await supabaseAdmin.from("wallets").select("*").eq("user_id", userId);
+        const matched = (wList || []).find((w: any) => w.name.toLowerCase().includes(searchTerm));
+        if (!matched) {
+          await sendWhatsAppMessage(cleanPhone, `❓ Não encontrei a carteira "${action.search}".`);
+        } else {
+          await supabaseAdmin.from("wallets").delete().eq("id", matched.id);
+          await sendWhatsAppMessage(cleanPhone, `🗑️ Carteira *${matched.name}* excluída!\n\n_Brave IA 🤖_`);
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ── Detect delete_category action ──
+      const deleteCategoryMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"delete_category"[\s\S]*\}/);
+      if (deleteCategoryMatch) {
+        const action = JSON.parse(deleteCategoryMatch[0]);
+        const searchTerm = (action.search || "").toLowerCase();
+        const matched = (categories || []).find((c: any) => c.name.toLowerCase().includes(searchTerm));
+        if (!matched) {
+          await sendWhatsAppMessage(cleanPhone, `❓ Não encontrei a categoria "${action.search}".`);
+        } else {
+          await supabaseAdmin.from("categories").delete().eq("id", (matched as any).id);
+          await sendWhatsAppMessage(cleanPhone, `🗑️ Categoria *${(matched as any).name}* excluída!\n\n_Brave IA 🤖_`);
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ── Detect delete_card action ──
+      const deleteCardMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"delete_card"[\s\S]*\}/);
+      if (deleteCardMatch) {
+        const action = JSON.parse(deleteCardMatch[0]);
+        const searchTerm = (action.search || "").toLowerCase();
+        const { data: cList } = await supabaseAdmin.from("cards").select("*").eq("user_id", userId);
+        const matched = (cList || []).find((c: any) => c.name.toLowerCase().includes(searchTerm));
+        if (!matched) {
+          await sendWhatsAppMessage(cleanPhone, `❓ Não encontrei o cartão "${action.search}".`);
+        } else {
+          await supabaseAdmin.from("cards").delete().eq("id", matched.id);
+          await sendWhatsAppMessage(cleanPhone, `🗑️ Cartão *${matched.name}* excluído!\n\n_Brave IA 🤖_`);
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ── Detect delete_transaction action ──
+      const deleteTransactionMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"delete_transaction"[\s\S]*\}/);
+      if (deleteTransactionMatch) {
+        const action = JSON.parse(deleteTransactionMatch[0]);
+        const searchTerm = (action.search || "").toLowerCase();
+        const { data: txList } = await supabaseAdmin.from("transactions").select("id, description, amount, type, date, wallet_id")
+          .eq("user_id", userId).order("date", { ascending: false }).limit(20);
+        const matched = (txList || []).find((t: any) => t.description.toLowerCase().includes(searchTerm));
+        if (!matched) {
+          await sendWhatsAppMessage(cleanPhone, `❓ Não encontrei a transação "${action.search}".`);
+        } else {
+          // Reverse wallet balance change
+          if (matched.wallet_id) {
+            const { data: w } = await supabaseAdmin.from("wallets").select("id, balance").eq("id", matched.wallet_id).maybeSingle();
+            if (w) {
+              const change = matched.type === "income" ? -Number(matched.amount) : Number(matched.amount);
+              await supabaseAdmin.from("wallets").update({ balance: Number(w.balance) + change }).eq("id", w.id);
+            }
+          }
+          await supabaseAdmin.from("transactions").delete().eq("id", matched.id);
+          const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
+          await sendWhatsAppMessage(cleanPhone,
+            `🗑️ Transação excluída!\n\n` +
+            `📝 ${matched.description}\n` +
+            `💵 ${fmt(Number(matched.amount))}\n` +
+            `📅 ${new Date(matched.date + "T12:00:00").toLocaleDateString("pt-BR")}\n\n` +
+            `_Saldo da carteira atualizado automaticamente._\n_Brave IA 🤖_`
+          );
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
     } catch (parseErr) {
       console.log("Response is text, not action");
     }
