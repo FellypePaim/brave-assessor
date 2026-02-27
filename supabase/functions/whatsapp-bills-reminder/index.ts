@@ -9,6 +9,7 @@ const corsHeaders = {
 
 const BATCH_SIZE = 10;
 const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
+const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -22,12 +23,8 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const specificUserId: string | undefined = body.userId;
 
-    const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-    // Get users with WhatsApp linked
     const profileQuery = supabase.from("profiles").select("id, display_name");
     if (specificUserId) profileQuery.eq("id", specificUserId);
-
     const { data: profiles, error: profErr } = await profileQuery;
     if (profErr) throw profErr;
 
@@ -39,19 +36,13 @@ serve(async (req) => {
     if (linkErr) throw linkErr;
 
     const linkedMap = new Map(links?.map(l => [l.user_id, l.phone_number]) ?? []);
-
-    // Use Brazil timezone (UTC-3)
     const today = getBrazilNow();
     const todayDay = today.getDate();
-    const targetDays = [1, 3];
 
     let sent = 0;
     let skipped = 0;
-
-    // Filter eligible users
     const eligibleUsers = (profiles ?? []).filter(p => linkedMap.has(p.id));
 
-    // Process in batches
     for (let i = 0; i < eligibleUsers.length; i += BATCH_SIZE) {
       const batch = eligibleUsers.slice(i, i + BATCH_SIZE);
 
@@ -60,127 +51,92 @@ serve(async (req) => {
         const name = profile.display_name || "Usuário";
 
         try {
-          // ── 0. Fetch wallet balances ──
-          const { data: wallets } = await supabase
-            .from("wallets")
-            .select("name, balance")
-            .eq("user_id", profile.id);
-
-          const totalBalance = (wallets || []).reduce((s, w) => s + Number(w.balance), 0);
-
-          // ── 1. Notify about upcoming one-time unpaid transactions (1 or 3 days ahead) ──
           const todayStr = today.toISOString().slice(0, 10);
-          const threeAhead = new Date(today); threeAhead.setDate(today.getDate() + 3);
+          const threeAhead = new Date(today);
+          threeAhead.setDate(today.getDate() + 3);
           const threeAheadStr = threeAhead.toISOString().slice(0, 10);
 
+          // Wallets
+          const { data: wallets } = await supabase
+            .from("wallets").select("balance").eq("user_id", profile.id);
+          const totalBalance = (wallets || []).reduce((s, w) => s + Number(w.balance), 0);
+
+          // Upcoming unpaid bills
           const { data: upcoming } = await supabase
             .from("transactions")
-            .select("description, amount, type, due_date, categories(name)")
+            .select("description, amount, type, due_date")
             .eq("user_id", profile.id)
             .eq("is_paid", false)
             .gte("due_date", todayStr)
             .lte("due_date", threeAheadStr)
             .order("due_date", { ascending: true })
-            .limit(10);
+            .limit(5);
 
           const bills = (upcoming || []).filter(t => t.type === "expense");
           const receivables = (upcoming || []).filter(t => t.type === "income");
 
-          if (bills.length > 0 || receivables.length > 0) {
-            let messageLines = [`⚠️ *Olá, ${name}!* Você tem compromissos nos próximos 3 dias:`];
-
-            if (bills.length > 0) {
-              const totalBills = bills.reduce((s, t) => s + Number(t.amount), 0);
-              messageLines.push(`\n📋 *Contas a Pagar:*`);
-              bills.forEach(t => {
-                const catName = (t as any).categories?.name || "Geral";
-                const due = t.due_date ? new Date(t.due_date + "T12:00:00").toLocaleDateString("pt-BR") : "—";
-                const daysUntil = t.due_date
-                  ? Math.round((new Date(t.due_date + "T12:00:00").getTime() - today.getTime()) / 86400000)
-                  : null;
-                const urgency = daysUntil !== null ? (daysUntil <= 1 ? "🔴 AMANHÃ" : `em ${daysUntil} dias`) : "";
-                messageLines.push(`• *${t.description}* — ${fmt(Number(t.amount))} · vence ${due} ${urgency} · ${catName}`);
-              });
-              messageLines.push(`💸 *Total a pagar: ${fmt(totalBills)}*`);
-
-              // Show wallet balance comparison
-              if (totalBalance >= totalBills) {
-                messageLines.push(`✅ *Saldo disponível: ${fmt(totalBalance)}* — Você tem saldo suficiente!`);
-              } else {
-                const falta = totalBills - totalBalance;
-                messageLines.push(`⚠️ *Saldo disponível: ${fmt(totalBalance)}* — Faltam *${fmt(falta)}* para cobrir tudo.`);
-              }
-            }
-
-            if (receivables.length > 0) {
-              const totalRec = receivables.reduce((s, t) => s + Number(t.amount), 0);
-              messageLines.push(`\n💰 *A Receber:*`);
-              receivables.forEach(t => {
-                const due = t.due_date ? new Date(t.due_date + "T12:00:00").toLocaleDateString("pt-BR") : "—";
-                messageLines.push(`• ${t.description} — ${fmt(Number(t.amount))} · previsto ${due}`);
-              });
-              messageLines.push(`✅ *Total: ${fmt(totalRec)}*`);
-            }
-
-            messageLines.push(`\n💬 Envie *conferir* para ver e marcar como pagas.\n_Brave IA - Seu assessor financeiro 🤖_`);
-
-            await sendWhatsAppMessage(phone, messageLines.join("\n"));
-            sent++;
-          }
-
-          // ── 2. Notify about recurring transactions due in 1 or 3 days ──
+          // Recurring due in 1 or 3 days
           const { data: recurringList } = await supabase
             .from("recurring_transactions")
-            .select("description, amount, type, day_of_month, categories(name)")
+            .select("description, amount, day_of_month")
             .eq("user_id", profile.id)
             .eq("is_active", true)
             .eq("type", "expense");
 
-          const dueRec: any[] = [];
+          const dueRec: { desc: string; amount: number; days: number }[] = [];
           for (const r of recurringList || []) {
-            const day = r.day_of_month;
-            let dueDate = new Date(today.getFullYear(), today.getMonth(), day);
-            if (dueDate < today) {
-              dueDate = new Date(today.getFullYear(), today.getMonth() + 1, day);
+            let dueDate = new Date(today.getFullYear(), today.getMonth(), r.day_of_month);
+            if (dueDate < new Date(today.getFullYear(), today.getMonth(), todayDay)) {
+              dueDate = new Date(today.getFullYear(), today.getMonth() + 1, r.day_of_month);
             }
-            const todayMidnight = new Date(today);
-            todayMidnight.setHours(0, 0, 0, 0);
-            const daysUntil = Math.round((dueDate.getTime() - todayMidnight.getTime()) / 86400000);
+            const todayMid = new Date(today); todayMid.setHours(0, 0, 0, 0);
+            const days = Math.round((dueDate.getTime() - todayMid.getTime()) / 86400000);
+            if (days === 1 || days === 3) {
+              dueRec.push({ desc: r.description, amount: Number(r.amount), days });
+            }
+          }
 
-            if (targetDays.includes(daysUntil)) {
-              dueRec.push({ ...r, daysUntil, dueDate });
+          const hasContent = bills.length > 0 || receivables.length > 0 || dueRec.length > 0;
+          if (!hasContent) { skipped++; return; }
+
+          const lines: string[] = [];
+          lines.push(`📌 *${name}*, atenção nos próximos dias:`);
+
+          if (bills.length > 0) {
+            const totalBills = bills.reduce((s, t) => s + Number(t.amount), 0);
+            lines.push(`💸 *A pagar:*`);
+            for (const t of bills) {
+              const due = t.due_date ? new Date(t.due_date + "T12:00:00").toLocaleDateString("pt-BR") : "—";
+              lines.push(`• ${t.description} · ${fmt(Number(t.amount))} · ${due}`);
             }
+            lines.push(`Total: *${fmt(totalBills)}*${totalBalance >= totalBills ? " ✅ coberto" : ` ⚠️ faltam ${fmt(totalBills - totalBalance)}`}`);
           }
 
           if (dueRec.length > 0) {
-            const lines: string[] = [`🔁 *Olá, ${name}!* Suas contas recorrentes estão chegando:\n`];
-            dueRec.forEach(r => {
-              const catName = (r as any).categories?.name || "Geral";
-              const due = r.dueDate.toLocaleDateString("pt-BR");
-              const urgency = r.daysUntil === 1 ? "🔴 *AMANHÃ*" : `em ${r.daysUntil} dias`;
-              lines.push(`• *${r.description}* — ${fmt(Number(r.amount))} · vence ${due} (${urgency}) · ${catName}`);
-            });
-            lines.push(`\n💡 Lembre-se de separar o dinheiro!\n_Brave IA - Seu assessor financeiro 🤖_`);
-
-            await sendWhatsAppMessage(phone, lines.join("\n"));
-            sent++;
-            console.log(`Recurring reminder sent to ${phone} (user: ${profile.id}): ${dueRec.length} items`);
-          } else if (bills.length === 0 && receivables.length === 0) {
-            skipped++;
+            lines.push(`🔁 *Recorrentes:*`);
+            for (const r of dueRec) {
+              const icon = r.days === 1 ? "🔴" : "🟡";
+              lines.push(`${icon} ${r.desc} · ${fmt(r.amount)} · em ${r.days}d`);
+            }
           }
+
+          if (receivables.length > 0) {
+            const totalRec = receivables.reduce((s, t) => s + Number(t.amount), 0);
+            lines.push(`💰 *A receber:* ${fmt(totalRec)}`);
+          }
+
+          lines.push(`_Brave IA 🤖_`);
+          await sendWhatsAppMessage(phone, lines.join("\n"));
+          sent++;
         } catch (e) {
-          console.error(`Failed to process user ${profile.id}:`, e);
+          console.error(`Failed for ${profile.id}:`, e);
           skipped++;
         }
       }));
 
-      // Delay between batches
-      if (i + BATCH_SIZE < eligibleUsers.length) {
-        await delay(1000);
-      }
+      if (i + BATCH_SIZE < eligibleUsers.length) await delay(1000);
     }
 
-    // Count non-eligible users
     skipped += (profiles ?? []).length - eligibleUsers.length;
 
     return new Response(
