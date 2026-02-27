@@ -62,7 +62,7 @@ serve(async (req) => {
         `📋 Plano: *Brave ${planMap[profile.subscription_plan] || profile.subscription_plan}*`,
         `📅 Expira: *${expiryDate}*`,
         `🔒 Sem renovação, você perde Família, análise comportamental e WhatsApp.`,
-        `💳 Renove: Brave → Configurações → Planos`,
+        `💳 Renove agora: https://brave-assessor.lovable.app/plan-gate`,
         `_Brave IA 🤖_`,
       ].join("\n");
 
@@ -114,7 +114,7 @@ serve(async (req) => {
           const message = [
             `⚠️ *${name}*, seu plano Brave expirou.`,
             `🔒 Família, análise comportamental e grupos foram desativados.`,
-            `💳 Renove agora: Brave → Configurações → Planos`,
+            `💳 Renove agora: https://brave-assessor.lovable.app/plan-gate`,
             `_Brave IA 🤖_`,
           ].join("\n");
 
