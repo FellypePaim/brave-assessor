@@ -60,6 +60,14 @@ serve(async (req) => {
         const name = profile.display_name || "Usuário";
 
         try {
+          // ── 0. Fetch wallet balances ──
+          const { data: wallets } = await supabase
+            .from("wallets")
+            .select("name, balance")
+            .eq("user_id", profile.id);
+
+          const totalBalance = (wallets || []).reduce((s, w) => s + Number(w.balance), 0);
+
           // ── 1. Notify about upcoming one-time unpaid transactions (1 or 3 days ahead) ──
           const todayStr = today.toISOString().slice(0, 10);
           const threeAhead = new Date(today); threeAhead.setDate(today.getDate() + 3);
@@ -93,7 +101,15 @@ serve(async (req) => {
                 const urgency = daysUntil !== null ? (daysUntil <= 1 ? "🔴 AMANHÃ" : `em ${daysUntil} dias`) : "";
                 messageLines.push(`• *${t.description}* — ${fmt(Number(t.amount))} · vence ${due} ${urgency} · ${catName}`);
               });
-              messageLines.push(`💸 *Total: ${fmt(totalBills)}*`);
+              messageLines.push(`💸 *Total a pagar: ${fmt(totalBills)}*`);
+
+              // Show wallet balance comparison
+              if (totalBalance >= totalBills) {
+                messageLines.push(`✅ *Saldo disponível: ${fmt(totalBalance)}* — Você tem saldo suficiente!`);
+              } else {
+                const falta = totalBills - totalBalance;
+                messageLines.push(`⚠️ *Saldo disponível: ${fmt(totalBalance)}* — Faltam *${fmt(falta)}* para cobrir tudo.`);
+              }
             }
 
             if (receivables.length > 0) {
