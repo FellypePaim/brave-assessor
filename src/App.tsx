@@ -18,6 +18,7 @@ import Wallets from "./pages/dashboard/Wallets";
 import Categories from "./pages/dashboard/Categories";
 import Cards from "./pages/dashboard/Cards";
 import Bills from "./pages/dashboard/Bills";
+import Transactions from "./pages/dashboard/Transactions";
 import Goals from "./pages/dashboard/Goals";
 import Investments from "./pages/dashboard/Investments";
 import Behavior from "./pages/dashboard/Behavior";
@@ -84,7 +85,8 @@ const App = () => (
               }
             >
               <Route index element={<Dashboard />} />
-              <Route path="transactions" element={<Bills />} />
+              <Route path="bills" element={<Bills />} />
+              <Route path="transactions" element={<Transactions />} />
               <Route path="wallets" element={<Wallets />} />
               <Route path="cards" element={<Cards />} />
               <Route path="budgets" element={<Categories />} />

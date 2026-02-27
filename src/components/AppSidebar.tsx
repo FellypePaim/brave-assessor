@@ -2,7 +2,7 @@ const braveLogoIcon = "/brave-icon.png";
 import {
   LayoutDashboard, Wallet, Tag, CreditCard, CalendarCheck,
   Target, TrendingUp, Brain, FileText, HeadphonesIcon,
-  Settings, LogOut, Sparkles, ShieldCheck, Users, Bell
+  Settings, LogOut, Sparkles, ShieldCheck, Users, Bell, ArrowLeftRight
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
@@ -51,7 +51,8 @@ export function AppSidebar() {
     { title: "Carteira", url: "/dashboard/wallets", icon: Wallet, badge: 0 },
     { title: "Categorias", url: "/dashboard/budgets", icon: Tag, badge: 0 },
     { title: "Cartões", url: "/dashboard/cards", icon: CreditCard, badge: 0 },
-    { title: "Compromissos", url: "/dashboard/transactions", icon: CalendarCheck, badge: 0 },
+    { title: "Transações", url: "/dashboard/transactions", icon: ArrowLeftRight, badge: 0 },
+    { title: "Contas a Pagar", url: "/dashboard/bills", icon: CalendarCheck, badge: 0 },
     { title: "Lembretes", url: "/dashboard/reminders", icon: Bell, badge: reminderCount },
     { title: "Metas", url: "/dashboard/goals", icon: Target, badge: 0 },
     { title: "Investimentos", url: "/dashboard/investments", icon: TrendingUp, badge: 0 },
