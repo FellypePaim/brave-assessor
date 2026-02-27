@@ -6,8 +6,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   Plus, ChevronLeft, ChevronRight, DollarSign, Pencil, Clock,
-  CheckCircle2, AlertTriangle, Check, ArrowUpCircle, ArrowDownCircle,
+  CheckCircle2, AlertTriangle, Check, ArrowUpCircle, ArrowDownCircle, Filter,
 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format, startOfMonth, endOfMonth, addMonths, subMonths, startOfWeek, endOfWeek, isBefore, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { AddTransactionDialog } from "@/components/AddTransactionDialog";
@@ -23,6 +24,7 @@ export default function Transactions() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [period, setPeriod] = useState<Period>("month");
   const [editTx, setEditTx] = useState<any>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
 
   const monthLabel = format(currentDate, "MMMM yyyy", { locale: ptBR });
   const monthCapitalized = monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1);
@@ -40,6 +42,16 @@ export default function Transactions() {
     return `${format(startOfMonth(currentDate), "dd/MM/yyyy")} até ${format(endOfMonth(currentDate), "dd/MM/yyyy")}`;
   };
 
+  // Fetch categories for filter
+  const { data: categories = [] } = useQuery({
+    queryKey: ["categories", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from("categories").select("id, name").order("name");
+      return data || [];
+    },
+    enabled: !!user,
+  });
+
   // Only non-recurring transactions
   const { data: transactions = [] } = useQuery({
     queryKey: ["day-transactions", user?.id, range.start, range.end],
@@ -56,17 +68,23 @@ export default function Transactions() {
     enabled: !!user,
   });
 
+  const filteredTransactions = useMemo(() => {
+    if (selectedCategory === "all") return transactions;
+    if (selectedCategory === "none") return transactions.filter(t => !t.category_id);
+    return transactions.filter(t => t.category_id === selectedCategory);
+  }, [transactions, selectedCategory]);
+
   const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
   const today = format(new Date(), "yyyy-MM-dd");
 
   const computed = useMemo(() => {
-    const income = transactions.filter(t => t.type === "income");
-    const expenses = transactions.filter(t => t.type === "expense");
+    const income = filteredTransactions.filter(t => t.type === "income");
+    const expenses = filteredTransactions.filter(t => t.type === "expense");
     const totalIncome = income.reduce((s, t) => s + Number(t.amount), 0);
     const totalExpenses = expenses.reduce((s, t) => s + Number(t.amount), 0);
     const balance = totalIncome - totalExpenses;
     return { income, expenses, totalIncome, totalExpenses, balance };
-  }, [transactions]);
+  }, [filteredTransactions]);
 
   const summaryCards = [
     { label: "Receitas", value: fmt(computed.totalIncome), icon: ArrowUpCircle, bg: "bg-gradient-to-br from-emerald-100 to-green-200 dark:from-emerald-950/40 dark:to-green-950/30", text: "text-emerald-600 dark:text-emerald-400", valueColor: "text-emerald-500" },
@@ -186,12 +204,27 @@ export default function Transactions() {
 
       {/* Transactions list */}
       <Card className="p-6">
-        <div className="mb-4">
-          <h2 className="font-bold text-foreground">Transações do Período</h2>
-          <p className="text-sm text-muted-foreground">{transactions.length} transações no período</p>
+        <div className="mb-4 flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <h2 className="font-bold text-foreground">Transações do Período</h2>
+            <p className="text-sm text-muted-foreground">{filteredTransactions.length} transações no período</p>
+          </div>
+          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+            <SelectTrigger className="w-[180px] h-9 rounded-full text-xs">
+              <Filter className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+              <SelectValue placeholder="Categoria" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas categorias</SelectItem>
+              <SelectItem value="none">Sem categoria</SelectItem>
+              {categories.map((c) => (
+                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
-        {transactions.length === 0 ? (
+        {filteredTransactions.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">
             <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-blue-100 to-sky-200 dark:from-blue-950/40 dark:to-sky-950/30 flex items-center justify-center mx-auto mb-4">
               <DollarSign className="h-8 w-8 text-primary" />
@@ -201,7 +234,7 @@ export default function Transactions() {
           </div>
         ) : (
           <div>
-            {transactions.map(t => renderTransactionItem(t))}
+            {filteredTransactions.map(t => renderTransactionItem(t))}
           </div>
         )}
       </Card>
