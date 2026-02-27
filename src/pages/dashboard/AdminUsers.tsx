@@ -68,6 +68,8 @@ export default function AdminUsers() {
   const [confirmDeleteUser, setConfirmDeleteUser] = useState<UserRow | null>(null);
   const [confirmResetUser, setConfirmResetUser] = useState<UserRow | null>(null);
   const [resettingId, setResettingId] = useState<string | null>(null);
+  const [confirmResetAll, setConfirmResetAll] = useState(false);
+  const [resettingAll, setResettingAll] = useState(false);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -296,6 +298,29 @@ export default function AdminUsers() {
     } finally { setResettingId(null); }
   };
 
+  const resetAllUsers = async () => {
+    setResettingAll(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Sem sessão");
+      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/admin-reset-all`,
+        { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` } }
+      );
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      toast({
+        title: "Reset geral concluído!",
+        description: `${json.reset} usuário(s) resetados, ${json.notified} notificado(s) via WhatsApp.`,
+      });
+      setConfirmResetAll(false);
+      fetchUsers();
+    } catch (err: any) {
+      toast({ title: "Erro no reset geral", description: err.message, variant: "destructive" });
+    } finally { setResettingAll(false); }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -306,10 +331,21 @@ export default function AdminUsers() {
           </h1>
           <p className="text-sm text-muted-foreground">{filtered.length} de {users.length} usuário(s)</p>
         </div>
-        <Button variant="outline" size="sm" onClick={fetchUsers} disabled={loading}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-          Atualizar
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-destructive text-destructive hover:bg-destructive/10"
+            onClick={() => setConfirmResetAll(true)}
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Resetar Todos
+          </Button>
+          <Button variant="outline" size="sm" onClick={fetchUsers} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+            Atualizar
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -713,6 +749,41 @@ export default function AdminUsers() {
               disabled={!!resettingId}
             >
               {resettingId ? "Resetando..." : "Resetar dados"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Reset All Dialog */}
+      <Dialog open={confirmResetAll} onOpenChange={open => !open && setConfirmResetAll(false)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <RefreshCw className="h-4 w-4" /> Resetar TODOS os usuários
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            <p className="text-sm text-foreground font-semibold">
+              ⚠️ Atenção! Esta ação irá resetar os dados de TODOS os usuários (exceto admins).
+            </p>
+            <p className="text-xs text-muted-foreground mt-2">
+              🗑️ Serão apagados: transações, lembretes, cartões, carteiras, metas, categorias, recorrências e chat.
+            </p>
+            <p className="text-xs text-emerald-600 mt-1">
+              ✅ Serão mantidos: planos de assinatura e WhatsApp vinculado.
+            </p>
+            <p className="text-xs text-muted-foreground mt-2">
+              📱 Todos os usuários com WhatsApp vinculado receberão um aviso automático.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmResetAll(false)}>Cancelar</Button>
+            <Button
+              variant="destructive"
+              onClick={resetAllUsers}
+              disabled={resettingAll}
+            >
+              {resettingAll ? "Resetando todos..." : "Confirmar Reset Geral"}
             </Button>
           </DialogFooter>
         </DialogContent>
