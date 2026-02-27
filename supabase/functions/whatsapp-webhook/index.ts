@@ -447,6 +447,104 @@ serve(async (req) => {
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
+        // ── Step: select reminder to delete (numbered list) ──
+        if (session.step === "select_reminder_to_delete") {
+          const reminders: any[] = ctx.reminders_list || [];
+
+          if (/^\s*(cancelar|sair|voltar)\s*$/i.test(effectiveText)) {
+            await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
+            await sendWhatsAppMessage(cleanPhone, "❌ Operação cancelada. Nenhum lembrete foi apagado.");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          // "todos" or "all" → confirm delete all
+          if (/^\s*(todos|tudo|all|0)\s*$/i.test(effectiveText)) {
+            await supabaseAdmin.from("whatsapp_sessions").update({
+              step: "confirm_bulk_delete",
+              context: { ...ctx, delete_target: "reminders" },
+              expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+            }).eq("id", session.id);
+            await sendWhatsAppButtons(
+              cleanPhone,
+              `🔔 *ATENÇÃO!* Você tem certeza que deseja apagar *TODOS os ${reminders.length} lembretes*?\n\n⚠️ Esta ação *NÃO pode ser desfeita*!`,
+              [{ id: "BULK_DELETE_YES", text: "✅ Sim, apagar tudo" }, { id: "BULK_DELETE_NO", text: "❌ Não, cancelar" }],
+              ""
+            );
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          // Pick by number
+          const numMatch = effectiveText.match(/^(\d+)$/);
+          if (numMatch) {
+            const idx = parseInt(numMatch[1]) - 1;
+            if (idx >= 0 && idx < reminders.length) {
+              const chosen = reminders[idx];
+              await supabaseAdmin.from("whatsapp_sessions").update({
+                step: "confirm_single_reminder_delete",
+                context: { ...ctx, chosen_reminder: chosen },
+                expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+              }).eq("id", session.id);
+              await sendWhatsAppButtons(
+                cleanPhone,
+                `⚠️ Tem certeza que quer apagar o lembrete *${chosen.title}*?`,
+                [{ id: "CONFIRM_DELETE_REMINDER", text: "✅ Sim, apagar" }, { id: "BACK_DELETE_LIST", text: "❌ Não, voltar" }],
+                ""
+              );
+              return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            }
+          }
+
+          // Invalid input — re-show list
+          const list = reminders.map((r: any, i: number) => {
+            const dt = new Date(r.event_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
+            return `${i + 1}. 🔔 ${r.title} — ${dt}`;
+          }).join("\n");
+          await sendWhatsAppMessage(cleanPhone,
+            `❓ Não entendi. Responda com o *número* do lembrete para apagar:\n\n${list}\n\n0️⃣ *Todos* — apagar todos\n❌ *Cancelar* — sair`
+          );
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // ── Step: confirm single reminder delete ──
+        if (session.step === "confirm_single_reminder_delete") {
+          const chosen: any = ctx.chosen_reminder;
+          const isConfirm = /sim|ok|yes|confirmar|CONFIRM_DELETE_REMINDER|✅/i.test(effectiveText);
+          const isCancel = /não|nao|voltar|cancelar|BACK_DELETE_LIST|❌/i.test(effectiveText);
+
+          if (isConfirm) {
+            await supabaseAdmin.from("reminders").delete().eq("id", chosen.id);
+            await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
+            await sendWhatsAppMessage(cleanPhone, `🗑️ Lembrete *${chosen.title}* apagado com sucesso!\n\n_Brave IA 🤖_`);
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          if (isCancel) {
+            // Go back to the list
+            const reminders: any[] = ctx.reminders_list || [];
+            const list = reminders.map((r: any, i: number) => {
+              const dt = new Date(r.event_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
+              return `${i + 1}. 🔔 ${r.title} — ${dt}`;
+            }).join("\n");
+            await supabaseAdmin.from("whatsapp_sessions").update({
+              step: "select_reminder_to_delete",
+              context: ctx,
+              expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+            }).eq("id", session.id);
+            await sendWhatsAppMessage(cleanPhone,
+              `👌 Ok! Escolha outro lembrete para apagar:\n\n${list}\n\n0️⃣ *Todos* — apagar todos\n❌ *Cancelar* — sair`
+            );
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          await sendWhatsAppButtons(
+            cleanPhone,
+            "⚠️ Responda *sim* para confirmar ou *não* para voltar.",
+            [{ id: "CONFIRM_DELETE_REMINDER", text: "✅ Sim, apagar" }, { id: "BACK_DELETE_LIST", text: "❌ Não, voltar" }],
+            ""
+          );
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
         // ── Step: confirm bulk delete ──
         if (session.step === "confirm_bulk_delete") {
           const isConfirm = /sim|ok|yes|confirmar|BULK_DELETE_YES|✅/i.test(effectiveText);
@@ -3834,9 +3932,42 @@ Metas financeiras: ${goalsCtx}`;
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // ── Detect delete_all_* actions ──
+      // ── Detect delete_all_reminders — show numbered list ──
+      const bulkDeleteReminders = extractActionJson(aiResponse, "delete_all_reminders");
+      if (bulkDeleteReminders) {
+        const { data: allReminders } = await supabaseAdmin
+          .from("reminders")
+          .select("id, title, event_at, recurrence, is_active")
+          .eq("user_id", userId)
+          .eq("is_active", true)
+          .order("event_at", { ascending: true });
+
+        if (!allReminders || allReminders.length === 0) {
+          await sendWhatsAppMessage(cleanPhone, "📭 Você não tem nenhum lembrete ativo para apagar.");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const list = allReminders.map((r: any, i: number) => {
+          const dt = new Date(r.event_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
+          return `${i + 1}. 🔔 *${r.title}* — ${dt}`;
+        }).join("\n");
+
+        await supabaseAdmin.from("whatsapp_sessions").delete().eq("phone_number", cleanPhone);
+        await supabaseAdmin.from("whatsapp_sessions").insert({
+          phone_number: cleanPhone,
+          step: "select_reminder_to_delete",
+          context: { user_id: userId, reminders_list: allReminders },
+          expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+        });
+
+        await sendWhatsAppMessage(cleanPhone,
+          `🗑️ *Qual lembrete deseja apagar?*\n\n${list}\n\n0️⃣ *Todos* — apagar todos os lembretes\n❌ *Cancelar* — sair sem apagar`
+        );
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ── Detect other delete_all_* actions ──
       const bulkDeleteTargets: Record<string, { action: string; label: string; emoji: string }> = {
-        delete_all_reminders: { action: "reminders", label: "lembretes", emoji: "🔔" },
         delete_all_transactions: { action: "transactions", label: "transações", emoji: "💸" },
         delete_all_cards: { action: "cards", label: "cartões", emoji: "💳" },
         delete_all_wallets: { action: "wallets", label: "carteiras", emoji: "💳" },
@@ -3848,7 +3979,6 @@ Metas financeiras: ${goalsCtx}`;
       for (const [actionName, info] of Object.entries(bulkDeleteTargets)) {
         const bulkAction = extractActionJson(aiResponse, actionName);
         if (bulkAction) {
-          // Clear any existing sessions
           await supabaseAdmin.from("whatsapp_sessions").delete().eq("phone_number", cleanPhone);
           await supabaseAdmin.from("whatsapp_sessions").insert({
             phone_number: cleanPhone,
