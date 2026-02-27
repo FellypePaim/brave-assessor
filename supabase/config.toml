@@ -41,3 +41,6 @@ verify_jwt = false
 
 [functions.whatsapp-weekly-report]
 verify_jwt = false
+
+[functions.whatsapp-budget-alert]
+verify_jwt = false
