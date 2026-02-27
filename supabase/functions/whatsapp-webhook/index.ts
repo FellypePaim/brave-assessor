@@ -447,6 +447,89 @@ serve(async (req) => {
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
+        // ── Step: confirm bulk delete ──
+        if (session.step === "confirm_bulk_delete") {
+          const isConfirm = /sim|ok|yes|confirmar|BULK_DELETE_YES|✅/i.test(effectiveText);
+          const isCancel = /não|nao|n|cancelar|cancel|BULK_DELETE_NO|❌/i.test(effectiveText);
+
+          if (isCancel) {
+            await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
+            await sendWhatsAppMessage(cleanPhone, "❌ Operação cancelada. Nenhum dado foi apagado.");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          if (isConfirm) {
+            const target = ctx.delete_target;
+            const uid = ctx.user_id;
+            let resultMsg = "";
+
+            try {
+              if (target === "reminders") {
+                await supabaseAdmin.from("reminders").delete().eq("user_id", uid);
+                resultMsg = "🗑️ *Todos os lembretes foram apagados!*";
+              } else if (target === "transactions") {
+                // Restore wallet balances before deleting
+                const { data: txs } = await supabaseAdmin.from("transactions").select("amount, type, wallet_id").eq("user_id", uid);
+                if (txs) {
+                  const walletChanges: Record<string, number> = {};
+                  for (const tx of txs) {
+                    if (tx.wallet_id) {
+                      if (!walletChanges[tx.wallet_id]) walletChanges[tx.wallet_id] = 0;
+                      walletChanges[tx.wallet_id] += tx.type === "income" ? -Number(tx.amount) : Number(tx.amount);
+                    }
+                  }
+                  for (const [wid, change] of Object.entries(walletChanges)) {
+                    const { data: w } = await supabaseAdmin.from("wallets").select("id, balance").eq("id", wid).maybeSingle();
+                    if (w) await supabaseAdmin.from("wallets").update({ balance: Number(w.balance) + change }).eq("id", w.id);
+                  }
+                }
+                await supabaseAdmin.from("transactions").delete().eq("user_id", uid);
+                resultMsg = "🗑️ *Todas as transações foram apagadas!* Saldos das carteiras revertidos.";
+              } else if (target === "cards") {
+                await supabaseAdmin.from("cards").delete().eq("user_id", uid);
+                resultMsg = "🗑️ *Todos os cartões foram apagados!*";
+              } else if (target === "wallets") {
+                await supabaseAdmin.from("wallets").delete().eq("user_id", uid);
+                resultMsg = "🗑️ *Todas as carteiras foram apagadas!*";
+              } else if (target === "goals") {
+                await supabaseAdmin.from("financial_goals").delete().eq("user_id", uid);
+                resultMsg = "🗑️ *Todas as metas foram apagadas!*";
+              } else if (target === "categories") {
+                await supabaseAdmin.from("categories").delete().eq("user_id", uid);
+                resultMsg = "🗑️ *Todas as categorias foram apagadas!*";
+              } else if (target === "recurring") {
+                await supabaseAdmin.from("recurring_transactions").delete().eq("user_id", uid);
+                resultMsg = "🗑️ *Todas as recorrências foram apagadas!*";
+              } else if (target === "all") {
+                await supabaseAdmin.from("reminders").delete().eq("user_id", uid);
+                await supabaseAdmin.from("transactions").delete().eq("user_id", uid);
+                await supabaseAdmin.from("cards").delete().eq("user_id", uid);
+                await supabaseAdmin.from("financial_goals").delete().eq("user_id", uid);
+                await supabaseAdmin.from("recurring_transactions").delete().eq("user_id", uid);
+                await supabaseAdmin.from("wallets").delete().eq("user_id", uid);
+                await supabaseAdmin.from("categories").delete().eq("user_id", uid);
+                resultMsg = "🗑️ *Todos os dados financeiros foram resetados!* Lembretes, transações, carteiras, cartões, metas, categorias e recorrências foram apagados.";
+              }
+            } catch (err) {
+              console.error("Bulk delete error:", err);
+              resultMsg = "❌ Erro ao apagar dados. Tente novamente.";
+            }
+
+            await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
+            await sendWhatsAppMessage(cleanPhone, resultMsg + "\n\n_Brave IA 🤖_");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          // Didn't understand
+          await sendWhatsAppButtons(
+            cleanPhone,
+            "⚠️ Responda *sim* para confirmar ou *não* para cancelar.",
+            [{ id: "BULK_DELETE_YES", text: "✅ Sim, apagar" }, { id: "BULK_DELETE_NO", text: "❌ Não, cancelar" }],
+            ""
+          );
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
         // ── Step: waiting for user to pick which bill to mark as paid ──
         if (session.step === "bill_selection") {
           const bills: any[] = ctx.bills || [];
@@ -3749,6 +3832,38 @@ Metas financeiras: ${goalsCtx}`;
           await sendWhatsAppMessage(cleanPhone, `📋 *Contas a pagar:*\n\n${list}\n\n💸 *Total: ${fmt(total)}*\n\n_Brave IA 🤖_`);
         }
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ── Detect delete_all_* actions ──
+      const bulkDeleteTargets: Record<string, { action: string; label: string; emoji: string }> = {
+        delete_all_reminders: { action: "reminders", label: "lembretes", emoji: "🔔" },
+        delete_all_transactions: { action: "transactions", label: "transações", emoji: "💸" },
+        delete_all_cards: { action: "cards", label: "cartões", emoji: "💳" },
+        delete_all_wallets: { action: "wallets", label: "carteiras", emoji: "💳" },
+        delete_all_goals: { action: "goals", label: "metas", emoji: "🎯" },
+        delete_all_categories: { action: "categories", label: "categorias", emoji: "📂" },
+        delete_all_recurring: { action: "recurring", label: "recorrências", emoji: "🔄" },
+        reset_all_data: { action: "all", label: "TODOS os dados financeiros", emoji: "⚠️" },
+      };
+      for (const [actionName, info] of Object.entries(bulkDeleteTargets)) {
+        const bulkAction = extractActionJson(aiResponse, actionName);
+        if (bulkAction) {
+          // Clear any existing sessions
+          await supabaseAdmin.from("whatsapp_sessions").delete().eq("phone_number", cleanPhone);
+          await supabaseAdmin.from("whatsapp_sessions").insert({
+            phone_number: cleanPhone,
+            step: "confirm_bulk_delete",
+            context: { user_id: userId, delete_target: info.action },
+            expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+          });
+          await sendWhatsAppButtons(
+            cleanPhone,
+            `${info.emoji} *ATENÇÃO!* Você tem certeza que deseja apagar *${info.label}*?\n\n⚠️ Esta ação *NÃO pode ser desfeita*!`,
+            [{ id: "BULK_DELETE_YES", text: "✅ Sim, apagar tudo" }, { id: "BULK_DELETE_NO", text: "❌ Não, cancelar" }],
+            ""
+          );
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
       }
 
     } catch (parseErr) {
