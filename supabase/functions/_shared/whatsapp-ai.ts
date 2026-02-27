@@ -409,9 +409,43 @@ NUNCA adicione texto extra fora do JSON.`;
 
     const jsonStr = content.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
     const parsed = JSON.parse(jsonStr);
+
+    // ── Post-process title: strip temporal words and leading prepositions ──
+    let cleanTitle = (parsed.title || "").trim();
+    // Remove leading prepositions
+    cleanTitle = cleanTitle.replace(/^(de|do|da|para|pra)\s+/i, "");
+    // Remove temporal words that AI may have left
+    cleanTitle = cleanTitle.replace(/\s*(amanhã|amanha|hoje|ontem|segunda|terça|terca|quarta|quinta|sexta|sábado|sabado|domingo)\s*/gi, " ");
+    cleanTitle = cleanTitle.replace(/\s*(às|as|ao|à)\s*\d{1,2}[h:]\d{0,2}\s*/gi, " ");
+    cleanTitle = cleanTitle.replace(/\s*\d{1,2}[h:]\d{2}\s*/g, " ");
+    cleanTitle = cleanTitle.replace(/\s*\d{1,2}h\b\s*/gi, " ");
+    cleanTitle = cleanTitle.replace(/\s*(dia\s+)?\d{1,2}\/\d{1,2}(\/\d{2,4})?\s*/g, " ");
+    cleanTitle = cleanTitle.replace(/\s{2,}/g, " ").trim();
+    // Capitalize first letter of each word
+    cleanTitle = cleanTitle.replace(/\b\w/g, c => c.toUpperCase());
+    if (!cleanTitle) cleanTitle = parsed.title || text;
+
+    // ── Post-process event_at: extract time from original text and override if AI got it wrong ──
+    let finalEventAt = parsed.event_at || null;
+    const userTimeMatch = text.match(/(?:às|as|à)\s*(\d{1,2})[h:](\d{0,2})/i) || text.match(/(\d{1,2})[h:](\d{2})/);
+    if (userTimeMatch && finalEventAt) {
+      const userHour = parseInt(userTimeMatch[1]);
+      const userMin = parseInt(userTimeMatch[2] || "0");
+      if (userHour >= 0 && userHour <= 23 && userMin >= 0 && userMin <= 59) {
+        // Parse the AI's date but force the user's time
+        const aiDate = new Date(finalEventAt);
+        if (!isNaN(aiDate.getTime())) {
+          // Extract the date part, reconstruct with correct time
+          const dateStr = finalEventAt.substring(0, 10); // YYYY-MM-DD
+          const pad = (n: number) => n.toString().padStart(2, "0");
+          finalEventAt = `${dateStr}T${pad(userHour)}:${pad(userMin)}:00-03:00`;
+        }
+      }
+    }
+
     return {
-      title: parsed.title || "",
-      event_at: parsed.event_at || null,
+      title: cleanTitle,
+      event_at: finalEventAt,
       recurrence: ["none","daily","weekly","monthly"].includes(parsed.recurrence) ? parsed.recurrence : "none",
       notify_minutes_before: typeof parsed.notify_minutes_before === "number" ? parsed.notify_minutes_before : null,
     };
