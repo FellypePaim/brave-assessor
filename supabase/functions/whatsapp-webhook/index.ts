@@ -2460,8 +2460,8 @@ Metas financeiras: ${goalsCtx}`;
 
         const confirmMatch = effectiveText.match(/^(sim|s|confirmar|ok|yes|confirm|✅ confirmar)$/i);
         const cancelMatch  = effectiveText.match(/^(não|nao|n|cancelar|cancel|no|❌ cancelar)$/i);
-        const amountMatch  = effectiveText.match(/^r?\$?\s*(\d+(?:[.,]\d{1,2})?)$/i);
-        const descMatch    = effectiveText.match(/^(?:desc(?:rição)?|descrição|nome|item)\s*[:\-]\s*(.+)$/i);
+        const amountMatch  = effectiveText.match(/^(?:valor\s+)?r?\$?\s*(\d+(?:[.,]\d{1,2})?)$/i);
+        const descMatch    = effectiveText.match(/^(?:desc(?:rição)?|descrição|nome|item)\s*[:\-]?\s*(.+)$/i);
         const typeMatch    = effectiveText.match(/^(receita|income|entrada|despesa|expense|gasto|saída|saida)$/i);
         const catMatch     = !confirmMatch && !cancelMatch && !amountMatch && !descMatch && !typeMatch
           ? (categories || []).find((c: any) => effectiveText.toLowerCase() === c.name.toLowerCase())
