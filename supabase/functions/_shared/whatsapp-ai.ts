@@ -150,6 +150,17 @@ export async function processWithNoxIA(userMessage: string, financialContext: st
 Quando o usuário perguntar sobre metas, use os dados do contexto "Metas financeiras" para responder com precisão.
 Exemplos: "quanto falta para minha meta de viagem?", "quando vou atingir minha meta?", "minhas metas"
 
+🔔 LEMBRETES (PRIORIDADE ALTA):
+Quando o usuário pedir para criar um lembrete (ex: "lembrete: reunião amanhã 15h", "me lembra de pagar a conta dia 10", "adicione um lembrete para amanhã 11:00 para atualizar o SIA"), responda SOMENTE com JSON:
+{"action":"add_reminder","title":"Nome do lembrete","date":"2025-02-28","time":"11:00","recurrence":"none","notify_minutes_before":30}
+
+Regras para lembretes:
+- "title": nome limpo do evento, sem datas/horários
+- "date": formato YYYY-MM-DD. Se "amanhã", calcule a data correta.
+- "time": formato HH:MM (24h). Se não especificado, use "09:00"
+- "recurrence": "none", "daily", "weekly" ou "monthly"
+- "notify_minutes_before": padrão 30, ou o que o usuário pedir
+
 🧠 INTERPRETAÇÃO DE LISTAS DE RECORRÊNCIAS (PRIORIDADE MÁXIMA):
 Quando o usuário enviar uma LISTA com 2 ou mais itens que indiquem gastos/receitas recorrentes mensais, retorne SOMENTE JSON com action "add_recurring_list":
 

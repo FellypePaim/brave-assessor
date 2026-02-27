@@ -2664,6 +2664,73 @@ Metas financeiras: ${goalsCtx}`;
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+
+      // ── Detect add_reminder action from AI ──
+      const reminderMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"add_reminder"[\s\S]*\}/);
+      if (reminderMatch) {
+        const action = JSON.parse(reminderMatch[0]);
+        
+        // Build event_at from date + time provided by AI
+        let eventAt: string | null = null;
+        if (action.date && action.time) {
+          eventAt = new Date(`${action.date}T${action.time}:00-03:00`).toISOString();
+        } else if (action.date) {
+          eventAt = new Date(`${action.date}T09:00:00-03:00`).toISOString();
+        } else if (action.event_at) {
+          eventAt = new Date(action.event_at).toISOString();
+        }
+
+        if (!eventAt || isNaN(new Date(eventAt).getTime())) {
+          // Fallback: use parseReminderWithAI for the original text
+          replyText = "❓ Não consegui identificar a data/hora do lembrete. Tente: _\"lembrete: reunião amanhã 15h\"_";
+        } else {
+          const recurrence = action.recurrence || "none";
+          const notifyMinutes = action.notify_minutes_before ?? 30;
+
+          // Create session for confirmation
+          await supabaseAdmin.from("whatsapp_sessions").upsert({
+            phone_number: cleanPhone,
+            step: "reminder_confirm",
+            context: {
+              user_id: userId,
+              title: action.title,
+              description: action.description || null,
+              event_at: eventAt,
+              recurrence,
+              notify_minutes_before: notifyMinutes,
+              originalText: effectiveText,
+            },
+            expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+          }, { onConflict: "phone_number" });
+
+          const fmtDate = (s: string) =>
+            new Date(s).toLocaleString("pt-BR", {
+              day: "2-digit", month: "2-digit", year: "numeric",
+              hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo",
+            });
+
+          let notifyLabel = "";
+          if (notifyMinutes < 60) notifyLabel = `${notifyMinutes} minutos`;
+          else if (notifyMinutes < 1440) notifyLabel = `${notifyMinutes / 60} hora(s)`;
+          else notifyLabel = `${notifyMinutes / 1440} dia(s)`;
+
+          const recLbl = recurrenceLabel(recurrence, eventAt, effectiveText);
+
+          await sendWhatsAppButtons(
+            cleanPhone,
+            `🔔 *Confirmar lembrete?*\n\n` +
+            `📝 *Nome:* ${action.title}\n` +
+            `📅 *Horário:* ${fmtDate(eventAt)}\n` +
+            `⏰ *Aviso:* ${notifyLabel} antes\n` +
+            (recLbl ? `${recLbl}\n` : `🔂 *Recorrência:* Nenhuma\n`),
+            [{ id: "CONFIRM_REMINDER", text: "✅ Confirmar" }, { id: "cancelar", text: "❌ Cancelar" }],
+            "Toque para confirmar"
+          );
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
     } catch (parseErr) {
       console.log("Response is text, not action");
     }
