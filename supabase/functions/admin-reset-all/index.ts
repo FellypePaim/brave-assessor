@@ -131,8 +131,7 @@ Deno.serve(async (req) => {
 
     let notified = 0;
     for (const link of waLinks || []) {
-      if (adminIds.has(link.user_id)) continue; // skip admins
-      const profile = usersToReset.find(u => u.id === link.user_id);
+      const profile = allProfiles.find(u => u.id === link.user_id);
       const name = profile?.display_name || "Usuário";
 
       const message =

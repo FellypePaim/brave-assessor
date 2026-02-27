@@ -6,6 +6,21 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+async function sendWhatsAppMessage(phone: string, message: string) {
+  const UAZAPI_URL = Deno.env.get("UAZAPI_URL");
+  const UAZAPI_TOKEN = Deno.env.get("UAZAPI_TOKEN");
+  if (!UAZAPI_URL || !UAZAPI_TOKEN) return;
+  const resp = await fetch(`${UAZAPI_URL}/send/text`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", token: UAZAPI_TOKEN },
+    body: JSON.stringify({ number: phone, text: message }),
+  });
+  if (!resp.ok) {
+    const t = await resp.text();
+    console.error("UAZAPI send error:", resp.status, t);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -136,10 +151,31 @@ Deno.serve(async (req) => {
       if (walletErr) errors.push(`wallets: ${walletErr.message}`);
 
       // Reset profile fields (keep plan, whatsapp, name)
+      const { data: profileData } = await adminClient.from("profiles").select("display_name").eq("id", userId).maybeSingle();
       await adminClient.from("profiles").update({
         monthly_income: 0,
         has_completed_onboarding: false,
       }).eq("id", userId);
+
+      // Send WhatsApp notification
+      const { data: waLink } = await adminClient
+        .from("whatsapp_links")
+        .select("phone_number")
+        .eq("user_id", userId)
+        .eq("verified", true)
+        .maybeSingle();
+
+      if (waLink?.phone_number) {
+        const name = profileData?.display_name || "Usuário";
+        const message =
+          `⚠️ *Aviso, ${name}!*\n\n` +
+          `Seus dados foram resetados pela equipe de administração.\n\n` +
+          `🗑️ *Removidos:* transações, lembretes, cartões, carteiras, metas, categorias, recorrências e chat.\n\n` +
+          `✅ *Mantidos:* plano de assinatura e WhatsApp vinculado.\n\n` +
+          `Você pode começar a usar o app normalmente.\n\n` +
+          `_Brave IA - Seu assessor financeiro 🤖_`;
+        try { await sendWhatsAppMessage(waLink.phone_number, message); } catch (e) { console.error("WA notify error:", e); }
+      }
 
       if (errors.length > 0) {
         return new Response(JSON.stringify({ error: `Erros parciais: ${errors.join("; ")}` }), {

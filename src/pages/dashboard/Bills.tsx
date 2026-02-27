@@ -15,7 +15,7 @@ import { AddTransactionDialog } from "@/components/AddTransactionDialog";
 import { EditTransactionDialog } from "@/components/EditTransactionDialog";
 import { useToast } from "@/hooks/use-toast";
 
-type Period = "today" | "week" | "month";
+type Period = "today" | "week" | "month" | "next7" | "nextMonth";
 
 export default function Bills() {
   const { user } = useAuth();
@@ -29,15 +29,21 @@ export default function Bills() {
   const monthCapitalized = monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1);
 
   const getRange = () => {
+    const now = new Date();
     if (period === "today") { const d = format(currentDate, "yyyy-MM-dd"); return { start: d, end: d }; }
     if (period === "week") return { start: format(startOfWeek(currentDate, { weekStartsOn: 1 }), "yyyy-MM-dd"), end: format(endOfWeek(currentDate, { weekStartsOn: 1 }), "yyyy-MM-dd") };
+    if (period === "next7") return { start: format(now, "yyyy-MM-dd"), end: format(addDays(now, 7), "yyyy-MM-dd") };
+    if (period === "nextMonth") return { start: format(now, "yyyy-MM-dd"), end: format(addMonths(now, 1), "yyyy-MM-dd") };
     return { start: format(startOfMonth(currentDate), "yyyy-MM-dd"), end: format(endOfMonth(currentDate), "yyyy-MM-dd") };
   };
   const range = getRange();
 
   const getDateRangeLabel = () => {
+    const now = new Date();
     if (period === "today") return format(currentDate, "dd/MM/yyyy");
     if (period === "week") return `${format(startOfWeek(currentDate, { weekStartsOn: 1 }), "dd/MM/yyyy")} até ${format(endOfWeek(currentDate, { weekStartsOn: 1 }), "dd/MM/yyyy")}`;
+    if (period === "next7") return `${format(now, "dd/MM/yyyy")} até ${format(addDays(now, 7), "dd/MM/yyyy")}`;
+    if (period === "nextMonth") return `${format(now, "dd/MM/yyyy")} até ${format(addMonths(now, 1), "dd/MM/yyyy")}`;
     return `${format(startOfMonth(currentDate), "dd/MM/yyyy")} até ${format(endOfMonth(currentDate), "dd/MM/yyyy")}`;
   };
 
@@ -210,11 +216,13 @@ export default function Bills() {
           <div className="text-center">
             <p className="font-bold text-foreground text-lg">{monthCapitalized}</p>
             <div className="flex items-center gap-2 mt-2 justify-center">
-              {(["today", "week", "month"] as Period[]).map((p) => (
-                <Button key={p} variant={period === p ? "default" : "outline"} size="sm" className={`rounded-full text-xs px-4 h-7 ${period === p ? "" : "border-border text-muted-foreground hover:text-foreground"}`} onClick={() => setPeriod(p)}>
-                  {p === "today" ? "Hoje" : p === "week" ? "Essa semana" : "Esse mês"}
-                </Button>
-              ))}
+              <div className="flex items-center gap-2 mt-2 justify-center flex-wrap">
+                {(["today", "week", "month", "next7", "nextMonth"] as Period[]).map((p) => (
+                  <Button key={p} variant={period === p ? "default" : "outline"} size="sm" className={`rounded-full text-xs px-4 h-7 ${period === p ? "" : "border-border text-muted-foreground hover:text-foreground"}`} onClick={() => setPeriod(p)}>
+                    {p === "today" ? "Hoje" : p === "week" ? "Essa semana" : p === "month" ? "Esse mês" : p === "next7" ? "Próximos 7 dias" : "Próximo mês"}
+                  </Button>
+                ))}
+              </div>
             </div>
             <p className="text-xs text-muted-foreground mt-2">{getDateRangeLabel()}</p>
           </div>
