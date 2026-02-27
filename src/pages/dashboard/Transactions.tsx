@@ -190,13 +190,13 @@ export default function Transactions() {
       {/* Summary cards */}
       <div className="grid grid-cols-3 gap-3">
         {summaryCards.map((item) => (
-          <Card key={item.label} className="p-4 flex items-center gap-3">
-            <div className={`h-11 w-11 rounded-xl ${item.bg} flex items-center justify-center shrink-0`}>
+          <Card key={item.label} className="p-3 sm:p-4 flex flex-col items-center text-center gap-2">
+            <div className={`h-10 w-10 sm:h-11 sm:w-11 rounded-xl ${item.bg} flex items-center justify-center shrink-0`}>
               <item.icon className={`h-5 w-5 ${item.text}`} />
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-xs text-muted-foreground">{item.label}</p>
-              <p className={`font-bold text-sm ${item.valueColor}`}>{item.value}</p>
+              <p className={`font-bold text-xs sm:text-sm ${item.valueColor} truncate`}>{item.value}</p>
             </div>
           </Card>
         ))}
