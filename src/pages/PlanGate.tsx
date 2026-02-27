@@ -14,7 +14,7 @@ const PLANS = [
     name: "Plano Teste",
     price: "Grátis",
     period: "10 minutos",
-    description: "Liberado pelo administrador",
+    description: "Acesso imediato e gratuito",
     icon: Clock,
     color: "text-primary",
     bg: "bg-primary/10",
@@ -22,7 +22,7 @@ const PLANS = [
     features: [
       "Acesso completo por 10 minutos",
       "Todas as funcionalidades do Mensal",
-      "Apenas via convite do admin",
+      "Ativação automática e instantânea",
     ],
   },
   {
@@ -66,7 +66,7 @@ const PLANS = [
 export default function PlanGate() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [planInfo, setPlanInfo] = useState<{ plan: string; name: string } | null>(null);
+  const [planInfo, setPlanInfo] = useState<{ plan: string; name: string; alreadyUsedTest: boolean } | null>(null);
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
 
   useEffect(() => {
@@ -81,15 +81,34 @@ export default function PlanGate() {
         const expired =
           data.subscription_expires_at &&
           new Date(data.subscription_expires_at) < new Date();
+        const alreadyUsedTest = data.subscription_plan === "teste" || (expired && data.subscription_plan !== "free");
         if (data.subscription_plan !== "free" && expired) {
-          setPlanInfo({ plan: "expired", name: data.display_name || "usuário" });
+          setPlanInfo({ plan: "expired", name: data.display_name || "usuário", alreadyUsedTest: true });
         } else {
-          setPlanInfo({ plan: data.subscription_plan, name: data.display_name || "usuário" });
+          setPlanInfo({ plan: data.subscription_plan, name: data.display_name || "usuário", alreadyUsedTest });
         }
       }
     };
     fetchPlan();
   }, [user]);
+
+  const handleActivateTest = async () => {
+    if (!user) return;
+    setLoadingPlan("teste");
+    try {
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+      const { error } = await supabase
+        .from("profiles")
+        .update({ subscription_plan: "teste" as any, subscription_expires_at: expiresAt })
+        .eq("id", user.id);
+      if (error) throw error;
+      toast({ title: "Plano Teste ativado!", description: "Você tem 10 minutos de acesso completo." });
+      window.location.href = "/dashboard";
+    } catch (err: any) {
+      toast({ title: "Erro ao ativar plano", description: err.message, variant: "destructive" });
+      setLoadingPlan(null);
+    }
+  };
 
   const handleCheckout = async (plan: "mensal" | "anual") => {
     setLoadingPlan(plan);
@@ -184,15 +203,26 @@ export default function PlanGate() {
                     ))}
                   </div>
                   {p.key === "teste" ? (
-                    <a
-                      href={`https://wa.me/5537998195029?text=${encodeURIComponent("Olá! Gostaria de solicitar o Plano Teste do Brave Assessor.")}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-center gap-2 w-full py-2 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold transition-colors"
+                    <Button
+                      size="sm"
+                      className="w-full rounded-xl"
+                      disabled={loadingPlan === "teste" || planInfo?.alreadyUsedTest}
+                      onClick={handleActivateTest}
                     >
-                      <MessageSquare className="h-3.5 w-3.5" />
-                      Solicitar via WhatsApp
-                    </a>
+                      {loadingPlan === "teste" ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                          Ativando…
+                        </>
+                      ) : planInfo?.alreadyUsedTest ? (
+                        "Teste já utilizado"
+                      ) : (
+                        <>
+                          <Zap className="h-3.5 w-3.5 mr-1.5" />
+                          Ativar agora
+                        </>
+                      )}
+                    </Button>
                   ) : (
                     <Button
                       size="sm"
