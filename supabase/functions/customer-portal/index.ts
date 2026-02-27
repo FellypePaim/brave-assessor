@@ -44,7 +44,7 @@ serve(async (req) => {
     } else {
       customerId = customers.data[0].id;
     }
-    const origin = req.headers.get("origin") || "https://nox-assessor.lovable.app";
+    const origin = req.headers.get("origin") || "https://brave-assessor.lovable.app";
 
     const portalSession = await stripe.billingPortal.sessions.create({
       customer: customerId,
