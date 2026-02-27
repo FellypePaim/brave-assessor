@@ -73,7 +73,7 @@ function usePlanStatus(userId?: string, authLoading?: boolean): PlanStatus {
     // Only poll every 30s for "teste" plan (10min limit), otherwise check every 5min
     const interval = setInterval(check, 30_000);
     return () => clearInterval(interval);
-  }, [userId]);
+  }, [userId, authLoading]);
 
   return status;
 }
