@@ -66,6 +66,8 @@ export default function AdminUsers() {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteUser, setConfirmDeleteUser] = useState<UserRow | null>(null);
+  const [confirmResetUser, setConfirmResetUser] = useState<UserRow | null>(null);
+  const [resettingId, setResettingId] = useState<string | null>(null);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -257,30 +259,41 @@ export default function AdminUsers() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error("Sem sessão");
-
       const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
       const res = await fetch(
         `https://${projectId}.supabase.co/functions/v1/admin-update-user`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({ userId: u.id, deleteUser: true }),
-        }
+        { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({ userId: u.id, deleteUser: true }) }
       );
       const json = await res.json();
       if (json.error) throw new Error(json.error);
-
       toast({ title: "Usuário excluído", description: `${u.display_name || u.id} foi removido.` });
       setConfirmDeleteUser(null);
       fetchUsers();
     } catch (err: any) {
       toast({ title: "Erro ao excluir", description: err.message, variant: "destructive" });
-    } finally {
-      setDeletingId(null);
-    }
+    } finally { setDeletingId(null); }
+  };
+
+  const resetUserData = async (u: UserRow) => {
+    setResettingId(u.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Sem sessão");
+      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/admin-update-user`,
+        { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({ userId: u.id, resetUser: true }) }
+      );
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      toast({ title: "Dados resetados!", description: `${u.display_name || u.id} teve os dados limpos. Plano e WhatsApp mantidos.` });
+      setConfirmResetUser(null);
+      fetchUsers();
+    } catch (err: any) {
+      toast({ title: "Erro ao resetar", description: err.message, variant: "destructive" });
+    } finally { setResettingId(null); }
   };
 
   return (
@@ -422,15 +435,27 @@ export default function AdminUsers() {
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
                         {currentUserIsAdmin && u.role !== "admin" && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setConfirmDeleteUser(u)}
-                            className="h-8 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
-                            disabled={deletingId === u.id}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setConfirmResetUser(u)}
+                              className="h-8 px-2 text-amber-600 hover:text-amber-700 hover:bg-amber-500/10"
+                              disabled={resettingId === u.id}
+                              title="Resetar dados"
+                            >
+                              <RefreshCw className={`h-3.5 w-3.5 ${resettingId === u.id ? "animate-spin" : ""}`} />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setConfirmDeleteUser(u)}
+                              className="h-8 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                              disabled={deletingId === u.id}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </>
                         )}
                       </div>
                     </td>
@@ -655,6 +680,39 @@ export default function AdminUsers() {
               disabled={!!deletingId}
             >
               {deletingId ? "Excluindo..." : "Excluir permanentemente"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Reset Dialog */}
+      <Dialog open={!!confirmResetUser} onOpenChange={open => !open && setConfirmResetUser(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-600">
+              <RefreshCw className="h-4 w-4" /> Resetar dados do usuário
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            <p className="text-sm text-foreground">
+              Resetar todos os dados de{" "}
+              <span className="font-semibold">{confirmResetUser?.display_name || "este usuário"}</span>?
+            </p>
+            <p className="text-xs text-muted-foreground mt-2">
+              🗑️ Serão apagados: transações, lembretes, cartões, carteiras, metas, categorias, recorrências e chat.
+            </p>
+            <p className="text-xs text-emerald-600 mt-1">
+              ✅ Serão mantidos: plano de assinatura e WhatsApp vinculado.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmResetUser(null)}>Cancelar</Button>
+            <Button
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+              onClick={() => confirmResetUser && resetUserData(confirmResetUser)}
+              disabled={!!resettingId}
+            >
+              {resettingId ? "Resetando..." : "Resetar dados"}
             </Button>
           </DialogFooter>
         </DialogContent>
