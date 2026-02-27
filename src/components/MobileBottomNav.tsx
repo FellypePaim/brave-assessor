@@ -2,7 +2,7 @@ import { useState } from "react";
 import {
   LayoutDashboard, Wallet, CalendarCheck, Sparkles, MoreHorizontal,
   CreditCard, Tag, Target, TrendingUp, Brain, FileText,
-  HeadphonesIcon, Settings, X, Users, Bell, ShieldCheck,
+  HeadphonesIcon, Settings, X, Users, Bell, ShieldCheck, ArrowLeftRight,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -14,12 +14,13 @@ import { useIsAdmin } from "@/hooks/useIsAdmin";
 
 const tabs = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Início", end: true },
-  { to: "/dashboard/wallets", icon: Wallet, label: "Carteira" },
-  { to: "/dashboard/transactions", icon: CalendarCheck, label: "Contas" },
+  { to: "/dashboard/transactions", icon: ArrowLeftRight, label: "Transações" },
+  { to: "/dashboard/bills", icon: CalendarCheck, label: "Contas" },
   { to: "/dashboard/brave-ia", icon: Sparkles, label: "Brave IA" },
 ];
 
 const moreItems = [
+  { to: "/dashboard/wallets", icon: Wallet, label: "Carteira" },
   { to: "/dashboard/cards", icon: CreditCard, label: "Cartões" },
   { to: "/dashboard/budgets", icon: Tag, label: "Categorias" },
   { to: "/dashboard/reminders", icon: Bell, label: "Lembretes", badge: true },
