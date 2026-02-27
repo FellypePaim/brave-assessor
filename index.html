@@ -32,6 +32,15 @@
 </head>
 
   <body>
+    <script>
+      // Default to dark; only use light if explicitly saved
+      const t = localStorage.getItem("theme");
+      if (t === "light") {
+        document.documentElement.classList.remove("dark");
+      } else {
+        document.documentElement.classList.add("dark");
+      }
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

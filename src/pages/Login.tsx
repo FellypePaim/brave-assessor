@@ -20,6 +20,7 @@ export default function Login() {
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
+    localStorage.setItem("theme", dark ? "dark" : "light");
   }, [dark]);
 
   const handleSubmit = async (e: React.FormEvent) => {

@@ -11,10 +11,11 @@ import WhatsAppBanner from "@/components/WhatsAppBanner";
 import PWAInstallBanner from "@/components/PWAInstallBanner";
 
 export default function DashboardLayout() {
-  const [dark, setDark] = useState(false);
+  const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
+    localStorage.setItem("theme", dark ? "dark" : "light");
   }, [dark]);
 
   return (
