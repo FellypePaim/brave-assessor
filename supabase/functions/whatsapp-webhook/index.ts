@@ -2731,6 +2731,223 @@ Metas financeiras: ${goalsCtx}`;
           });
         }
       }
+
+      // ── Detect list_reminders action from AI ──
+      const listRemindersMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"list_reminders"[\s\S]*\}/);
+      if (listRemindersMatch) {
+        const now = new Date();
+        const { data: allUserReminders } = await supabaseAdmin
+          .from("reminders")
+          .select("id, title, description, event_at, notify_minutes_before, recurrence, is_active")
+          .eq("user_id", userId)
+          .eq("is_active", true)
+          .order("event_at", { ascending: true })
+          .limit(20);
+
+        const activeReminders = (allUserReminders || []).filter((r: any) => {
+          if (r.recurrence && r.recurrence !== "none") return true;
+          return new Date(r.event_at) > now;
+        }).slice(0, 10);
+
+        if (!activeReminders || activeReminders.length === 0) {
+          await sendWhatsAppMessage(cleanPhone,
+            "📭 Você não tem lembretes ativos no momento.\n\nPara criar um, envie:\n_lembrete: reunião amanhã 15h_\n\n_Brave IA - Seu assessor financeiro 🤖_"
+          );
+        } else {
+          const recMap: Record<string, string> = { none: "", daily: "🔁", weekly: "🔁", monthly: "🔁" };
+          const list = activeReminders.map((r: any, i: number) => {
+            const dt = new Date(r.event_at).toLocaleString("pt-BR", {
+              day: "2-digit", month: "2-digit", year: "numeric",
+              hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo",
+            });
+            const rec = recMap[r.recurrence] || "";
+            return `${i + 1}. ${rec} 🔔 *${r.title}*\n    📅 ${dt}`;
+          }).join("\n\n");
+
+          await supabaseAdmin.from("whatsapp_sessions").delete().eq("phone_number", cleanPhone);
+          await supabaseAdmin.from("whatsapp_sessions").insert({
+            phone_number: cleanPhone,
+            step: "list_reminders",
+            context: { user_id: userId, reminders: activeReminders },
+            expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+          });
+
+          await sendWhatsAppMessage(cleanPhone,
+            `📋 *Seus próximos lembretes (${activeReminders.length}):*\n\n${list}\n\n` +
+            `Responda com o *número* para editar ou cancelar um lembrete.\nEnvie *cancelar* para sair.`
+          );
+        }
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // ── Detect delete_reminder action from AI ──
+      const deleteReminderMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"delete_reminder"[\s\S]*\}/);
+      if (deleteReminderMatch) {
+        const action = JSON.parse(deleteReminderMatch[0]);
+        const searchTerm = (action.search || "").toLowerCase();
+
+        const { data: userReminders } = await supabaseAdmin
+          .from("reminders")
+          .select("id, title, event_at, recurrence, is_active")
+          .eq("user_id", userId)
+          .eq("is_active", true)
+          .order("event_at", { ascending: true });
+
+        const matched = (userReminders || []).filter((r: any) =>
+          r.title.toLowerCase().includes(searchTerm)
+        );
+
+        if (matched.length === 0) {
+          await sendWhatsAppMessage(cleanPhone,
+            `❓ Não encontrei nenhum lembrete com "${action.search}". Envie _"meus lembretes"_ para ver a lista.`
+          );
+        } else if (matched.length === 1) {
+          const r = matched[0];
+          const dt = new Date(r.event_at).toLocaleString("pt-BR", {
+            day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo",
+          });
+
+          await supabaseAdmin.from("whatsapp_sessions").delete().eq("phone_number", cleanPhone);
+          await supabaseAdmin.from("whatsapp_sessions").insert({
+            phone_number: cleanPhone,
+            step: "reminder_action",
+            context: { user_id: userId, chosen_reminder: r, reminders: userReminders },
+            expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+          });
+
+          await sendWhatsAppButtons(
+            cleanPhone,
+            `🔔 *${r.title}*\n📅 ${dt}\n\nDeseja cancelar este lembrete?`,
+            [{ id: "CONFIRM_DELETE_REMINDER", text: "✅ Sim, cancelar" }, { id: "BACK_REMINDERS", text: "⬅️ Voltar" }],
+            "Confirme para excluir"
+          );
+        } else {
+          // Multiple matches - show list to pick
+          const list = matched.map((r: any, i: number) => {
+            const dt = new Date(r.event_at).toLocaleString("pt-BR", {
+              day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo",
+            });
+            return `${i + 1}. 🔔 *${r.title}* — ${dt}`;
+          }).join("\n");
+
+          await supabaseAdmin.from("whatsapp_sessions").delete().eq("phone_number", cleanPhone);
+          await supabaseAdmin.from("whatsapp_sessions").insert({
+            phone_number: cleanPhone,
+            step: "list_reminders",
+            context: { user_id: userId, reminders: matched },
+            expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+          });
+
+          await sendWhatsAppMessage(cleanPhone,
+            `🔍 Encontrei ${matched.length} lembretes com "${action.search}":\n\n${list}\n\nResponda com o *número* para gerenciar.`
+          );
+        }
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // ── Detect edit_reminder action from AI ──
+      const editReminderMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"edit_reminder"[\s\S]*\}/);
+      if (editReminderMatch) {
+        const action = JSON.parse(editReminderMatch[0]);
+        const searchTerm = (action.search || "").toLowerCase();
+
+        const { data: userReminders } = await supabaseAdmin
+          .from("reminders")
+          .select("id, title, event_at, recurrence, notify_minutes_before, is_active")
+          .eq("user_id", userId)
+          .eq("is_active", true)
+          .order("event_at", { ascending: true });
+
+        const matched = (userReminders || []).filter((r: any) =>
+          r.title.toLowerCase().includes(searchTerm)
+        );
+
+        if (matched.length === 0) {
+          await sendWhatsAppMessage(cleanPhone,
+            `❓ Não encontrei nenhum lembrete com "${action.search}". Envie _"meus lembretes"_ para ver a lista.`
+          );
+        } else if (matched.length === 1) {
+          const r = matched[0];
+          let updateData: any = {};
+          let successMsg = "";
+
+          if (action.field === "title" && action.new_value) {
+            updateData.title = action.new_value;
+            successMsg = `✅ Nome atualizado para *${action.new_value}*!`;
+          } else if (action.field === "time" && action.new_value) {
+            const currentDate = new Date(r.event_at);
+            const [h, m] = action.new_value.split(":").map(Number);
+            currentDate.setHours(h, m, 0, 0);
+            updateData.event_at = currentDate.toISOString();
+            updateData.is_sent = false;
+            successMsg = `✅ Horário atualizado para *${action.new_value}*!`;
+          } else if (action.field === "date" && action.new_value) {
+            const currentTime = new Date(r.event_at);
+            const newDate = new Date(`${action.new_value}T${currentTime.getHours().toString().padStart(2,"0")}:${currentTime.getMinutes().toString().padStart(2,"0")}:00-03:00`);
+            updateData.event_at = newDate.toISOString();
+            updateData.is_sent = false;
+            const dt = newDate.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
+            successMsg = `✅ Data atualizada para *${dt}*!`;
+          } else if (action.field === "recurrence" && action.new_value) {
+            updateData.recurrence = action.new_value;
+            const recNames: Record<string, string> = { none: "Nenhuma", daily: "Diária", weekly: "Semanal", monthly: "Mensal" };
+            successMsg = `✅ Recorrência atualizada para *${recNames[action.new_value] || action.new_value}*!`;
+          } else {
+            // No valid field — open edit session
+            await supabaseAdmin.from("whatsapp_sessions").delete().eq("phone_number", cleanPhone);
+            await supabaseAdmin.from("whatsapp_sessions").insert({
+              phone_number: cleanPhone,
+              step: "reminder_edit_field",
+              context: { user_id: userId, chosen_reminder: r, reminders: userReminders },
+              expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+            });
+
+            await sendWhatsAppButtons(
+              cleanPhone,
+              `✏️ *Editar: ${r.title}*\n\nO que deseja alterar?`,
+              [{ id: "EDIT_TITLE", text: "📝 Nome" }, { id: "EDIT_DATE", text: "📅 Data/hora" }, { id: "EDIT_NOTIFY", text: "⏰ Aviso antecipado" }],
+              "Escolha o que editar"
+            );
+            return new Response(JSON.stringify({ ok: true }), {
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+
+          if (Object.keys(updateData).length > 0) {
+            await supabaseAdmin.from("reminders").update(updateData).eq("id", r.id);
+            await sendWhatsAppMessage(cleanPhone,
+              `${successMsg}\n\n🔔 *${updateData.title || r.title}*\n_Brave IA - Seu assessor financeiro 🤖_`
+            );
+          }
+        } else {
+          // Multiple matches
+          const list = matched.map((r: any, i: number) => {
+            const dt = new Date(r.event_at).toLocaleString("pt-BR", {
+              day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo",
+            });
+            return `${i + 1}. 🔔 *${r.title}* — ${dt}`;
+          }).join("\n");
+
+          await supabaseAdmin.from("whatsapp_sessions").delete().eq("phone_number", cleanPhone);
+          await supabaseAdmin.from("whatsapp_sessions").insert({
+            phone_number: cleanPhone,
+            step: "list_reminders",
+            context: { user_id: userId, reminders: matched },
+            expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+          });
+
+          await sendWhatsAppMessage(cleanPhone,
+            `🔍 Encontrei ${matched.length} lembretes com "${action.search}":\n\n${list}\n\nResponda com o *número* para gerenciar.`
+          );
+        }
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     } catch (parseErr) {
       console.log("Response is text, not action");
     }

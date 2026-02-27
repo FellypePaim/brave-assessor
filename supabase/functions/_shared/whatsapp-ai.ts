@@ -154,6 +154,17 @@ Exemplos: "quanto falta para minha meta de viagem?", "quando vou atingir minha m
 Quando o usuário pedir para criar um lembrete (ex: "lembrete: reunião amanhã 15h", "me lembra de pagar a conta dia 10", "adicione um lembrete para amanhã 11:00 para atualizar o SIA"), responda SOMENTE com JSON:
 {"action":"add_reminder","title":"Nome do lembrete","date":"2025-02-28","time":"11:00","recurrence":"none","notify_minutes_before":30}
 
+Quando o usuário pedir para VER ou LISTAR lembretes (ex: "meus lembretes", "quais meus lembretes", "ver lembretes", "lembretes"), responda SOMENTE com JSON:
+{"action":"list_reminders"}
+
+Quando o usuário pedir para CANCELAR ou EXCLUIR um lembrete pelo nome (ex: "cancela o lembrete do SIA", "remove o lembrete da reunião", "exclui lembrete academia"), responda SOMENTE com JSON:
+{"action":"delete_reminder","search":"SIA"}
+O campo "search" deve conter a palavra-chave que identifica o lembrete.
+
+Quando o usuário pedir para EDITAR um lembrete pelo nome (ex: "editar lembrete do SIA para 15h", "muda o horário do lembrete reunião para sexta"), responda SOMENTE com JSON:
+{"action":"edit_reminder","search":"SIA","field":"time","new_value":"15:00"}
+Campos editáveis: "title", "time" (HH:MM), "date" (YYYY-MM-DD), "recurrence"
+
 Regras para lembretes:
 - "title": nome limpo do evento, sem datas/horários
 - "date": formato YYYY-MM-DD. Se "amanhã", calcule a data correta.
