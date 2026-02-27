@@ -31,24 +31,48 @@ export function extractJsonFromMixed(text: string): string | null {
 
 /** Find JSON matching a specific action pattern */
 export function extractActionJson(text: string, actionName: string): any | null {
-  // First try: exact action match with regex
-  const pattern = new RegExp(`\\{[\\s\\S]*?"action"\\s*:\\s*"${actionName}"[\\s\\S]*?\\}`, "i");
-  const match = text.match(pattern);
-  if (!match) return null;
+  // First try: find the action keyword and then extract the full balanced JSON object
+  const actionMarker = `"action"`;
+  const actionIdx = text.indexOf(actionName);
+  if (actionIdx === -1) return null;
+
+  // Walk backwards to find the opening brace
+  let startIdx = text.lastIndexOf("{", actionIdx);
+  if (startIdx === -1) return null;
+
+  // Walk forward from startIdx to find matching closing brace (balanced)
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  let endIdx = -1;
+  for (let i = startIdx; i < text.length; i++) {
+    const ch = text[i];
+    if (escaped) { escaped = false; continue; }
+    if (ch === "\\") { escaped = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === "{" || ch === "[") depth++;
+    if (ch === "}" || ch === "]") depth--;
+    if (depth === 0) { endIdx = i; break; }
+  }
+
+  if (endIdx === -1) return null;
+  const jsonStr = text.substring(startIdx, endIdx + 1);
 
   try {
-    return safeJsonParse(match[0]);
-  } catch {
-    // Try extracting from broader context
-    const broader = extractJsonFromMixed(text);
-    if (broader) {
-      try {
-        const parsed = safeJsonParse(broader);
-        if (parsed?.action === actionName) return parsed;
-      } catch { /* ignore */ }
-    }
-    return null;
+    const parsed = safeJsonParse(jsonStr);
+    if (parsed?.action === actionName) return parsed;
+  } catch { /* ignore */ }
+
+  // Fallback: try extracting from broader context
+  const broader = extractJsonFromMixed(text);
+  if (broader) {
+    try {
+      const parsed = safeJsonParse(broader);
+      if (parsed?.action === actionName) return parsed;
+    } catch { /* ignore */ }
   }
+  return null;
 }
 
 /** Safely parse JSON, handling common LLM output issues */
@@ -206,13 +230,16 @@ export function cleanSearchTerm(search: string): string {
 export function extractAllActions(aiResponse: string): { action: any; textResponse: string } {
   // All known action names
   const actionNames = [
-    "add_transaction", "add_recurring_list", "add_reminder", "list_reminders",
+    "add_list", "add_transaction", "add_recurring_list", "add_reminder", "list_reminders",
     "delete_reminder", "edit_reminder", "add_goal", "deposit_goal", "edit_goal",
     "delete_goal", "list_goals", "add_wallet", "edit_wallet", "delete_wallet",
     "list_wallets", "add_category", "edit_category", "delete_category", "list_categories",
     "add_card", "edit_card", "delete_card", "list_cards", "delete_transaction",
     "edit_transaction", "list_transactions", "list_recurring", "edit_recurring",
     "delete_recurring", "transfer_wallet", "update_profile", "pay_bill", "list_bills",
+    "delete_all_reminders", "delete_all_transactions", "delete_all_cards",
+    "delete_all_wallets", "delete_all_goals", "delete_all_categories",
+    "delete_all_recurring", "reset_all_data",
   ];
 
   for (const name of actionNames) {
@@ -227,8 +254,8 @@ export function extractAllActions(aiResponse: string): { action: any; textRespon
       if (action.search) action.search = cleanSearchTerm(action.search);
       if (action.title) action.title = cleanReminderTitle(action.title);
 
-      // For recurring lists, clean each item
-      if (name === "add_recurring_list" && Array.isArray(action.items)) {
+      // For lists, clean each item
+      if ((name === "add_list" || name === "add_recurring_list") && Array.isArray(action.items)) {
         action.items = action.items.map((item: any) => ({
           ...item,
           amount: normalizeAmount(item.amount),
