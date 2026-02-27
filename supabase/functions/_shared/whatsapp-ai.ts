@@ -37,81 +37,12 @@ const FORMATTING_RULES = `
 - Seja caloroso, motivador e pessoal (use o nome do usuário quando disponível)
 `;
 
-export async function processImageWithAI(imageBase64: string, mimeType: string, financialContext: string, userCaption?: string) {
-  const systemPrompt = `Você é o Brave IA 🤖, assessor financeiro pessoal via WhatsApp.
-
-${FORMATTING_RULES}
-${NLP_RULES}
-
-🧾 ANÁLISE DE COMPROVANTES:
-Você está recebendo a FOTO de um comprovante/recibo/nota fiscal.
-Analise a imagem e extraia:
-- Valor (amount) — número exato
-- Descrição do pagamento (description) — nome limpo e comercial
-- Categoria mais adequada das disponíveis no contexto
-- Tipo: "expense" ou "income"
-- Forma de pagamento se visível (PIX, cartão, dinheiro, etc.)
-
-Responda SOMENTE com JSON quando identificar uma transação:
-{"action":"add_transaction","amount":50.00,"description":"Supermercado Extra","category":"Alimentação","type":"expense","payment_method":"PIX"}
-
-Se não conseguir identificar os dados, responda em texto explicando o que viu.
-
-${financialContext}`;
-
-  return await callGemini({
-    model: "gemini-2.5-flash",
-    systemPrompt,
-    messages: [
-      {
-        role: "user",
-        content: [
-          { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}` } },
-          { type: "text", text: userCaption || "Analise este comprovante e extraia os dados da transação." },
-        ],
-      },
-    ],
-  });
-}
-
-export async function processAudioWithAI(audioBase64: string, mimeType: string, financialContext: string) {
-  const systemPrompt = `Você é o Brave IA 🤖, assessor financeiro pessoal via WhatsApp. Responda SEMPRE em português brasileiro.
-
-${FORMATTING_RULES}
-${NLP_RULES}
-
-🎙️ ÁUDIO RECEBIDO:
-Transcreva o áudio e interprete o que foi dito.
-
-Se for um comando de transação (ex: "gastei 50 reais no almoço"), responda SOMENTE com JSON:
-{"action":"add_transaction","amount":50,"description":"Almoço","category":"Alimentação","type":"expense"}
-
-Para perguntas normais, responda em texto formatado com emojis e parágrafos.
-
-${financialContext}`;
-
-  const audioFormat = mimeType.includes("ogg") ? "audio/ogg" : mimeType.includes("mp4") ? "audio/mp4" : "audio/mpeg";
-
-  return await callGemini({
-    model: "gemini-2.5-flash",
-    systemPrompt,
-    messages: [
-      {
-        role: "user",
-        content: [
-          { type: "image_url", image_url: { url: `data:${audioFormat};base64,${audioBase64}` } },
-          { type: "text", text: "Transcreva e interprete este áudio financeiro." },
-        ],
-      },
-    ],
-  });
-}
-
-export async function processWithNoxIA(userMessage: string, financialContext: string) {
+// ── Shared capabilities prompt builder (used by text, audio, and image processing) ──
+function buildCapabilitiesPrompt(financialContext: string): string {
   const todayDayOfMonth = getBrazilNow().getDate();
   const nowBR = getBrazilNow().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "full", timeStyle: "short" });
 
-  const systemPrompt = `Você é o Brave IA 🤖, assessor financeiro pessoal via WhatsApp. Responda SEMPRE em português brasileiro.
+  return `Você é o Brave IA 🤖, assessor financeiro pessoal via WhatsApp. Responda SEMPRE em português brasileiro.
 Data/hora atual em São Paulo: ${nowBR}
 
 ${FORMATTING_RULES}
@@ -151,23 +82,12 @@ Campos: "name", "balance", "type"
 Para EXCLUIR carteira: {"action":"delete_wallet","search":"Nubank"}
 Para LISTAR carteiras: {"action":"list_wallets"}
 
-Exemplos naturais:
-- "cria uma carteira do nubank" → add_wallet
-- "atualiza o saldo do nubank pra 1500" → edit_wallet
-- "tira a carteira nubank" → delete_wallet
-- "quanto tenho nas carteiras?" → list_wallets
-
 📂 CATEGORIAS:
 Para CRIAR categoria: {"action":"add_category","name":"Pets","icon":"dog","color":"#f97316","budget_limit":300}
 Para EDITAR categoria: {"action":"edit_category","search":"Alimentação","field":"budget_limit","new_value":800}
 Campos: "name", "budget_limit", "color", "icon"
 Para EXCLUIR categoria: {"action":"delete_category","search":"Pets"}
 Para LISTAR categorias: {"action":"list_categories"}
-
-Exemplos naturais:
-- "cria categoria Pets com limite de 300" → add_category
-- "aumenta o orçamento de alimentação pra 800" → edit_category
-- "remove categoria pets" → delete_category
 
 💳 CARTÕES:
 Para CRIAR cartão: {"action":"add_card","name":"Nubank","brand":"Visa","last_4_digits":"1234","credit_limit":5000,"due_day":10}
@@ -176,28 +96,15 @@ Campos: "name", "brand", "credit_limit", "due_day", "last_4_digits"
 Para EXCLUIR cartão: {"action":"delete_card","search":"Nubank"}
 Para LISTAR cartões: {"action":"list_cards"}
 
-Exemplos naturais:
-- "adiciona cartão nubank visa limite 5k" → add_card
-- "tira o cartão nubank" → delete_card
-- "meus cartões" → list_cards
-
 🗑️ EXCLUIR TRANSAÇÃO:
 Para EXCLUIR uma transação recente: {"action":"delete_transaction","search":"Almoço"}
-Busca pela descrição mais recente.
 
 ✏️ EDITAR TRANSAÇÃO:
 Para EDITAR uma transação recente: {"action":"edit_transaction","search":"Almoço","field":"amount","new_value":60}
 Campos editáveis: "amount", "description", "category", "type"
 
-Exemplos naturais:
-- "apaga aquela transação do almoço" → delete_transaction
-- "tira o gasto de gasolina" → delete_transaction
-- "na verdade o almoço foi 60" → edit_transaction (search="Almoço", field="amount", new_value=60)
-- "o uber era transporte, não lazer" → edit_transaction (search="Uber", field="category", new_value="Transporte")
-
 📋 LISTAR TRANSAÇÕES RECENTES:
 Para LISTAR as últimas transações: {"action":"list_transactions"}
-Exemplos: "minhas transações", "últimos gastos", "extrato recente", "o que gastei hoje"
 
 🔄 RECORRÊNCIAS (CRUD completo):
 Para LISTAR recorrências ativas: {"action":"list_recurring"}
@@ -205,40 +112,18 @@ Para EDITAR uma recorrência: {"action":"edit_recurring","search":"Netflix","fie
 Campos editáveis: "amount", "description", "day_of_month", "is_active"
 Para EXCLUIR/DESATIVAR uma recorrência: {"action":"delete_recurring","search":"Netflix"}
 
-Exemplos naturais:
-- "minhas recorrências" → list_recurring
-- "a netflix subiu pra 45" → edit_recurring
-- "cancela a netflix" → delete_recurring
-
 💸 TRANSFERIR ENTRE CARTEIRAS:
 Para transferir dinheiro entre carteiras: {"action":"transfer_wallet","from":"Nubank","to":"Inter","amount":500}
-
-Exemplos naturais:
-- "transfere 500 do nubank pro inter" → transfer_wallet
-- "passa 200 da poupança pra corrente" → transfer_wallet
 
 👤 ATUALIZAR PERFIL:
 Para atualizar dados do perfil: {"action":"update_profile","field":"monthly_income","new_value":5000}
 Campos editáveis: "display_name" (nome), "monthly_income" (renda mensal)
 
-Exemplos naturais:
-- "minha renda é 5000" → update_profile com field=monthly_income
-- "ganho 5k por mês" → update_profile com field=monthly_income, new_value=5000
-- "me chama de João" → update_profile com field=display_name
-
 💳 MARCAR CONTA COMO PAGA:
 Para marcar uma conta/boleto como pago: {"action":"pay_bill","search":"Energia"}
 
-Exemplos naturais:
-- "paguei a luz" → pay_bill (search="Energia" ou "Luz")
-- "já paguei o aluguel" → pay_bill
-
 📋 LISTAR CONTAS A PAGAR:
 Para listar contas pendentes: {"action":"list_bills"}
-
-Exemplos naturais:
-- "o que tenho pra pagar?" → list_bills
-- "contas pendentes" → list_bills
 
 🎯 TRANSAÇÃO COM CARTEIRA/CARTÃO ESPECÍFICO:
 Quando o usuário mencionar uma carteira ou cartão na transação, inclua o campo no JSON:
@@ -246,18 +131,10 @@ Quando o usuário mencionar uma carteira ou cartão na transação, inclua o cam
 ou
 {"action":"add_transaction","amount":50,"description":"Almoço","category":"Alimentação","type":"expense","card":"Visa"}
 
-Exemplos naturais:
-- "gastei 50 no almoço pelo nubank" → wallet="Nubank"
-- "comprei 200 de roupa no cartão visa" → card="Visa"
-
 📅 TRANSAÇÃO COM DATA ESPECÍFICA:
 Quando o usuário mencionar uma data passada ("ontem", "dia 15", "semana passada"), inclua:
 {"action":"add_transaction","amount":50,"description":"Almoço","category":"Alimentação","type":"expense","date":"2026-02-26"}
 Se não mencionar data, NÃO inclua o campo date (usa data atual).
-
-Exemplos naturais:
-- "ontem gastei 30 no almoço" → date = data de ontem
-- "dia 15 paguei 200 de luz" → date = dia 15 do mês atual
 
 🔔 LEMBRETES (PRIORIDADE ALTA):
 Quando o usuário pedir para criar um lembrete, responda SOMENTE com JSON:
@@ -282,45 +159,12 @@ Campos editáveis: "title", "time" (HH:MM), "date" (YYYY-MM-DD), "recurrence"
 
 🧠 INTERPRETAÇÃO DE LISTAS DE RECORRÊNCIAS (PRIORIDADE MÁXIMA):
 Quando o usuário enviar uma LISTA com 2 ou mais itens que indiquem gastos/receitas recorrentes mensais, retorne SOMENTE JSON com action "add_recurring_list":
-
-Exemplos de listas:
-- "todo mês eu gasto: gmail R$20 / icloud R$20 / academia R$90"
-- "gastos mensais: netflix 45, spotify 19, academia 90"
-- "minhas contas mensais: luz 200 / internet 100 / condomínio 500"
-
-Para cada item extraia:
-- "description": nome limpo e capitalizado
-- "amount": valor numérico
-- "category": categoria mais adequada
-- "type": "expense" ou "income"
-- "day_of_month": dia do mês (se mencionado). Se NÃO mencionado, use ${todayDayOfMonth}
-
-Retorne SOMENTE este JSON:
 {"action":"add_recurring_list","items":[{"description":"Gmail","amount":20.00,"category":"Outros","type":"expense","day_of_month":${todayDayOfMonth}}]}
 
 🧠 INTERPRETAÇÃO DE GASTOS ÚNICOS (IMPORTANTE):
 Detecte QUALQUER mensagem que indique UM gasto ou receita, mesmo escrito de forma muito informal.
-
-Exemplos que DEVEM virar JSON:
-- "gastei uns 50 no mercado hoje" → R$ 50, Supermercado, Alimentação, expense
-- "almocei por 30 conto" → R$ 30, Almoço, Alimentação, expense
-- "paguei 200 de luz" → R$ 200, Energia Elétrica, Contas, expense
-- "fui ao posto, 80 de gasolina" → R$ 80, Gasolina, Transporte, expense
-- "recebi 1500 do freela" → R$ 1500, Freela, Renda Extra, income
-- "uber 15 reais" → R$ 15, Uber, Transporte, expense
-- "torrei 200 no shopping" → R$ 200, Shopping, Compras, expense
-- "caiu 3k do salário" → R$ 3000, Salário, Renda, income
-- "meti 50 de gasolina" → R$ 50, Gasolina, Transporte, expense
-- "lanche 25" → R$ 25, Lanche, Alimentação, expense
-
 Quando identificar UMA transação única, responda SOMENTE com JSON válido:
 {"action":"add_transaction","amount":50.00,"description":"Descrição limpa","category":"Categoria adequada","type":"expense"}
-
-Regras para o JSON:
-- "description": nome limpo e comercial, capitalizado (ex: "Almoço", "Supermercado", "Gasolina")
-- "category": use as categorias disponíveis do usuário quando possível
-- "amount": sempre número. "uns 50" → 50, "2k" → 2000, "1.5k" → 1500
-- "type": "expense" para gastos, "income" para receitas/entradas
 
 Para perguntas normais (não transações/comandos), responda em texto formatado com emojis e parágrafos.
 
@@ -331,6 +175,67 @@ Se a mensagem não for uma transação clara nem uma pergunta financeira reconhe
 NUNCA invente informações financeiras que não existem no contexto.
 
 ${financialContext}`;
+}
+
+export async function processImageWithAI(imageBase64: string, mimeType: string, financialContext: string, userCaption?: string) {
+  const systemPrompt = buildCapabilitiesPrompt(financialContext) + `
+
+🧾 ANÁLISE DE COMPROVANTES (CONTEXTO ADICIONAL):
+Você está recebendo a FOTO de um comprovante/recibo/nota fiscal.
+Analise a imagem e extraia:
+- Valor (amount) — número exato
+- Descrição do pagamento (description) — nome limpo e comercial
+- Categoria mais adequada das disponíveis no contexto
+- Tipo: "expense" ou "income"
+- Forma de pagamento se visível (PIX, cartão, dinheiro, etc.)
+
+Responda SOMENTE com JSON quando identificar uma transação:
+{"action":"add_transaction","amount":50.00,"description":"Supermercado Extra","category":"Alimentação","type":"expense","payment_method":"PIX"}
+
+Se não conseguir identificar os dados, responda em texto explicando o que viu.`;
+
+  return await callGemini({
+    model: "gemini-2.5-flash",
+    systemPrompt,
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}` } },
+          { type: "text", text: userCaption || "Analise este comprovante e extraia os dados da transação." },
+        ],
+      },
+    ],
+  });
+}
+
+export async function processAudioWithAI(audioBase64: string, mimeType: string, financialContext: string) {
+  const systemPrompt = buildCapabilitiesPrompt(financialContext) + `
+
+🎙️ ÁUDIO RECEBIDO (CONTEXTO ADICIONAL):
+Transcreva o áudio e interprete o que foi dito.
+Se for um comando (transação, lembrete, meta, carteira, etc.), responda SOMENTE com o JSON correspondente.
+Para perguntas normais, responda em texto formatado com emojis e parágrafos.`;
+
+  const audioFormat = mimeType.includes("ogg") ? "audio/ogg" : mimeType.includes("mp4") ? "audio/mp4" : "audio/mpeg";
+
+  return await callGemini({
+    model: "gemini-2.5-flash",
+    systemPrompt,
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "image_url", image_url: { url: `data:${audioFormat};base64,${audioBase64}` } },
+          { type: "text", text: "Transcreva e interprete este áudio. Se for um comando financeiro (gasto, receita, lembrete, meta, etc.), retorne o JSON da ação correspondente." },
+        ],
+      },
+    ],
+  });
+}
+
+export async function processWithNoxIA(userMessage: string, financialContext: string) {
+  const systemPrompt = buildCapabilitiesPrompt(financialContext);
 
   return await callGemini({
     model: "gemini-2.5-flash",
