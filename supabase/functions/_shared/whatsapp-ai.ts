@@ -1,9 +1,7 @@
 import { getBrazilNow } from "./whatsapp-utils.ts";
+import { callGemini } from "./gemini-client.ts";
 
 export async function processImageWithAI(imageBase64: string, mimeType: string, financialContext: string, userCaption?: string) {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
-
   const systemPrompt = `Você é o Brave IA 🤖, assessor financeiro pessoal via WhatsApp.
 
 📋 REGRAS DE FORMATAÇÃO:
@@ -30,41 +28,22 @@ Se não conseguir identificar os dados, responda em texto explicando o que viu.
 
 ${financialContext}`;
 
-  const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
-      messages: [
-        { role: "system", content: systemPrompt },
-        {
-          role: "user",
-          content: [
-            { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}` } },
-            { type: "text", text: userCaption || "Analise este comprovante e extraia os dados da transação." },
-          ],
-        },
-      ],
-    }),
+  return await callGemini({
+    model: "gemini-2.5-flash",
+    systemPrompt,
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}` } },
+          { type: "text", text: userCaption || "Analise este comprovante e extraia os dados da transação." },
+        ],
+      },
+    ],
   });
-
-  if (!resp.ok) {
-    const t = await resp.text();
-    console.error("AI vision error:", resp.status, t);
-    throw new Error("AI vision processing failed");
-  }
-
-  const data = await resp.json();
-  return data.choices?.[0]?.message?.content || "Desculpe, não consegui analisar a imagem.";
 }
 
 export async function processAudioWithAI(audioBase64: string, mimeType: string, financialContext: string) {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
-
   const systemPrompt = `Você é o Brave IA 🤖, assessor financeiro pessoal via WhatsApp. Responda SEMPRE em português brasileiro.
 
 📋 REGRAS DE FORMATAÇÃO:
@@ -87,44 +66,22 @@ ${financialContext}`;
 
   const audioFormat = mimeType.includes("ogg") ? "audio/ogg" : mimeType.includes("mp4") ? "audio/mp4" : "audio/mpeg";
 
-  const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
-      messages: [
-        { role: "system", content: systemPrompt },
-        {
-          role: "user",
-          content: [
-            {
-              type: "image_url",
-              image_url: { url: `data:${audioFormat};base64,${audioBase64}` },
-            },
-            { type: "text", text: "Transcreva e interprete este áudio financeiro." },
-          ],
-        },
-      ],
-    }),
+  return await callGemini({
+    model: "gemini-2.5-flash",
+    systemPrompt,
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "image_url", image_url: { url: `data:${audioFormat};base64,${audioBase64}` } },
+          { type: "text", text: "Transcreva e interprete este áudio financeiro." },
+        ],
+      },
+    ],
   });
-
-  if (!resp.ok) {
-    const t = await resp.text();
-    console.error("AI audio error:", resp.status, t);
-    throw new Error("AI audio processing failed");
-  }
-
-  const data = await resp.json();
-  return data.choices?.[0]?.message?.content || "Desculpe, não consegui processar o áudio.";
 }
 
 export async function processWithNoxIA(userMessage: string, financialContext: string) {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
-
   const todayDayOfMonth = getBrazilNow().getDate();
 
   const systemPrompt = `Você é o Brave IA 🤖, assessor financeiro pessoal via WhatsApp. Responda SEMPRE em português brasileiro.
@@ -219,30 +176,12 @@ NUNCA invente informações financeiras que não existem no contexto.
 
 ${financialContext}`;
 
-  const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "google/gemini-3-flash-preview",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userMessage },
-      ],
-      temperature: 0.3,
-    }),
+  return await callGemini({
+    model: "gemini-2.5-flash",
+    systemPrompt,
+    messages: [{ role: "user", content: userMessage }],
+    temperature: 0.3,
   });
-
-  if (!resp.ok) {
-    const t = await resp.text();
-    console.error("AI error:", resp.status, t);
-    throw new Error("AI processing failed");
-  }
-
-  const data = await resp.json();
-  return data.choices?.[0]?.message?.content || "Desculpe, não consegui processar sua mensagem.";
 }
 
 export async function parseReminderWithAI(text: string): Promise<{
@@ -251,9 +190,6 @@ export async function parseReminderWithAI(text: string): Promise<{
   recurrence: string;
   notify_minutes_before: number | null;
 } | null> {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) return null;
-
   const nowBR = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "full", timeStyle: "short" });
 
   const systemPrompt = `Você é um assistente que extrai informações de lembretes a partir de mensagens em português brasileiro.
@@ -275,30 +211,13 @@ Regras:
 - Nunca adicione texto extra fora do JSON.`;
 
   try {
-    const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: text },
-        ],
-        stream: false,
-        temperature: 0,
-      }),
+    const content = await callGemini({
+      model: "gemini-2.5-flash",
+      systemPrompt,
+      messages: [{ role: "user", content: text }],
+      temperature: 0,
     });
 
-    if (!resp.ok) {
-      console.error("AI parse error:", resp.status, await resp.text());
-      return null;
-    }
-
-    const data = await resp.json();
-    const content = data.choices?.[0]?.message?.content?.trim() || "";
     const jsonStr = content.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
     const parsed = JSON.parse(jsonStr);
     return {

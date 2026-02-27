@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { callGeminiStream, geminiStreamToOpenAI, convertToGeminiMessages } from "../_shared/gemini-client.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -92,8 +93,8 @@ serve(async (req) => {
     const body = await req.json();
     const { messages, imageBase64, imageMimeType } = body;
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    const GOOGLE_AI_KEY = Deno.env.get("GOOGLE_AI_KEY");
+    if (!GOOGLE_AI_KEY) throw new Error("GOOGLE_AI_KEY is not configured");
 
     const authHeader = req.headers.get("Authorization");
     let financialContext = "";
@@ -164,47 +165,19 @@ ${financialContext}`;
       }
     }
 
-    // Use vision model when image is present, otherwise fast model
-    const model = imageBase64 ? "google/gemini-2.5-flash" : "google/gemini-3-flash-preview";
+    // Use vision model when image is present
+    const model = imageBase64 ? "gemini-2.5-flash" : "gemini-2.5-flash";
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...processedMessages,
-        ],
-        stream: true,
-      }),
+    const geminiResp = await callGeminiStream({
+      model,
+      systemPrompt,
+      messages: processedMessages,
     });
 
-    if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Muitas solicitações. Tente novamente em alguns segundos." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Créditos de IA esgotados." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      const t = await response.text();
-      console.error("AI gateway error:", response.status, t);
-      return new Response(JSON.stringify({ error: "Erro ao conectar com IA" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    // Transform Gemini SSE to OpenAI-compatible SSE for frontend compatibility
+    const openaiStream = geminiStreamToOpenAI(geminiResp);
 
-    return new Response(response.body, {
+    return new Response(openaiStream, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
   } catch (e) {
