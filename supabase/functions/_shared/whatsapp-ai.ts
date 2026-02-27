@@ -320,18 +320,38 @@ A data/hora atual em São Paulo é: ${nowBR}
 
 Retorne APENAS um JSON válido com exatamente estes campos:
 {
-  "title": "nome limpo do lembrete, sem palavras de data/hora/recorrência",
+  "title": "nome limpo do lembrete",
   "event_at": "ISO 8601 com timezone -03:00 ou null se não houver data/hora clara",
   "recurrence": "none" | "daily" | "weekly" | "monthly",
   "notify_minutes_before": número de minutos ou null se não especificado
 }
 
-Regras:
-- title: extraia APENAS o nome/evento, sem "todos os dias", "amanhã", horários etc.
-- event_at: se o usuário diz "todos os dias às 12:00", use hoje às 12:00. Se diz "amanhã 15h", calcule corretamente.
-- recurrence: "todos os dias/todo dia/diário" → "daily", "toda semana/toda segunda/etc" → "weekly", "todo mês" → "monthly"
-- notify_minutes_before: "1h antes" → 60, "30 min antes" → 30, "1 dia antes" → 1440. null se não mencionado.
-- Nunca adicione texto extra fora do JSON.`;
+Regras CRÍTICAS para o title:
+- Extraia SOMENTE o nome/evento principal, sem preposições iniciais como "de", "do", "da", "para".
+- Remova TODAS as palavras de tempo: "amanhã", "hoje", "às 14h", "14:00", "segunda", datas, horários etc.
+- Capitalize a primeira letra de cada palavra importante.
+- Exemplos:
+  - "de editar video amanhã as 14:00" → title: "Editar Vídeo"
+  - "reunião com cliente sexta 10h" → title: "Reunião com Cliente"
+  - "pagar conta de luz dia 15" → title: "Pagar Conta de Luz"
+  - "ir ao dentista amanhã 9h" → title: "Ir ao Dentista"
+
+Regras para event_at:
+- PRESTE MUITA ATENÇÃO ao horário mencionado pelo usuário. Se ele diz "14:00" ou "14h" ou "as 14:00", o horário é 14:00, NÃO 11:00.
+- "amanhã as 14:00" → calcule a data de amanhã e use horário 14:00.
+- "todos os dias às 12:00" → use hoje às 12:00.
+- Sempre use timezone -03:00 (São Paulo).
+
+Regras para recurrence:
+- "todos os dias/todo dia/diário" → "daily"
+- "toda semana/toda segunda/etc" → "weekly"
+- "todo mês" → "monthly"
+- Qualquer outra coisa → "none"
+
+Regras para notify_minutes_before:
+- "1h antes" → 60, "30 min antes" → 30, "1 dia antes" → 1440. null se não mencionado.
+
+NUNCA adicione texto extra fora do JSON.`;
 
   try {
     const content = await callGemini({
