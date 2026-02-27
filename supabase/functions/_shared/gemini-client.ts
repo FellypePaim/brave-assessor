@@ -87,7 +87,7 @@ export async function callGemini(opts: {
   const GOOGLE_AI_KEY = Deno.env.get("GOOGLE_AI_KEY");
   if (!GOOGLE_AI_KEY) throw new Error("GOOGLE_AI_KEY not configured");
 
-  const model = opts.model || "gemini-2.0-flash-lite";
+  const model = opts.model || "gemini-2.0-flash";
   const contents = convertToGeminiMessages(opts.systemPrompt, opts.messages);
   const maxRetries = opts.maxRetries ?? 3;
 
@@ -139,7 +139,7 @@ export async function callGeminiStream(opts: {
   const GOOGLE_AI_KEY = Deno.env.get("GOOGLE_AI_KEY");
   if (!GOOGLE_AI_KEY) throw new Error("GOOGLE_AI_KEY not configured");
 
-  const model = opts.model || "gemini-2.0-flash-lite";
+  const model = opts.model || "gemini-2.0-flash";
   const contents = convertToGeminiMessages(opts.systemPrompt, opts.messages);
   const maxRetries = opts.maxRetries ?? 3;
 
@@ -176,27 +176,6 @@ export async function callGeminiStream(opts: {
   }
 
   throw new Error("Gemini stream: max retries exceeded (429)");
-}
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents,
-        generationConfig: {
-          temperature: 0.3,
-          maxOutputTokens: 4096,
-        },
-      }),
-    }
-  );
-
-  if (!resp.ok) {
-    const t = await resp.text();
-    console.error("Gemini stream error:", resp.status, t);
-    throw new Error(`Gemini stream error: ${resp.status}`);
-  }
-
-  return resp;
 }
 
 /**
