@@ -107,11 +107,11 @@ export function AddTransactionDialog({ trigger }: Props) {
         amount: installmentAmount,
         type,
         category_id: categoryId || null,
-        wallet_id: payMethod === "wallet" ? (walletId || null) : null,
-        card_id: payMethod === "card" ? (cardId || null) : null,
+        wallet_id: effectivePayMethod === "wallet" ? (effectiveWalletId || null) : null,
+        card_id: effectivePayMethod === "card" ? (cardId || null) : null,
         date: installmentDate.toISOString().slice(0, 10),
         due_date: isRecurring ? date : null,
-        is_paid: !isRecurring && i === 0 && payMethod === "wallet",
+        is_paid: !isRecurring && i === 0 && effectivePayMethod === "wallet",
         recurring_id: recurringId,
       });
     }
@@ -121,11 +121,11 @@ export function AddTransactionDialog({ trigger }: Props) {
     if (error) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
     } else {
-      if (walletId && !isRecurring) {
+      if (effectiveWalletId && !isRecurring && effectivePayMethod === "wallet") {
         const delta = type === "income" ? parsedAmount : -parsedAmount;
-        const wallet = wallets.find(w => w.id === walletId);
+        const wallet = wallets.find(w => w.id === effectiveWalletId);
         if (wallet) {
-          await supabase.from("wallets").update({ balance: Number((wallet as any).balance || 0) + delta }).eq("id", walletId);
+          await supabase.from("wallets").update({ balance: Number((wallet as any).balance || 0) + delta }).eq("id", effectiveWalletId);
         }
       }
       toast({ title: isRecurring ? "Conta recorrente criada!" : "Transação adicionada!" });
@@ -160,7 +160,16 @@ export function AddTransactionDialog({ trigger }: Props) {
     setInstallments(1);
   };
 
-  const selectedWallet = wallets.find(w => w.id === walletId);
+  const hasMultipleWallets = wallets.length > 1;
+  const hasCards = cards.length > 0;
+
+  // Auto-select single wallet
+  const effectiveWalletId = walletId || (wallets.length === 1 ? wallets[0].id : "");
+
+  // If no cards, force wallet method
+  const effectivePayMethod = hasCards ? payMethod : "wallet";
+
+  const selectedWallet = wallets.find(w => w.id === effectiveWalletId);
   const selectedCard = cards.find(c => c.id === cardId);
 
   return (
@@ -279,44 +288,46 @@ export function AddTransactionDialog({ trigger }: Props) {
             <Switch checked={isRecurring} onCheckedChange={setIsRecurring} />
           </div>
 
-          {/* Payment method */}
-          <div>
-            <label className="text-sm font-semibold text-foreground mb-1.5 block">Como você vai pagar?</label>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => setPayMethod("wallet")}
-                className={`flex flex-col items-center gap-1.5 py-3 rounded-2xl border-2 transition-all ${
-                  payMethod === "wallet"
-                    ? "border-primary bg-primary text-primary-foreground shadow-lg shadow-primary/20"
-                    : "border-border bg-card text-muted-foreground hover:border-muted-foreground/30"
-                }`}
-              >
-                <Wallet className="h-5 w-5" />
-                <span className="text-sm font-semibold">Conta Corrente</span>
-                <span className="text-[10px] opacity-80">Pix / Débito</span>
-              </button>
-              <button
-                onClick={() => setPayMethod("card")}
-                className={`flex flex-col items-center gap-1.5 py-3 rounded-2xl border-2 transition-all ${
-                  payMethod === "card"
-                    ? "border-primary bg-primary text-primary-foreground shadow-lg shadow-primary/20"
-                    : "border-border bg-card text-muted-foreground hover:border-muted-foreground/30"
-                }`}
-              >
-                <CreditCard className="h-5 w-5" />
-                <span className="text-sm font-semibold">Cartão de Crédito</span>
-                <span className="text-[10px] opacity-80">Fatura</span>
-              </button>
+          {/* Payment method - only show if user has cards */}
+          {hasCards && (
+            <div>
+              <label className="text-sm font-semibold text-foreground mb-1.5 block">Como você vai pagar?</label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => setPayMethod("wallet")}
+                  className={`flex flex-col items-center gap-1.5 py-3 rounded-2xl border-2 transition-all ${
+                    effectivePayMethod === "wallet"
+                      ? "border-primary bg-primary text-primary-foreground shadow-lg shadow-primary/20"
+                      : "border-border bg-card text-muted-foreground hover:border-muted-foreground/30"
+                  }`}
+                >
+                  <Wallet className="h-5 w-5" />
+                  <span className="text-sm font-semibold">Conta Corrente</span>
+                  <span className="text-[10px] opacity-80">Pix / Débito</span>
+                </button>
+                <button
+                  onClick={() => setPayMethod("card")}
+                  className={`flex flex-col items-center gap-1.5 py-3 rounded-2xl border-2 transition-all ${
+                    effectivePayMethod === "card"
+                      ? "border-primary bg-primary text-primary-foreground shadow-lg shadow-primary/20"
+                      : "border-border bg-card text-muted-foreground hover:border-muted-foreground/30"
+                  }`}
+                >
+                  <CreditCard className="h-5 w-5" />
+                  <span className="text-sm font-semibold">Cartão de Crédito</span>
+                  <span className="text-[10px] opacity-80">Fatura</span>
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* Wallet selector */}
-          {payMethod === "wallet" && (
+          {/* Wallet selector - show when wallet method AND multiple wallets */}
+          {effectivePayMethod === "wallet" && hasMultipleWallets && (
             <div>
               <label className="text-sm font-semibold text-foreground mb-1.5 flex items-center gap-1.5">
-                <Landmark className="h-3.5 w-3.5" /> De qual conta sai?
+                <Landmark className="h-3.5 w-3.5" /> {type === "income" ? "Em qual conta entra?" : "De qual conta sai?"}
               </label>
-              <Select value={walletId} onValueChange={setWalletId}>
+              <Select value={effectiveWalletId} onValueChange={setWalletId}>
                 <SelectTrigger className="h-11 rounded-xl border-border">
                   <SelectValue placeholder="Selecione a conta" />
                 </SelectTrigger>
@@ -326,30 +337,34 @@ export function AddTransactionDialog({ trigger }: Props) {
                   ))}
                 </SelectContent>
               </Select>
-              {selectedWallet && (
-                <div className="mt-2 flex items-center justify-between px-3 py-2.5 rounded-xl bg-muted/50 border border-border">
-                  <div className="flex items-center gap-2">
-                    <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <Landmark className="h-4 w-4 text-primary" />
-                    </div>
-                    <span className="text-sm font-medium text-foreground">{selectedWallet.name}</span>
+            </div>
+          )}
+
+          {/* Selected wallet preview */}
+          {effectivePayMethod === "wallet" && selectedWallet && (
+            <div>
+              <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-muted/50 border border-border">
+                <div className="flex items-center gap-2">
+                  <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Landmark className="h-4 w-4 text-primary" />
                   </div>
-                  <span className={`text-sm font-bold ${type === "expense" ? "text-destructive" : "text-primary"}`}>
-                    {type === "expense" ? "-" : "+"}R$ {amount ? Number(amount).toLocaleString("pt-BR", { minimumFractionDigits: 2 }) : "0,00"}
-                  </span>
+                  <span className="text-sm font-medium text-foreground">{selectedWallet.name}</span>
                 </div>
-              )}
-              {selectedWallet && amount && (
+                <span className={`text-sm font-bold ${type === "expense" ? "text-destructive" : "text-primary"}`}>
+                  {type === "expense" ? "-" : "+"}R$ {amount ? Number(amount).toLocaleString("pt-BR", { minimumFractionDigits: 2 }) : "0,00"}
+                </span>
+              </div>
+              {amount && (
                 <p className="text-[11px] text-muted-foreground mt-1.5 flex items-center gap-1">
                   <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary" />
-                  O saldo será deduzido automaticamente
+                  O saldo será {type === "income" ? "adicionado" : "deduzido"} automaticamente
                 </p>
               )}
             </div>
           )}
 
           {/* Card selector */}
-          {payMethod === "card" && (
+          {effectivePayMethod === "card" && (
             <div>
               <label className="text-sm font-semibold text-foreground mb-1.5 flex items-center gap-1.5">
                 <CreditCard className="h-3.5 w-3.5" /> Qual cartão?

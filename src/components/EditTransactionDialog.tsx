@@ -94,8 +94,8 @@ export function EditTransactionDialog({ transaction, open, onOpenChange }: Props
       amount: parseFloat(amount),
       type,
       category_id: categoryId || null,
-      wallet_id: payMethod === "wallet" ? (walletId || null) : null,
-      card_id: payMethod === "card" ? (cardId || null) : null,
+      wallet_id: effectivePayMethod === "wallet" ? (effectiveWalletId || null) : null,
+      card_id: effectivePayMethod === "card" ? (cardId || null) : null,
       date,
     }).eq("id", transaction.id);
     if (error) {
@@ -120,7 +120,11 @@ export function EditTransactionDialog({ transaction, open, onOpenChange }: Props
     }
   };
 
-  const selectedWallet = wallets.find(w => w.id === walletId);
+  const hasMultipleWallets = wallets.length > 1;
+  const hasCards = cards.length > 0;
+  const effectiveWalletId = walletId || (wallets.length === 1 ? wallets[0].id : "");
+  const effectivePayMethod = hasCards ? payMethod : "wallet";
+  const selectedWallet = wallets.find(w => w.id === effectiveWalletId);
   const selectedCard = cards.find(c => c.id === cardId);
 
   return (
@@ -174,61 +178,64 @@ export function EditTransactionDialog({ transaction, open, onOpenChange }: Props
             </Select>
           </div>
 
-          {/* Payment method */}
-          <div>
-            <label className="text-sm font-semibold text-foreground mb-1.5 block">Como você vai pagar?</label>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => setPayMethod("wallet")}
-                className={`flex flex-col items-center gap-1.5 py-3 rounded-2xl border-2 transition-all ${
-                  payMethod === "wallet"
-                    ? "border-primary bg-primary text-primary-foreground shadow-lg shadow-primary/20"
-                    : "border-border bg-card text-muted-foreground hover:border-muted-foreground/30"
-                }`}
-              >
-                <Wallet className="h-5 w-5" />
-                <span className="text-sm font-semibold">Conta Corrente</span>
-                <span className="text-[10px] opacity-80">Pix / Débito</span>
-              </button>
-              <button
-                onClick={() => setPayMethod("card")}
-                className={`flex flex-col items-center gap-1.5 py-3 rounded-2xl border-2 transition-all ${
-                  payMethod === "card"
-                    ? "border-primary bg-primary text-primary-foreground shadow-lg shadow-primary/20"
-                    : "border-border bg-card text-muted-foreground hover:border-muted-foreground/30"
-                }`}
-              >
-                <CreditCard className="h-5 w-5" />
-                <span className="text-sm font-semibold">Cartão de Crédito</span>
-                <span className="text-[10px] opacity-80">Fatura</span>
-              </button>
+          {/* Payment method - only show if user has cards */}
+          {hasCards && (
+            <div>
+              <label className="text-sm font-semibold text-foreground mb-1.5 block">Como você vai pagar?</label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => setPayMethod("wallet")}
+                  className={`flex flex-col items-center gap-1.5 py-3 rounded-2xl border-2 transition-all ${
+                    effectivePayMethod === "wallet"
+                      ? "border-primary bg-primary text-primary-foreground shadow-lg shadow-primary/20"
+                      : "border-border bg-card text-muted-foreground hover:border-muted-foreground/30"
+                  }`}
+                >
+                  <Wallet className="h-5 w-5" />
+                  <span className="text-sm font-semibold">Conta Corrente</span>
+                  <span className="text-[10px] opacity-80">Pix / Débito</span>
+                </button>
+                <button
+                  onClick={() => setPayMethod("card")}
+                  className={`flex flex-col items-center gap-1.5 py-3 rounded-2xl border-2 transition-all ${
+                    effectivePayMethod === "card"
+                      ? "border-primary bg-primary text-primary-foreground shadow-lg shadow-primary/20"
+                      : "border-border bg-card text-muted-foreground hover:border-muted-foreground/30"
+                  }`}
+                >
+                  <CreditCard className="h-5 w-5" />
+                  <span className="text-sm font-semibold">Cartão de Crédito</span>
+                  <span className="text-[10px] opacity-80">Fatura</span>
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* Wallet selector */}
-          {payMethod === "wallet" && (
+          {/* Wallet selector - only when multiple wallets */}
+          {effectivePayMethod === "wallet" && hasMultipleWallets && (
             <div>
               <label className="text-sm font-semibold text-foreground mb-1.5 flex items-center gap-1.5">
-                <Landmark className="h-3.5 w-3.5" /> De qual conta sai?
+                <Landmark className="h-3.5 w-3.5" /> {type === "income" ? "Em qual conta entra?" : "De qual conta sai?"}
               </label>
-              <Select value={walletId} onValueChange={setWalletId}>
+              <Select value={effectiveWalletId} onValueChange={setWalletId}>
                 <SelectTrigger className="h-11 rounded-xl border-border"><SelectValue placeholder="Selecione a conta" /></SelectTrigger>
                 <SelectContent>{wallets.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}</SelectContent>
               </Select>
-              {selectedWallet && (
-                <div className="mt-2 flex items-center justify-between px-3 py-2.5 rounded-xl bg-muted/50 border border-border">
-                  <div className="flex items-center gap-2">
-                    <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center"><Landmark className="h-4 w-4 text-primary" /></div>
-                    <span className="text-sm font-medium text-foreground">{selectedWallet.name}</span>
-                  </div>
-                  <span className="text-sm font-bold text-primary">R$ {Number(selectedWallet.balance).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                </div>
-              )}
+            </div>
+          )}
+
+          {effectivePayMethod === "wallet" && selectedWallet && (
+            <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-muted/50 border border-border">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center"><Landmark className="h-4 w-4 text-primary" /></div>
+                <span className="text-sm font-medium text-foreground">{selectedWallet.name}</span>
+              </div>
+              <span className="text-sm font-bold text-primary">R$ {Number(selectedWallet.balance).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
             </div>
           )}
 
           {/* Card selector */}
-          {payMethod === "card" && (
+          {effectivePayMethod === "card" && (
             <div>
               <label className="text-sm font-semibold text-foreground mb-1.5 flex items-center gap-1.5">
                 <CreditCard className="h-3.5 w-3.5" /> Qual cartão?
