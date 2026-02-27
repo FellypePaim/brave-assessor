@@ -17,6 +17,7 @@ import {
   cleanDescription, normalizeAmount, normalizeType, cleanSearchTerm,
   cleanReminderTitle, extractUserTime, forceTimeOnIso,
 } from "../_shared/ai-response-parser.ts";
+import { autoCategorize } from "../_shared/auto-categorize.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -3623,9 +3624,13 @@ Metas financeiras: ${goalsCtx}`;
 
         // Match categories for each item
         const enriched = items.map((item: any) => {
-          const matchedCat = (categories || []).find(
+          let matchedCat = (categories || []).find(
             (c: any) => c.name.toLowerCase() === item.category?.toLowerCase()
           );
+          // Fallback: keyword-based auto-categorization
+          if (!matchedCat && item.description) {
+            matchedCat = autoCategorize(item.description, categories || []);
+          }
           return { ...item, category_id: matchedCat?.id || null, category_name: matchedCat?.name || item.category || "Outros" };
         });
 
@@ -3669,9 +3674,13 @@ Metas financeiras: ${goalsCtx}`;
         action.description = cleanDescription(action.description || "");
         action.type = normalizeType(action.type || "expense");
 
-        const matchedCategory = (categories || []).find(
+        let matchedCategory = (categories || []).find(
           (c: any) => c.name.toLowerCase() === action.category?.toLowerCase()
         );
+        // Fallback: keyword-based auto-categorization
+        if (!matchedCategory && action.description) {
+          matchedCategory = autoCategorize(action.description, categories || []);
+        }
 
         // Save as pending and ask for confirmation instead of auto-registering
         await supabaseAdmin.from("whatsapp_pending_transactions").insert({

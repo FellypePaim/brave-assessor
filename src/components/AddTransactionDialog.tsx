@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { autoCategorize } from "@/lib/auto-categorize";
 
 interface Props {
   trigger?: React.ReactNode;
@@ -431,7 +432,14 @@ export function AddTransactionDialog({ trigger }: Props) {
             <label className="text-sm font-semibold text-foreground mb-1.5 block">Descrição (opcional)</label>
             <Input
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(e) => {
+                setDescription(e.target.value);
+                // Auto-categorize based on description
+                if (!categoryId && e.target.value.length >= 3) {
+                  const match = autoCategorize(e.target.value, categories);
+                  if (match) setCategoryId(match.id);
+                }
+              }}
               placeholder="Ex: Almoço no restaurante"
               className="h-11 rounded-xl border-border"
             />
