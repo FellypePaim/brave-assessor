@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
@@ -606,9 +607,96 @@ function QuizResult({ answers, onOpenAuth }: { answers: QuizAnswers; onOpenAuth:
   );
 }
 
+/* ─── CLIENT CHECK SCREEN ─── */
+function ClientCheck({ onExisting, onNew }: { onExisting: () => void; onNew: () => void }) {
+  const navigate = useNavigate();
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-background"
+    >
+      <AnimatedBackground />
+      <motion.div
+        initial={{ scale: 0.8, opacity: 0, y: 30 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, ease: easeOut }}
+        className="relative z-10 text-center px-6 max-w-md w-full"
+      >
+        <div className="inline-block mb-6">
+          <img
+            src={braveIconImg}
+            alt="Brave Assessor"
+            className="w-20 h-20 object-contain drop-shadow-md"
+          />
+        </div>
+
+        <motion.h1
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3, duration: 0.5 }}
+          className="text-2xl sm:text-3xl font-extrabold text-foreground"
+        >
+          Você já é cliente <span className="text-primary">Brave</span>?
+        </motion.h1>
+
+        <motion.p
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4, duration: 0.5 }}
+          className="mt-3 text-muted-foreground text-sm sm:text-base"
+        >
+          Nos diga para seguirmos no caminho certo
+        </motion.p>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5, duration: 0.5 }}
+          className="mt-8 grid grid-cols-1 gap-3 sm:gap-4"
+        >
+          <motion.button
+            onClick={() => navigate("/login")}
+            whileHover={{ scale: 1.02, y: -2 }}
+            whileTap={{ scale: 0.97 }}
+            className="group flex items-center gap-4 p-4 sm:p-5 rounded-2xl border-2 border-border bg-card hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10 transition-all duration-300"
+          >
+            <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-2xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+              <User className="h-6 w-6 sm:h-7 sm:w-7 text-primary" />
+            </div>
+            <div className="text-left">
+              <span className="font-semibold text-foreground text-sm sm:text-base block">Sim, já tenho conta</span>
+              <span className="text-[10px] sm:text-xs text-muted-foreground">Ir para o login</span>
+            </div>
+            <ChevronRight className="h-5 w-5 text-muted-foreground ml-auto" />
+          </motion.button>
+
+          <motion.button
+            onClick={onNew}
+            whileHover={{ scale: 1.02, y: -2 }}
+            whileTap={{ scale: 0.97 }}
+            className="group flex items-center gap-4 p-4 sm:p-5 rounded-2xl border-2 border-border bg-card hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10 transition-all duration-300"
+          >
+            <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-2xl bg-emerald-500/10 flex items-center justify-center group-hover:bg-emerald-500/20 transition-colors">
+              <Sparkles className="h-6 w-6 sm:h-7 sm:w-7 text-emerald-500" />
+            </div>
+            <div className="text-left">
+              <span className="font-semibold text-foreground text-sm sm:text-base block">Ainda não, sou novo(a)</span>
+              <span className="text-[10px] sm:text-xs text-muted-foreground">Conhecer o Brave</span>
+            </div>
+            <ChevronRight className="h-5 w-5 text-muted-foreground ml-auto" />
+          </motion.button>
+        </motion.div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 /* ─── MAIN QUIZ ─── */
 export default function QuizFunnel({ onOpenAuth }: { onOpenAuth: () => void }) {
   const [showThemePicker, setShowThemePicker] = useState(true);
+  const [showClientCheck, setShowClientCheck] = useState(false);
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(1);
   const [answers, setAnswers] = useState<QuizAnswers>({
@@ -624,6 +712,7 @@ export default function QuizFunnel({ onOpenAuth }: { onOpenAuth: () => void }) {
     if (theme === "dark") document.documentElement.classList.add("dark");
     else document.documentElement.classList.remove("dark");
     setShowThemePicker(false);
+    setShowClientCheck(true);
   };
 
   useEffect(() => {
@@ -678,6 +767,15 @@ export default function QuizFunnel({ onOpenAuth }: { onOpenAuth: () => void }) {
       </AnimatePresence>
 
       <AnimatePresence>
+        {showClientCheck && (
+          <ClientCheck
+            onExisting={onOpenAuth}
+            onNew={() => setShowClientCheck(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
         {showHook && currentHook && <HookToast hook={currentHook} />}
       </AnimatePresence>
 
@@ -699,7 +797,7 @@ export default function QuizFunnel({ onOpenAuth }: { onOpenAuth: () => void }) {
 
       {/* Main */}
       <div className="flex-1 flex flex-col items-center justify-center px-4 pt-20 pb-24 sm:pb-8 relative z-10">
-        {!showThemePicker && (
+        {!showThemePicker && !showClientCheck && (
           <>
             {done ? (
               <QuizResult answers={answers} onOpenAuth={onOpenAuth} />
@@ -876,7 +974,7 @@ export default function QuizFunnel({ onOpenAuth }: { onOpenAuth: () => void }) {
       </div>
 
       {/* Footer */}
-      {!showThemePicker && (
+      {!showThemePicker && !showClientCheck && (
         <footer className="py-4 text-center border-t border-border/50 relative z-10 bg-background/90 sm:bg-background/60 sm:backdrop-blur-sm">
           <p className="text-[10px] sm:text-xs text-muted-foreground">
             © 2026 Brave Assessor · Hubflows Tecnologia Ltda
