@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { callGemini, callGeminiStream, geminiStreamToOpenAI } from "../_shared/gemini-client.ts";
 import { extractActionJson, normalizeAmount, cleanDescription, normalizeType, cleanSearchTerm } from "../_shared/ai-response-parser.ts";
+import { autoCategorize } from "../_shared/auto-categorize.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -117,7 +118,11 @@ async function executeAction(supabaseAdmin: any, userId: string, aiText: string)
       switch (h) {
         case "add_transaction": {
           const { data: cats } = await supabaseAdmin.from("categories").select("id, name").eq("user_id", userId);
-          const cat = (cats || []).find((c: any) => c.name.toLowerCase() === (a.category || "").toLowerCase());
+          let cat = (cats || []).find((c: any) => c.name.toLowerCase() === (a.category || "").toLowerCase());
+          // Fallback: keyword-based auto-categorization
+          if (!cat && a.description) {
+            cat = autoCategorize(a.description, cats || []);
+          }
           // Support wallet/card selection
           let walletId: string | null = null;
           let cardId: string | null = null;
