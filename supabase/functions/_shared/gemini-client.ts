@@ -68,43 +68,63 @@ export function convertToGeminiMessages(
 }
 
 /**
- * Call Gemini API (non-streaming) and return the text response.
+ * Sleep helper for retry backoff.
+ */
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Call Gemini API (non-streaming) with automatic retry on 429.
  */
 export async function callGemini(opts: {
   model?: string;
   systemPrompt: string;
   messages: { role: string; content: any }[];
   temperature?: number;
+  maxRetries?: number;
 }): Promise<string> {
   const GOOGLE_AI_KEY = Deno.env.get("GOOGLE_AI_KEY");
   if (!GOOGLE_AI_KEY) throw new Error("GOOGLE_AI_KEY not configured");
 
   const model = opts.model || "gemini-2.0-flash-lite";
   const contents = convertToGeminiMessages(opts.systemPrompt, opts.messages);
+  const maxRetries = opts.maxRetries ?? 3;
 
-  const resp = await fetch(
-    `${GEMINI_BASE}/${model}:generateContent?key=${GOOGLE_AI_KEY}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents,
-        generationConfig: {
-          temperature: opts.temperature ?? 0.3,
-          maxOutputTokens: 2048,
-        },
-      }),
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const resp = await fetch(
+      `${GEMINI_BASE}/${model}:generateContent?key=${GOOGLE_AI_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents,
+          generationConfig: {
+            temperature: opts.temperature ?? 0.3,
+            maxOutputTokens: 2048,
+          },
+        }),
+      }
+    );
+
+    if (resp.status === 429 && attempt < maxRetries) {
+      const waitMs = Math.min(1000 * Math.pow(2, attempt), 8000);
+      console.warn(`Gemini 429, retrying in ${waitMs}ms (attempt ${attempt + 1}/${maxRetries})`);
+      await sleep(waitMs);
+      continue;
     }
-  );
 
-  if (!resp.ok) {
-    const t = await resp.text();
-    console.error("Gemini API error:", resp.status, t);
-    throw new Error(`Gemini API error: ${resp.status}`);
+    if (!resp.ok) {
+      const t = await resp.text();
+      console.error("Gemini API error:", resp.status, t);
+      throw new Error(`Gemini API error: ${resp.status}`);
+    }
+
+    const data = await resp.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
   }
 
-  const data = await resp.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  throw new Error("Gemini API: max retries exceeded (429)");
 }
 
 /**
@@ -114,15 +134,49 @@ export async function callGeminiStream(opts: {
   model?: string;
   systemPrompt: string;
   messages: { role: string; content: any }[];
+  maxRetries?: number;
 }): Promise<Response> {
   const GOOGLE_AI_KEY = Deno.env.get("GOOGLE_AI_KEY");
   if (!GOOGLE_AI_KEY) throw new Error("GOOGLE_AI_KEY not configured");
 
   const model = opts.model || "gemini-2.0-flash-lite";
   const contents = convertToGeminiMessages(opts.systemPrompt, opts.messages);
+  const maxRetries = opts.maxRetries ?? 3;
 
-  const resp = await fetch(
-    `${GEMINI_BASE}/${model}:streamGenerateContent?alt=sse&key=${GOOGLE_AI_KEY}`,
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const resp = await fetch(
+      `${GEMINI_BASE}/${model}:streamGenerateContent?alt=sse&key=${GOOGLE_AI_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents,
+          generationConfig: {
+            temperature: 0.3,
+            maxOutputTokens: 4096,
+          },
+        }),
+      }
+    );
+
+    if (resp.status === 429 && attempt < maxRetries) {
+      const waitMs = Math.min(1000 * Math.pow(2, attempt), 8000);
+      console.warn(`Gemini stream 429, retrying in ${waitMs}ms (attempt ${attempt + 1}/${maxRetries})`);
+      await sleep(waitMs);
+      continue;
+    }
+
+    if (!resp.ok) {
+      const t = await resp.text();
+      console.error("Gemini stream error:", resp.status, t);
+      throw new Error(`Gemini stream error: ${resp.status}`);
+    }
+
+    return resp;
+  }
+
+  throw new Error("Gemini stream: max retries exceeded (429)");
+}
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
