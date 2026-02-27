@@ -118,6 +118,14 @@ async function executeAction(supabaseAdmin: any, userId: string, aiText: string)
     { r: /\{[\s\S]*"action"\s*:\s*"update_profile"[\s\S]*\}/, h: "update_profile" },
     { r: /\{[\s\S]*"action"\s*:\s*"pay_bill"[\s\S]*\}/, h: "pay_bill" },
     { r: /\{[\s\S]*"action"\s*:\s*"list_bills"[\s\S]*\}/, h: "list_bills" },
+    { r: /\{[\s\S]*"action"\s*:\s*"delete_all_reminders"[\s\S]*\}/, h: "delete_all_reminders" },
+    { r: /\{[\s\S]*"action"\s*:\s*"delete_all_transactions"[\s\S]*\}/, h: "delete_all_transactions" },
+    { r: /\{[\s\S]*"action"\s*:\s*"delete_all_cards"[\s\S]*\}/, h: "delete_all_cards" },
+    { r: /\{[\s\S]*"action"\s*:\s*"delete_all_wallets"[\s\S]*\}/, h: "delete_all_wallets" },
+    { r: /\{[\s\S]*"action"\s*:\s*"delete_all_goals"[\s\S]*\}/, h: "delete_all_goals" },
+    { r: /\{[\s\S]*"action"\s*:\s*"delete_all_categories"[\s\S]*\}/, h: "delete_all_categories" },
+    { r: /\{[\s\S]*"action"\s*:\s*"delete_all_recurring"[\s\S]*\}/, h: "delete_all_recurring" },
+    { r: /\{[\s\S]*"action"\s*:\s*"reset_all_data"[\s\S]*\}/, h: "reset_all_data" },
   ];
 
   const fmt = (v: number) => `R$ ${v.toFixed(2)}`;
@@ -444,6 +452,60 @@ async function executeAction(supabaseAdmin: any, userId: string, aiText: string)
           }).join("\n");
           return { executed: true, message: `📋 **Contas a pagar:**\n\n${list}\n\n💸 **Total: ${fmt(total)}**` };
         }
+        case "delete_all_reminders": {
+          const { count } = await supabaseAdmin.from("reminders").select("id", { count: "exact", head: true }).eq("user_id", userId);
+          if (!count || count === 0) return { executed: true, message: "📭 Nenhum lembrete para apagar." };
+          await supabaseAdmin.from("reminders").delete().eq("user_id", userId);
+          return { executed: true, message: `🗑️ **${count} lembretes apagados!**` };
+        }
+        case "delete_all_transactions": {
+          const { data: txs } = await supabaseAdmin.from("transactions").select("amount, type, wallet_id").eq("user_id", userId);
+          if (!txs || txs.length === 0) return { executed: true, message: "📭 Nenhuma transação para apagar." };
+          // Restore wallet balances
+          const walletChanges: Record<string, number> = {};
+          for (const tx of txs) {
+            if (tx.wallet_id) {
+              if (!walletChanges[tx.wallet_id]) walletChanges[tx.wallet_id] = 0;
+              walletChanges[tx.wallet_id] += tx.type === "income" ? -Number(tx.amount) : Number(tx.amount);
+            }
+          }
+          for (const [wid, change] of Object.entries(walletChanges)) {
+            const { data: w } = await supabaseAdmin.from("wallets").select("id, balance").eq("id", wid).maybeSingle();
+            if (w) await supabaseAdmin.from("wallets").update({ balance: Number(w.balance) + change }).eq("id", w.id);
+          }
+          await supabaseAdmin.from("transactions").delete().eq("user_id", userId);
+          return { executed: true, message: `🗑️ **${txs.length} transações apagadas!** Saldos das carteiras revertidos.` };
+        }
+        case "delete_all_cards": {
+          await supabaseAdmin.from("cards").delete().eq("user_id", userId);
+          return { executed: true, message: "🗑️ **Todos os cartões foram apagados!**" };
+        }
+        case "delete_all_wallets": {
+          await supabaseAdmin.from("wallets").delete().eq("user_id", userId);
+          return { executed: true, message: "🗑️ **Todas as carteiras foram apagadas!**" };
+        }
+        case "delete_all_goals": {
+          await supabaseAdmin.from("financial_goals").delete().eq("user_id", userId);
+          return { executed: true, message: "🗑️ **Todas as metas foram apagadas!**" };
+        }
+        case "delete_all_categories": {
+          await supabaseAdmin.from("categories").delete().eq("user_id", userId);
+          return { executed: true, message: "🗑️ **Todas as categorias foram apagadas!**" };
+        }
+        case "delete_all_recurring": {
+          await supabaseAdmin.from("recurring_transactions").delete().eq("user_id", userId);
+          return { executed: true, message: "🗑️ **Todas as recorrências foram apagadas!**" };
+        }
+        case "reset_all_data": {
+          await supabaseAdmin.from("reminders").delete().eq("user_id", userId);
+          await supabaseAdmin.from("transactions").delete().eq("user_id", userId);
+          await supabaseAdmin.from("cards").delete().eq("user_id", userId);
+          await supabaseAdmin.from("financial_goals").delete().eq("user_id", userId);
+          await supabaseAdmin.from("recurring_transactions").delete().eq("user_id", userId);
+          await supabaseAdmin.from("wallets").delete().eq("user_id", userId);
+          await supabaseAdmin.from("categories").delete().eq("user_id", userId);
+          return { executed: true, message: "🗑️ **Todos os dados financeiros foram resetados!** Lembretes, transações, carteiras, cartões, metas, categorias e recorrências foram apagados." };
+        }
       }
     } catch (e) { console.error("Action error:", e); }
   }
@@ -519,6 +581,14 @@ serve(async (req) => {
 - Atualizar perfil: {"action":"update_profile","field":"monthly_income","new_value":5000}
 - Marcar conta como paga: {"action":"pay_bill","search":"Energia"}
 - Listar contas a pagar: {"action":"list_bills"}
+- Apagar todos lembretes: {"action":"delete_all_reminders"}
+- Apagar todas transações: {"action":"delete_all_transactions"}
+- Apagar todos cartões: {"action":"delete_all_cards"}
+- Apagar todas carteiras: {"action":"delete_all_wallets"}
+- Apagar todas metas: {"action":"delete_all_goals"}
+- Apagar todas categorias: {"action":"delete_all_categories"}
+- Apagar todas recorrências: {"action":"delete_all_recurring"}
+- Resetar tudo: {"action":"reset_all_data"}
 
 💡 Capacidades consultivas (responda em texto):
 - Analisar gastos, comparar meses, identificar padrões
@@ -545,7 +615,7 @@ ${financialContext}`;
 
     // Check if message might trigger an action
     const lastContent = typeof processedMessages[processedMessages.length - 1]?.content === "string" ? processedMessages[processedMessages.length - 1].content : "";
-    const actionKeywords = /gast|pagu|receb|comprei|almoc|uber|criar?\s+(meta|carteira|categoria|cart[aã]o|lembrete)|depositar|aportar|atualizar\s+saldo|adicionar\s+cart|mudar\s+or[cç]amento|lembrete|excluir|deletar|remover|apagar|listar|minhas?\s+(metas?|carteiras?|categorias?|cart[oõ]es|lembretes?|transa[cç][oõ]es|recorr[eê]ncias?|contas?)|meus\s+(cart[oõ]es|lembretes?|gastos?)|transfer|mover\s+\d|minha\s+renda|mudar\s+(?:meu\s+)?nome|contas?\s+(?:a\s+)?pag|pend[eê]nt|marcar\s+.+pag|[uú]ltim.+gast|extrato\s+recente|recorr[eê]nc/i;
+    const actionKeywords = /gast|pagu|receb|comprei|almoc|uber|criar?\s+(meta|carteira|categoria|cart[aã]o|lembrete)|depositar|aportar|atualizar\s+saldo|adicionar\s+cart|mudar\s+or[cç]amento|lembrete|excluir|deletar|remover|apagar|listar|minhas?\s+(metas?|carteiras?|categorias?|cart[oõ]es|lembretes?|transa[cç][oõ]es|recorr[eê]ncias?|contas?)|meus\s+(cart[oõ]es|lembretes?|gastos?)|transfer|mover\s+\d|minha\s+renda|mudar\s+(?:meu\s+)?nome|contas?\s+(?:a\s+)?pag|pend[eê]nt|marcar\s+.+pag|[uú]ltim.+gast|extrato\s+recente|recorr[eê]nc|reset|zerar|limpar\s+tudo|apagar\s+tud/i;
 
     if (userId && actionKeywords.test(lastContent)) {
       const aiText = await callGemini({ model: "gemini-2.5-flash", systemPrompt, messages: processedMessages, temperature: 0.3 });

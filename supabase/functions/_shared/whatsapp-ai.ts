@@ -125,6 +125,24 @@ Para marcar uma conta/boleto como pago: {"action":"pay_bill","search":"Energia"}
 📋 LISTAR CONTAS A PAGAR:
 Para listar contas pendentes: {"action":"list_bills"}
 
+🗑️ APAGAR TUDO / RESETAR (OPERAÇÕES EM MASSA):
+Quando o usuário pedir para apagar/resetar/limpar TODOS os itens de uma categoria, responda com o JSON correspondente:
+- Apagar todos lembretes: {"action":"delete_all_reminders"}
+- Apagar todas transações: {"action":"delete_all_transactions"}
+- Apagar todos cartões: {"action":"delete_all_cards"}
+- Apagar todas carteiras: {"action":"delete_all_wallets"}
+- Apagar todas metas: {"action":"delete_all_goals"}
+- Apagar todas categorias: {"action":"delete_all_categories"}
+- Apagar todas recorrências: {"action":"delete_all_recurring"}
+- Resetar TUDO (apagar todos os dados): {"action":"reset_all_data"}
+
+Exemplos de linguagem natural:
+- "apaga todos os lembretes" → delete_all_reminders
+- "reseta minhas transações" → delete_all_transactions
+- "limpa tudo" / "resetar tudo" / "zerar conta" → reset_all_data
+- "apagar todos os cartões" → delete_all_cards
+- "limpar todas as metas" → delete_all_goals
+
 🎯 TRANSAÇÃO COM CARTEIRA/CARTÃO ESPECÍFICO:
 Quando o usuário mencionar uma carteira ou cartão na transação, inclua o campo no JSON:
 {"action":"add_transaction","amount":50,"description":"Almoço","category":"Alimentação","type":"expense","wallet":"Nubank"}
