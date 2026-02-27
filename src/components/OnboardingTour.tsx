@@ -86,6 +86,11 @@ export function OnboardingTour({ onComplete }: OnboardingTourProps) {
       await supabase.from("profiles").update(updates).eq("id", user.id);
     }
 
+    // Sync display_name to auth metadata so Dashboard greeting updates immediately
+    if (formData.name.trim()) {
+      await supabase.auth.updateUser({ data: { display_name: formData.name.trim() } });
+    }
+
     // Create wallet if balance provided
     if (formData.balance.trim()) {
       await supabase.from("wallets").insert({
