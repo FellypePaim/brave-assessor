@@ -618,7 +618,7 @@ ${financialContext}`;
     const actionKeywords = /gast|pagu|receb|comprei|almoc|uber|criar?\s+(meta|carteira|categoria|cart[aã]o|lembrete)|depositar|aportar|atualizar\s+saldo|adicionar\s+cart|mudar\s+or[cç]amento|lembrete|excluir|deletar|remover|apagar|listar|minhas?\s+(metas?|carteiras?|categorias?|cart[oõ]es|lembretes?|transa[cç][oõ]es|recorr[eê]ncias?|contas?)|meus\s+(cart[oõ]es|lembretes?|gastos?)|transfer|mover\s+\d|minha\s+renda|mudar\s+(?:meu\s+)?nome|contas?\s+(?:a\s+)?pag|pend[eê]nt|marcar\s+.+pag|[uú]ltim.+gast|extrato\s+recente|recorr[eê]nc|reset|zerar|limpar\s+tudo|apagar\s+tud/i;
 
     if (userId && actionKeywords.test(lastContent)) {
-      const aiText = await callGemini({ model: "gemini-2.5-flash", systemPrompt, messages: processedMessages, temperature: 0.3 });
+      const aiText = await callGemini({ model: "gemini-2.0-flash", systemPrompt, messages: processedMessages, temperature: 0.3 });
       const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
       const result = await executeAction(supabaseAdmin, userId, aiText);
 
@@ -638,7 +638,7 @@ ${financialContext}`;
       return new Response(stream, { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
     }
 
-    const geminiResp = await callGeminiStream({ model: "gemini-2.5-flash", systemPrompt, messages: processedMessages });
+    const geminiResp = await callGeminiStream({ model: "gemini-2.0-flash", systemPrompt, messages: processedMessages });
     return new Response(geminiStreamToOpenAI(geminiResp), { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
   } catch (e) {
     console.error("nylo-chat error:", e);
