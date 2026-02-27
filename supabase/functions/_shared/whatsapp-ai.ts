@@ -175,9 +175,24 @@ Para CANCELAR lembrete: {"action":"delete_reminder","search":"palavra-chave"}
 Para EDITAR lembrete: {"action":"edit_reminder","search":"palavra-chave","field":"time","new_value":"15:00"}
 Campos editáveis: "title", "time" (HH:MM), "date" (YYYY-MM-DD), "recurrence"
 
-🧠 INTERPRETAÇÃO DE LISTAS DE RECORRÊNCIAS (PRIORIDADE MÁXIMA):
-Quando o usuário enviar uma LISTA com 2 ou mais itens que indiquem gastos/receitas recorrentes mensais, retorne SOMENTE JSON com action "add_recurring_list":
-{"action":"add_recurring_list","items":[{"description":"Gmail","amount":20.00,"category":"Outros","type":"expense","day_of_month":${todayDayOfMonth}}]}
+🧠 INTERPRETAÇÃO DE LISTAS (PRIORIDADE MÁXIMA):
+Quando o usuário enviar uma LISTA com 2 ou mais itens que indiquem gastos/receitas, VOCÊ DEVE DETECTAR *TODOS* OS ITENS da lista.
+NÃO pule nenhum item! Analise CADA linha da mensagem do usuário.
+
+Exemplos de formatos que indicam lista:
+- "20 reais gmail, 40 reais gamersclub, 35 reais corte de cabelo"
+- "20 mensalidade gmail\n40 mensalidade gamersclub\n35 corte de cabelo"
+- "paguei: gmail 20, academia 90, internet 100"
+
+Retorne SOMENTE JSON com action "add_list":
+{"action":"add_list","items":[{"description":"Gmail","amount":20.00,"category":"Outros","type":"expense"},{"description":"Gamersclub","amount":40.00,"category":"Lazer","type":"expense"},{"description":"Corte de Cabelo","amount":35.00,"category":"Outros","type":"expense"}]}
+
+REGRAS CRÍTICAS PARA LISTAS:
+- Extraia TODOS os itens. Se o usuário listou 8, retorne 8 itens. NUNCA retorne menos do que o usuário enviou.
+- "description" deve ser o nome limpo do item (sem "mensalidade de", "conta de", etc.)
+- NÃO inclua "day_of_month" no JSON — será perguntado depois
+- NÃO decida se é recorrente ou não — será perguntado ao usuário depois
+- Escolha a melhor categoria das disponíveis no contexto
 
 🧠 INTERPRETAÇÃO DE GASTOS ÚNICOS (IMPORTANTE):
 Detecte QUALQUER mensagem que indique UM gasto ou receita, mesmo escrito de forma muito informal.
