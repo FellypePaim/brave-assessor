@@ -839,8 +839,84 @@ serve(async (req) => {
             return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
           }
 
+          // Helper to format and show confirmation with edit options
+          const showReminderConfirm = async (c: any) => {
+            const fmtD = (s: string) =>
+              new Date(s).toLocaleString("pt-BR", {
+                day: "2-digit", month: "2-digit", year: "numeric",
+                hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo",
+              });
+            const nm = c.notify_minutes_before ?? 30;
+            let notifyLbl = nm < 60 ? `${nm} minutos` : nm < 1440 ? `${nm / 60} hora(s)` : `${nm / 1440} dia(s)`;
+            const recLbl = recurrenceLabel(c.recurrence || "none", c.event_at, c.originalText || "");
+
+            await sendWhatsAppButtons(
+              cleanPhone,
+              `🔔 *Confirmar lembrete?*\n\n` +
+              `📝 *Nome:* ${c.title}\n` +
+              `📅 *Horário:* ${fmtD(c.event_at)}\n` +
+              `⏰ *Aviso:* ${notifyLbl} antes\n` +
+              (recLbl ? `${recLbl}\n` : `🔂 *Recorrência:* Nenhuma\n`) +
+              `\n✏️ _Para editar antes de confirmar:_\n` +
+              `• _"nome Reunião semanal"_ — altera o nome\n` +
+              `• _"data amanhã 15h"_ — altera data/hora\n` +
+              `• _"aviso 1h"_ — altera tempo de aviso`,
+              [{ id: "CONFIRM_REMINDER", text: "✅ Confirmar" }, { id: "cancelar", text: "❌ Cancelar" }],
+              "Confirme ou edite"
+            );
+          };
+
+          // ── Inline edit: "nome Novo Nome" ──
+          const nameMatch = effectiveText.match(/^nome\s+(.+)$/i);
+          if (nameMatch) {
+            const newTitle = nameMatch[1].trim();
+            await supabaseAdmin.from("whatsapp_sessions").update({
+              context: { ...ctx, title: newTitle },
+              expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+            }).eq("id", session.id);
+            await sendWhatsAppMessage(cleanPhone, `✅ Nome atualizado para *${newTitle}*!`);
+            await showReminderConfirm({ ...ctx, title: newTitle });
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          // ── Inline edit: "data amanhã 15h" ──
+          const dateMatch = effectiveText.match(/^data\s+(.+)$/i);
+          if (dateMatch) {
+            const newDate = parseDateTimeBR(dateMatch[1].trim());
+            if (!newDate) {
+              await sendWhatsAppMessage(cleanPhone, `❓ Não entendi a data. Tente: _"data amanhã 15h"_, _"data 25/02 10:00"_`);
+              return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            }
+            const newEventAt = newDate.toISOString();
+            await supabaseAdmin.from("whatsapp_sessions").update({
+              context: { ...ctx, event_at: newEventAt },
+              expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+            }).eq("id", session.id);
+            const dtLabel = newDate.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
+            await sendWhatsAppMessage(cleanPhone, `✅ Data atualizada para *${dtLabel}*!`);
+            await showReminderConfirm({ ...ctx, event_at: newEventAt });
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          // ── Inline edit: "aviso 1h" or "aviso 30 min" ──
+          const avisoMatch = effectiveText.match(/^aviso\s+(.+)$/i);
+          if (avisoMatch) {
+            const mins = parseNotifyMinutes(avisoMatch[1].trim());
+            if (mins === null) {
+              await sendWhatsAppMessage(cleanPhone, `❓ Não entendi. Tente: _"aviso 30 min"_, _"aviso 1h"_, _"aviso 1 dia"_`);
+              return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            }
+            await supabaseAdmin.from("whatsapp_sessions").update({
+              context: { ...ctx, notify_minutes_before: mins },
+              expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+            }).eq("id", session.id);
+            let label = mins < 60 ? `${mins} minutos` : mins < 1440 ? `${mins / 60} hora(s)` : `${mins / 1440} dia(s)`;
+            await sendWhatsAppMessage(cleanPhone, `✅ Aviso atualizado para *${label} antes*!`);
+            await showReminderConfirm({ ...ctx, notify_minutes_before: mins });
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
           // CONFIRM_REMINDER or "sim" or button text "✅ Confirmar"
-          // Match broadly: button text, buttonId, or natural "sim/ok/confirmar"
           const isConfirmReminder = 
             /sim|ok|yes|confirmar/i.test(effectiveText) ||
             effectiveText.includes("✅") ||
@@ -874,7 +950,7 @@ serve(async (req) => {
               });
 
             let notifyLabel = "";
-            const nm = ctx.notify_minutes_before;
+            const nm = ctx.notify_minutes_before ?? 30;
             if (nm < 60) notifyLabel = `${nm} minutos`;
             else if (nm < 1440) notifyLabel = `${nm / 60} hora(s)`;
             else notifyLabel = `${nm / 1440} dia(s)`;
@@ -891,6 +967,10 @@ serve(async (req) => {
             );
             return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
           }
+
+          // Unknown input: re-show confirmation
+          await showReminderConfirm(ctx);
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
         // ── Step: help category selection ──
@@ -2685,19 +2765,17 @@ Metas financeiras: ${goalsCtx}`;
           replyText = "❓ Não consegui identificar a data/hora do lembrete. Tente: _\"lembrete: reunião amanhã 15h\"_";
         } else {
           const recurrence = action.recurrence || "none";
-          const notifyMinutes = action.notify_minutes_before ?? 30;
 
-          // Create session for confirmation
+          // Create session — go to reminder_notify step to ask notification time
           await supabaseAdmin.from("whatsapp_sessions").upsert({
             phone_number: cleanPhone,
-            step: "reminder_confirm",
+            step: "reminder_notify",
             context: {
               user_id: userId,
               title: action.title,
               description: action.description || null,
               event_at: eventAt,
               recurrence,
-              notify_minutes_before: notifyMinutes,
               originalText: effectiveText,
             },
             expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
@@ -2709,22 +2787,17 @@ Metas financeiras: ${goalsCtx}`;
               hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo",
             });
 
-          let notifyLabel = "";
-          if (notifyMinutes < 60) notifyLabel = `${notifyMinutes} minutos`;
-          else if (notifyMinutes < 1440) notifyLabel = `${notifyMinutes / 60} hora(s)`;
-          else notifyLabel = `${notifyMinutes / 1440} dia(s)`;
-
           const recLbl = recurrenceLabel(recurrence, eventAt, effectiveText);
 
           await sendWhatsAppButtons(
             cleanPhone,
-            `🔔 *Confirmar lembrete?*\n\n` +
+            `🔔 *Novo lembrete:*\n\n` +
             `📝 *Nome:* ${action.title}\n` +
             `📅 *Horário:* ${fmtDate(eventAt)}\n` +
-            `⏰ *Aviso:* ${notifyLabel} antes\n` +
-            (recLbl ? `${recLbl}\n` : `🔂 *Recorrência:* Nenhuma\n`),
-            [{ id: "CONFIRM_REMINDER", text: "✅ Confirmar" }, { id: "cancelar", text: "❌ Cancelar" }],
-            "Toque para confirmar"
+            (recLbl ? `${recLbl}\n` : `🔂 *Recorrência:* Nenhuma\n`) +
+            `\n⏰ *Quanto tempo antes quer ser avisado?*`,
+            [{ id: "30m", text: "30 minutos" }, { id: "1h", text: "1 hora" }, { id: "1d", text: "1 dia" }],
+            "Ou escreva: 10 min, 2h, 3 dias..."
           );
           return new Response(JSON.stringify({ ok: true }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
