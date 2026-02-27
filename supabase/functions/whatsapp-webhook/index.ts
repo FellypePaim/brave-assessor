@@ -3021,6 +3021,305 @@ Metas financeiras: ${goalsCtx}`;
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+      // ── Detect add_goal action ──
+      const addGoalMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"add_goal"[\s\S]*\}/);
+      if (addGoalMatch) {
+        const action = JSON.parse(addGoalMatch[0]);
+        const { error } = await supabaseAdmin.from("financial_goals").insert({
+          user_id: userId,
+          name: action.name,
+          target_amount: Number(action.target_amount),
+          current_amount: 0,
+          deadline: action.deadline || null,
+          color: action.color || "#10b981",
+        });
+        if (error) {
+          await sendWhatsAppMessage(cleanPhone, `❌ Erro ao criar meta: ${error.message}`);
+        } else {
+          await sendWhatsAppMessage(cleanPhone,
+            `🎯 *Meta criada com sucesso!*\n\n` +
+            `📝 *Nome:* ${action.name}\n` +
+            `💰 *Valor alvo:* R$ ${Number(action.target_amount).toFixed(2)}\n` +
+            (action.deadline ? `📅 *Prazo:* ${new Date(action.deadline + "T12:00:00").toLocaleDateString("pt-BR")}\n` : "") +
+            `\n_Brave IA - Seu assessor financeiro 🤖_`
+          );
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ── Detect deposit_goal action ──
+      const depositGoalMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"deposit_goal"[\s\S]*\}/);
+      if (depositGoalMatch) {
+        const action = JSON.parse(depositGoalMatch[0]);
+        const searchTerm = (action.search || "").toLowerCase();
+        const { data: goals } = await supabaseAdmin.from("financial_goals").select("*").eq("user_id", userId);
+        const matched = (goals || []).find((g: any) => g.name.toLowerCase().includes(searchTerm));
+        if (!matched) {
+          await sendWhatsAppMessage(cleanPhone, `❓ Não encontrei a meta "${action.search}". Envie _"minhas metas"_ para ver a lista.`);
+        } else {
+          const newAmount = Number(matched.current_amount) + Number(action.amount);
+          await supabaseAdmin.from("financial_goals").update({ current_amount: newAmount }).eq("id", matched.id);
+          const pct = ((newAmount / Number(matched.target_amount)) * 100).toFixed(0);
+          const remaining = Number(matched.target_amount) - newAmount;
+          await sendWhatsAppMessage(cleanPhone,
+            `💰 *Aporte registrado!*\n\n` +
+            `🎯 *${matched.name}*\n` +
+            `➕ Aporte: R$ ${Number(action.amount).toFixed(2)}\n` +
+            `📊 Progresso: R$ ${newAmount.toFixed(2)} / R$ ${Number(matched.target_amount).toFixed(2)} (${pct}%)\n` +
+            (remaining > 0 ? `💪 Faltam: R$ ${remaining.toFixed(2)}\n` : `🎉 *Meta atingida!*\n`) +
+            `\n_Brave IA - Seu assessor financeiro 🤖_`
+          );
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ── Detect edit_goal action ──
+      const editGoalMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"edit_goal"[\s\S]*\}/);
+      if (editGoalMatch) {
+        const action = JSON.parse(editGoalMatch[0]);
+        const searchTerm = (action.search || "").toLowerCase();
+        const { data: goals } = await supabaseAdmin.from("financial_goals").select("*").eq("user_id", userId);
+        const matched = (goals || []).find((g: any) => g.name.toLowerCase().includes(searchTerm));
+        if (!matched) {
+          await sendWhatsAppMessage(cleanPhone, `❓ Não encontrei a meta "${action.search}".`);
+        } else {
+          const updateData: any = {};
+          if (action.field === "name") updateData.name = action.new_value;
+          else if (action.field === "target_amount") updateData.target_amount = Number(action.new_value);
+          else if (action.field === "deadline") updateData.deadline = action.new_value;
+          else if (action.field === "color") updateData.color = action.new_value;
+          if (Object.keys(updateData).length > 0) {
+            await supabaseAdmin.from("financial_goals").update(updateData).eq("id", matched.id);
+            await sendWhatsAppMessage(cleanPhone, `✅ Meta *${matched.name}* atualizada!\n\n_Brave IA - Seu assessor financeiro 🤖_`);
+          }
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ── Detect delete_goal action ──
+      const deleteGoalMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"delete_goal"[\s\S]*\}/);
+      if (deleteGoalMatch) {
+        const action = JSON.parse(deleteGoalMatch[0]);
+        const searchTerm = (action.search || "").toLowerCase();
+        const { data: goals } = await supabaseAdmin.from("financial_goals").select("*").eq("user_id", userId);
+        const matched = (goals || []).find((g: any) => g.name.toLowerCase().includes(searchTerm));
+        if (!matched) {
+          await sendWhatsAppMessage(cleanPhone, `❓ Não encontrei a meta "${action.search}".`);
+        } else {
+          await supabaseAdmin.from("financial_goals").delete().eq("id", matched.id);
+          await sendWhatsAppMessage(cleanPhone, `🗑️ Meta *${matched.name}* excluída!\n\n_Brave IA - Seu assessor financeiro 🤖_`);
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ── Detect list_goals action ──
+      const listGoalsMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"list_goals"[\s\S]*\}/);
+      if (listGoalsMatch) {
+        const { data: goals } = await supabaseAdmin.from("financial_goals").select("*").eq("user_id", userId).order("created_at");
+        if (!goals || goals.length === 0) {
+          await sendWhatsAppMessage(cleanPhone, "📭 Você não tem metas cadastradas.\n\nPara criar: _\"criar meta de viagem de 5000\"_\n\n_Brave IA 🤖_");
+        } else {
+          const list = goals.map((g: any, i: number) => {
+            const pct = ((Number(g.current_amount) / Number(g.target_amount)) * 100).toFixed(0);
+            const dl = g.deadline ? ` · até ${new Date(g.deadline + "T12:00:00").toLocaleDateString("pt-BR")}` : "";
+            return `${i + 1}. 🎯 *${g.name}*\n   R$ ${Number(g.current_amount).toFixed(2)} / R$ ${Number(g.target_amount).toFixed(2)} (${pct}%)${dl}`;
+          }).join("\n\n");
+          await sendWhatsAppMessage(cleanPhone, `🎯 *Suas Metas (${goals.length}):*\n\n${list}\n\n💡 _Aportar: "depositar 200 na meta X"_\n_Brave IA 🤖_`);
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ── Detect add_wallet action ──
+      const addWalletMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"add_wallet"[\s\S]*\}/);
+      if (addWalletMatch) {
+        const action = JSON.parse(addWalletMatch[0]);
+        const { error } = await supabaseAdmin.from("wallets").insert({
+          user_id: userId,
+          name: action.name,
+          type: action.type || "checking",
+          balance: Number(action.balance || 0),
+        });
+        if (error) {
+          await sendWhatsAppMessage(cleanPhone, `❌ Erro ao criar carteira: ${error.message}`);
+        } else {
+          const typeNames: Record<string, string> = { checking: "Corrente", savings: "Poupança", cash: "Dinheiro", investment: "Investimento" };
+          await sendWhatsAppMessage(cleanPhone,
+            `💳 *Carteira criada!*\n\n` +
+            `📝 *${action.name}*\n` +
+            `🏷️ Tipo: ${typeNames[action.type] || action.type}\n` +
+            `💰 Saldo: R$ ${Number(action.balance || 0).toFixed(2)}\n\n_Brave IA 🤖_`
+          );
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ── Detect edit_wallet action ──
+      const editWalletMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"edit_wallet"[\s\S]*\}/);
+      if (editWalletMatch) {
+        const action = JSON.parse(editWalletMatch[0]);
+        const searchTerm = (action.search || "").toLowerCase();
+        const { data: wList } = await supabaseAdmin.from("wallets").select("*").eq("user_id", userId);
+        const matched = (wList || []).find((w: any) => w.name.toLowerCase().includes(searchTerm));
+        if (!matched) {
+          await sendWhatsAppMessage(cleanPhone, `❓ Não encontrei a carteira "${action.search}".`);
+        } else {
+          const updateData: any = {};
+          if (action.field === "name") updateData.name = action.new_value;
+          else if (action.field === "balance") updateData.balance = Number(action.new_value);
+          else if (action.field === "type") updateData.type = action.new_value;
+          if (Object.keys(updateData).length > 0) {
+            await supabaseAdmin.from("wallets").update(updateData).eq("id", matched.id);
+            await sendWhatsAppMessage(cleanPhone, `✅ Carteira *${matched.name}* atualizada!\n\n_Brave IA 🤖_`);
+          }
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ── Detect list_wallets action ──
+      const listWalletsMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"list_wallets"[\s\S]*\}/);
+      if (listWalletsMatch) {
+        const { data: wList } = await supabaseAdmin.from("wallets").select("*").eq("user_id", userId).order("created_at");
+        if (!wList || wList.length === 0) {
+          await sendWhatsAppMessage(cleanPhone, "📭 Nenhuma carteira cadastrada.\n\nPara criar: _\"criar carteira Nubank\"_\n\n_Brave IA 🤖_");
+        } else {
+          const total = wList.reduce((s: number, w: any) => s + Number(w.balance), 0);
+          const typeNames: Record<string, string> = { checking: "Corrente", savings: "Poupança", cash: "Dinheiro", investment: "Investimento" };
+          const list = wList.map((w: any, i: number) => `${i + 1}. 💳 *${w.name}* (${typeNames[w.type] || w.type})\n   Saldo: R$ ${Number(w.balance).toFixed(2)}`).join("\n\n");
+          await sendWhatsAppMessage(cleanPhone, `💳 *Suas Carteiras:*\n\n${list}\n\n💰 *Saldo total: R$ ${total.toFixed(2)}*\n\n_Brave IA 🤖_`);
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ── Detect add_category action ──
+      const addCategoryMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"add_category"[\s\S]*\}/);
+      if (addCategoryMatch) {
+        const action = JSON.parse(addCategoryMatch[0]);
+        const { error } = await supabaseAdmin.from("categories").insert({
+          user_id: userId,
+          name: action.name,
+          icon: action.icon || "tag",
+          color: action.color || "#6b7280",
+          budget_limit: action.budget_limit ? Number(action.budget_limit) : null,
+        });
+        if (error) {
+          await sendWhatsAppMessage(cleanPhone, `❌ Erro ao criar categoria: ${error.message}`);
+        } else {
+          await sendWhatsAppMessage(cleanPhone,
+            `📂 *Categoria criada!*\n\n` +
+            `📝 *${action.name}*\n` +
+            (action.budget_limit ? `💰 Orçamento: R$ ${Number(action.budget_limit).toFixed(2)}\n` : "") +
+            `\n_Brave IA 🤖_`
+          );
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ── Detect edit_category action ──
+      const editCategoryMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"edit_category"[\s\S]*\}/);
+      if (editCategoryMatch) {
+        const action = JSON.parse(editCategoryMatch[0]);
+        const searchTerm = (action.search || "").toLowerCase();
+        const matched = (categories || []).find((c: any) => c.name.toLowerCase().includes(searchTerm));
+        if (!matched) {
+          await sendWhatsAppMessage(cleanPhone, `❓ Não encontrei a categoria "${action.search}".`);
+        } else {
+          const updateData: any = {};
+          if (action.field === "name") updateData.name = action.new_value;
+          else if (action.field === "budget_limit") updateData.budget_limit = Number(action.new_value);
+          else if (action.field === "color") updateData.color = action.new_value;
+          else if (action.field === "icon") updateData.icon = action.new_value;
+          if (Object.keys(updateData).length > 0) {
+            await supabaseAdmin.from("categories").update(updateData).eq("id", (matched as any).id);
+            await sendWhatsAppMessage(cleanPhone, `✅ Categoria *${(matched as any).name}* atualizada!\n\n_Brave IA 🤖_`);
+          }
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ── Detect list_categories action ──
+      const listCategoriesMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"list_categories"[\s\S]*\}/);
+      if (listCategoriesMatch) {
+        if (!categories || categories.length === 0) {
+          await sendWhatsAppMessage(cleanPhone, "📭 Nenhuma categoria cadastrada.\n\n_Brave IA 🤖_");
+        } else {
+          const list = categories.map((c: any, i: number) => {
+            const budget = c.budget_limit ? ` · Limite: R$ ${Number(c.budget_limit).toFixed(2)}` : "";
+            return `${i + 1}. 📂 *${c.name}*${budget}`;
+          }).join("\n");
+          await sendWhatsAppMessage(cleanPhone, `📂 *Suas Categorias (${categories.length}):*\n\n${list}\n\n_Brave IA 🤖_`);
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ── Detect add_card action ──
+      const addCardMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"add_card"[\s\S]*\}/);
+      if (addCardMatch) {
+        const action = JSON.parse(addCardMatch[0]);
+        const { error } = await supabaseAdmin.from("cards").insert({
+          user_id: userId,
+          name: action.name,
+          brand: action.brand || null,
+          last_4_digits: action.last_4_digits || null,
+          credit_limit: action.credit_limit ? Number(action.credit_limit) : null,
+          due_day: action.due_day ? Number(action.due_day) : null,
+        });
+        if (error) {
+          await sendWhatsAppMessage(cleanPhone, `❌ Erro ao criar cartão: ${error.message}`);
+        } else {
+          await sendWhatsAppMessage(cleanPhone,
+            `💳 *Cartão adicionado!*\n\n` +
+            `📝 *${action.name}*${action.brand ? ` (${action.brand})` : ""}\n` +
+            (action.last_4_digits ? `🔢 Final: ****${action.last_4_digits}\n` : "") +
+            (action.credit_limit ? `💰 Limite: R$ ${Number(action.credit_limit).toFixed(2)}\n` : "") +
+            (action.due_day ? `📅 Vencimento: dia ${action.due_day}\n` : "") +
+            `\n_Brave IA 🤖_`
+          );
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ── Detect edit_card action ──
+      const editCardMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"edit_card"[\s\S]*\}/);
+      if (editCardMatch) {
+        const action = JSON.parse(editCardMatch[0]);
+        const searchTerm = (action.search || "").toLowerCase();
+        const { data: cardList } = await supabaseAdmin.from("cards").select("*").eq("user_id", userId);
+        const matched = (cardList || []).find((c: any) => c.name.toLowerCase().includes(searchTerm));
+        if (!matched) {
+          await sendWhatsAppMessage(cleanPhone, `❓ Não encontrei o cartão "${action.search}".`);
+        } else {
+          const updateData: any = {};
+          if (action.field === "name") updateData.name = action.new_value;
+          else if (action.field === "brand") updateData.brand = action.new_value;
+          else if (action.field === "credit_limit") updateData.credit_limit = Number(action.new_value);
+          else if (action.field === "due_day") updateData.due_day = Number(action.new_value);
+          else if (action.field === "last_4_digits") updateData.last_4_digits = action.new_value;
+          if (Object.keys(updateData).length > 0) {
+            await supabaseAdmin.from("cards").update(updateData).eq("id", matched.id);
+            await sendWhatsAppMessage(cleanPhone, `✅ Cartão *${matched.name}* atualizado!\n\n_Brave IA 🤖_`);
+          }
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ── Detect list_cards action ──
+      const listCardsMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"list_cards"[\s\S]*\}/);
+      if (listCardsMatch) {
+        const { data: cardList } = await supabaseAdmin.from("cards").select("*").eq("user_id", userId).order("created_at");
+        if (!cardList || cardList.length === 0) {
+          await sendWhatsAppMessage(cleanPhone, "📭 Nenhum cartão cadastrado.\n\nPara adicionar: _\"adicionar cartão Nubank Visa limite 5000 vence dia 10\"_\n\n_Brave IA 🤖_");
+        } else {
+          const list = cardList.map((c: any, i: number) => {
+            const digits = c.last_4_digits ? ` (****${c.last_4_digits})` : "";
+            const limit = c.credit_limit ? ` · Limite: R$ ${Number(c.credit_limit).toFixed(2)}` : "";
+            const due = c.due_day ? ` · Venc: dia ${c.due_day}` : "";
+            return `${i + 1}. 💳 *${c.name}*${digits}${c.brand ? ` ${c.brand}` : ""}${limit}${due}`;
+          }).join("\n");
+          await sendWhatsAppMessage(cleanPhone, `💳 *Seus Cartões (${cardList.length}):*\n\n${list}\n\n_Brave IA 🤖_`);
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
     } catch (parseErr) {
       console.log("Response is text, not action");
     }
