@@ -23,7 +23,6 @@ serve(async (req) => {
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
     const todayStr = now.toISOString().slice(0, 10);
 
-    // Get users with WhatsApp linked
     const { data: links, error: linkErr } = await supabase
       .from("whatsapp_links")
       .select("user_id, phone_number")
@@ -32,26 +31,20 @@ serve(async (req) => {
     if (linkErr) throw linkErr;
 
     const linkedMap = new Map(links?.map(l => [l.user_id, l.phone_number]) ?? []);
-    const userIds = [...linkedMap.keys()];
-
-    if (userIds.length === 0) {
-      return new Response(JSON.stringify({ success: true, sent: 0, message: "No linked users" }), {
+    if (linkedMap.size === 0) {
+      return new Response(JSON.stringify({ success: true, sent: 0 }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Get all categories with budget_limit set
     const { data: categories, error: catErr } = await supabase
       .from("categories")
-      .select("id, user_id, name, budget_limit, icon")
+      .select("id, user_id, name, budget_limit")
       .not("budget_limit", "is", null)
       .gt("budget_limit", 0);
     if (catErr) throw catErr;
 
-    // Filter to only linked users
     const relevantCats = (categories || []).filter(c => linkedMap.has(c.user_id));
-
-    // Group by user
     const userCats = new Map<string, typeof relevantCats>();
     for (const cat of relevantCats) {
       const list = userCats.get(cat.user_id) || [];
@@ -68,9 +61,7 @@ serve(async (req) => {
 
       await Promise.all(batch.map(async ([userId, cats]) => {
         const phone = linkedMap.get(userId)!;
-
         try {
-          // Get this month's expenses for this user
           const { data: txs } = await supabase
             .from("transactions")
             .select("amount, category_id")
@@ -79,7 +70,6 @@ serve(async (req) => {
             .gte("date", monthStart)
             .lte("date", todayStr);
 
-          // Sum by category
           const spentByCategory = new Map<string, number>();
           for (const tx of txs || []) {
             if (tx.category_id) {
@@ -87,57 +77,40 @@ serve(async (req) => {
             }
           }
 
-          // Check which categories exceeded 80%
           const alerts: string[] = [];
           for (const cat of cats) {
             const spent = spentByCategory.get(cat.id) || 0;
             const limit = Number(cat.budget_limit);
             const pct = (spent / limit) * 100;
-
             if (pct >= 100) {
-              alerts.push(`🔴 *${cat.name}*: ${fmt(spent)} de ${fmt(limit)} (*${pct.toFixed(0)}%* — ESTOURADO!)`);
+              alerts.push(`🔴 ${cat.name}: ${fmt(spent)}/${fmt(limit)} · *estourado*`);
             } else if (pct >= 80) {
-              alerts.push(`🟡 *${cat.name}*: ${fmt(spent)} de ${fmt(limit)} (*${pct.toFixed(0)}%*)`);
+              alerts.push(`🟡 ${cat.name}: ${fmt(spent)}/${fmt(limit)} · ${pct.toFixed(0)}%`);
             }
           }
 
-          if (alerts.length === 0) {
-            skipped++;
-            return;
-          }
+          if (alerts.length === 0) { skipped++; return; }
 
           const { data: profile } = await supabase
-            .from("profiles")
-            .select("display_name")
-            .eq("id", userId)
-            .single();
-
+            .from("profiles").select("display_name").eq("id", userId).single();
           const name = profile?.display_name || "Usuário";
 
           const message = [
-            `⚠️ *Alerta de Orçamento — ${name}*`,
-            ``,
-            `Algumas categorias estão próximas ou acima do limite este mês:`,
-            ``,
+            `⚠️ *Alerta de orçamento, ${name}!*`,
             ...alerts,
-            ``,
-            `💡 Revise seus gastos para manter o controle!`,
-            ``,
-            `_Brave IA - Seu assessor financeiro 🤖_`,
+            `💡 Revise seus gastos para fechar o mês no azul.`,
+            `_Brave IA 🤖_`,
           ].join("\n");
 
           await sendWhatsAppMessage(phone, message);
           sent++;
-          console.log(`Budget alert sent to ${phone} (user: ${userId}, ${alerts.length} categories)`);
         } catch (e) {
-          console.error(`Failed budget alert for ${userId}:`, e);
+          console.error(`Budget alert failed for ${userId}:`, e);
           skipped++;
         }
       }));
 
-      if (i + BATCH_SIZE < usersToProcess.length) {
-        await delay(1000);
-      }
+      if (i + BATCH_SIZE < usersToProcess.length) await delay(1000);
     }
 
     return new Response(

@@ -33,13 +33,11 @@ serve(async (req) => {
 
     const now = new Date();
     const nowIso = now.toISOString();
-
-    // Window for "expiring soon" = now + 3 days (±1h to avoid duplicate sends)
     const in3Days = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
-    const in3DaysStart = new Date(in3Days.getTime() - 30 * 60 * 1000).toISOString(); // -30min
-    const in3DaysEnd   = new Date(in3Days.getTime() + 30 * 60 * 1000).toISOString(); // +30min
+    const in3DaysStart = new Date(in3Days.getTime() - 30 * 60 * 1000).toISOString();
+    const in3DaysEnd = new Date(in3Days.getTime() + 30 * 60 * 1000).toISOString();
 
-    // ── 1. Find plans expiring in ~3 days and send reminder ──
+    // ── 1. Reminder for plans expiring in ~3 days ──
     const { data: expiringProfiles } = await supabaseAdmin
       .from("profiles")
       .select("id, display_name, subscription_plan, subscription_expires_at")
@@ -51,40 +49,28 @@ serve(async (req) => {
     let reminders = 0;
     for (const profile of expiringProfiles ?? []) {
       const { data: waLink } = await supabaseAdmin
-        .from("whatsapp_links")
-        .select("phone_number")
-        .eq("user_id", profile.id)
-        .eq("verified", true)
-        .maybeSingle();
-
+        .from("whatsapp_links").select("phone_number")
+        .eq("user_id", profile.id).eq("verified", true).maybeSingle();
       if (!waLink?.phone_number) continue;
 
       const name = profile.display_name || "Usuário";
       const expiryDate = new Date(profile.subscription_expires_at!).toLocaleDateString("pt-BR");
-      const planNames: Record<string, string> = {
-        mensal: "Brave Mensal",
-        anual: "Brave Anual",
-        trimestral: "Brave Trimestral",
-      };
+      const planMap: Record<string, string> = { mensal: "Mensal", anual: "Anual", trimestral: "Trimestral" };
 
-      const message =
-        `⏰ *Lembrete: seu plano expira em 3 dias, ${name}!*\n\n` +
-        `📋 Plano: *${planNames[profile.subscription_plan] || profile.subscription_plan}*\n` +
-        `📅 Expira em: *${expiryDate}*\n\n` +
-        `Para não perder acesso aos seus recursos:\n` +
-        `• Modo Família\n` +
-        `• Análise comportamental\n` +
-        `• WhatsApp conectado\n\n` +
-        `💳 *Renove agora:*\n` +
-        `Abra o app Brave → Configurações → Planos e Assinatura\n\n` +
-        `_Brave IA - Seu assessor financeiro 🤖_`;
+      const message = [
+        `⏰ *${name}*, seu plano expira em 3 dias!`,
+        `📋 Plano: *Brave ${planMap[profile.subscription_plan] || profile.subscription_plan}*`,
+        `📅 Expira: *${expiryDate}*`,
+        `🔒 Sem renovação, você perde Família, análise comportamental e WhatsApp.`,
+        `💳 Renove: Brave → Configurações → Planos`,
+        `_Brave IA 🤖_`,
+      ].join("\n");
 
       await sendWhatsAppMessage(waLink.phone_number, message);
       reminders++;
-      console.log(`Sent 3-day expiry reminder to ${waLink.phone_number} (user: ${profile.id})`);
     }
 
-    // ── 2. Find all users with already-expired paid plans ──
+    // ── 2. Process already-expired plans ──
     const { data: expiredProfiles, error: fetchErr } = await supabaseAdmin
       .from("profiles")
       .select("id, display_name, subscription_plan, subscription_expires_at")
@@ -94,78 +80,48 @@ serve(async (req) => {
 
     if (fetchErr) throw fetchErr;
     if (!expiredProfiles || expiredProfiles.length === 0) {
-      console.log("No expired plans found.");
       return new Response(JSON.stringify({ ok: true, processed: 0, reminders }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    console.log(`Found ${expiredProfiles.length} expired plans to process.`);
     let processed = 0;
-
     for (const profile of expiredProfiles) {
       const userId = profile.id;
       const name = profile.display_name || "Usuário";
 
       try {
-        // 1. Downgrade plan to free
-        await supabaseAdmin
-          .from("profiles")
+        await supabaseAdmin.from("profiles")
           .update({ subscription_plan: "free", subscription_expires_at: null })
           .eq("id", userId);
 
-        // 2. Delete groups where user is owner (family groups)
         const { data: ownedGroups } = await supabaseAdmin
-          .from("family_groups")
-          .select("id")
-          .eq("owner_id", userId);
+          .from("family_groups").select("id").eq("owner_id", userId);
 
         if (ownedGroups && ownedGroups.length > 0) {
           const groupIds = ownedGroups.map((g: any) => g.id);
-          // Remove all memberships first, then groups
-          await supabaseAdmin
-            .from("family_memberships")
-            .delete()
-            .in("family_group_id", groupIds);
-          await supabaseAdmin
-            .from("family_groups")
-            .delete()
-            .in("id", groupIds);
-          console.log(`Deleted ${groupIds.length} owned groups for user ${userId}`);
+          await supabaseAdmin.from("family_memberships").delete().in("family_group_id", groupIds);
+          await supabaseAdmin.from("family_groups").delete().in("id", groupIds);
         }
 
-        // 3. Remove user from groups they are a member of (not owner)
-        await supabaseAdmin
-          .from("family_memberships")
-          .delete()
-          .eq("user_id", userId);
+        await supabaseAdmin.from("family_memberships").delete().eq("user_id", userId);
 
-        // 4. Notify via WhatsApp if linked
         const { data: waLink } = await supabaseAdmin
-          .from("whatsapp_links")
-          .select("phone_number")
-          .eq("user_id", userId)
-          .eq("verified", true)
-          .maybeSingle();
+          .from("whatsapp_links").select("phone_number")
+          .eq("user_id", userId).eq("verified", true).maybeSingle();
 
         if (waLink?.phone_number) {
-          const message =
-            `⚠️ *Seu plano Brave expirou, ${name}!*\n\n` +
-            `Infelizmente seu acesso premium foi encerrado e você foi removido dos grupos familiares.\n\n` +
-            `🔒 *O que mudou:*\n` +
-            `• Acesso ao Modo Família removido\n` +
-            `• Análise comportamental desativada\n` +
-            `• Grupos dos quais você era dono foram encerrados\n\n` +
-            `💳 *Renove agora e recupere tudo:*\n` +
-            `Abra o app Brave → Configurações → Planos e Assinatura\n\n` +
-            `_Brave IA - Seu assessor financeiro 🤖_`;
+          const message = [
+            `⚠️ *${name}*, seu plano Brave expirou.`,
+            `🔒 Família, análise comportamental e grupos foram desativados.`,
+            `💳 Renove agora: Brave → Configurações → Planos`,
+            `_Brave IA 🤖_`,
+          ].join("\n");
 
           await sendWhatsAppMessage(waLink.phone_number, message);
-          console.log(`Expiry notification sent to ${waLink.phone_number}`);
         }
 
         processed++;
-        console.log(`Processed expired plan for user ${userId} (was: ${profile.subscription_plan})`);
       } catch (userErr) {
         console.error(`Error processing user ${userId}:`, userErr);
       }
@@ -177,8 +133,7 @@ serve(async (req) => {
   } catch (error: any) {
     console.error("check-expired-plans error:", error);
     return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });

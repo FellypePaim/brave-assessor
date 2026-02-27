@@ -9,6 +9,7 @@ const corsHeaders = {
 
 const BATCH_SIZE = 10;
 const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
+const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -35,7 +36,6 @@ serve(async (req) => {
     if (linkErr) throw linkErr;
 
     const linkedMap = new Map(links?.map(l => [l.user_id, l.phone_number]) ?? []);
-
     const nowBR = getBrazilNow();
     const todayBR = nowBR.toISOString().slice(0, 10);
     const startDate = new Date(nowBR);
@@ -75,166 +75,26 @@ serve(async (req) => {
           const monthlyIncome = Number(profile.monthly_income) || 0;
           const pctUsed = monthlyIncome > 0 ? (totalExpense / monthlyIncome) * 100 : 0;
 
-          const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
           const todayTxs = transactions.filter(t => t.date === todayBR);
           const todayExpense = todayTxs.filter(t => t.type === "expense").reduce((s, t) => s + Number(t.amount), 0);
 
           let message = "";
 
           if (notificationType === "morning") {
-            // ── UNIFIED MORNING: Summary + Bills due today/tomorrow ──
-            const lines: string[] = [];
-            lines.push(`☀️ Bom dia, ${name}!`);
-            lines.push(``);
-            lines.push(`💰 *Resumo do mês até hoje:*`);
-            lines.push(`📈 Receitas: ${fmt(totalIncome)}`);
-            lines.push(`📉 Despesas: ${fmt(totalExpense)}`);
-            lines.push(`💳 Saldo: ${fmt(saldo)}`);
-            if (monthlyIncome > 0) {
-              lines.push(`🎯 Você usou ${pctUsed.toFixed(0)}% da sua renda mensal`);
-            }
-
-            // Fetch unpaid bills due today or tomorrow
-            const tomorrow = new Date(nowBR);
-            tomorrow.setDate(nowBR.getDate() + 1);
-            const tomorrowStr = tomorrow.toISOString().slice(0, 10);
-
-            const { data: dueBills } = await supabase
-              .from("transactions")
-              .select("description, amount, due_date, categories(name)")
-              .eq("user_id", profile.id)
-              .eq("type", "expense")
-              .eq("is_paid", false)
-              .gte("due_date", todayBR)
-              .lte("due_date", tomorrowStr)
-              .order("due_date", { ascending: true })
-              .limit(5);
-
-            if (dueBills && dueBills.length > 0) {
-              lines.push(``);
-              lines.push(`📋 *Contas a pagar hoje/amanhã:*`);
-              let totalDue = 0;
-              dueBills.forEach(b => {
-                const catName = (b as any).categories?.name || "Geral";
-                const dueLabel = b.due_date === todayBR ? "🔴 HOJE" : "🟡 Amanhã";
-                totalDue += Number(b.amount);
-                lines.push(`• *${b.description}* — ${fmt(Number(b.amount))} · ${dueLabel} · ${catName}`);
-              });
-              lines.push(`💸 Total pendente: *${fmt(totalDue)}*`);
-            }
-
-            // Fetch recurring due today/tomorrow
-            const { data: recurringList } = await supabase
-              .from("recurring_transactions")
-              .select("description, amount, day_of_month, categories(name)")
-              .eq("user_id", profile.id)
-              .eq("is_active", true)
-              .eq("type", "expense");
-
-            const dueRecurring: any[] = [];
-            for (const r of recurringList || []) {
-              const day = r.day_of_month;
-              let dueDate = new Date(nowBR.getFullYear(), nowBR.getMonth(), day);
-              if (dueDate.getTime() < new Date(nowBR.getFullYear(), nowBR.getMonth(), nowBR.getDate()).getTime()) {
-                dueDate = new Date(nowBR.getFullYear(), nowBR.getMonth() + 1, day);
-              }
-              const dueDateStr = dueDate.toISOString().slice(0, 10);
-              if (dueDateStr === todayBR || dueDateStr === tomorrowStr) {
-                dueRecurring.push({ ...r, dueDateStr });
-              }
-            }
-
-            if (dueRecurring.length > 0) {
-              lines.push(``);
-              lines.push(`🔁 *Recorrentes próximas:*`);
-              dueRecurring.forEach(r => {
-                const catName = (r as any).categories?.name || "Geral";
-                const label = r.dueDateStr === todayBR ? "🔴 HOJE" : "🟡 Amanhã";
-                lines.push(`• *${r.description}* — ${fmt(Number(r.amount))} · ${label} · ${catName}`);
-              });
-            }
-
-            // Tip based on budget usage
-            if (pctUsed > 80) {
-              lines.push(``);
-              lines.push(`⚠️ *Atenção:* Você já usou mais de 80% da sua renda. Cuidado com os gastos hoje!`);
-            } else if (pctUsed > 50) {
-              lines.push(``);
-              lines.push(`💡 Já na metade do orçamento. Mantenha o foco!`);
-            } else {
-              lines.push(``);
-              lines.push(`✅ Você está no caminho certo. Bom dia produtivo!`);
-            }
-
-            lines.push(``);
-            lines.push(`_Brave IA - Seu assessor financeiro 🤖_`);
-            message = lines.join("\n");
-
+            message = await buildMorningMessage(supabase, profile.id, name, totalIncome, totalExpense, saldo, monthlyIncome, pctUsed, nowBR, todayBR);
           } else {
-            // ── NIGHT SUMMARY WITH AI TIP ──
-            const lines: string[] = [];
-            lines.push(`🌙 Boa noite, ${name}!`);
-
-            if (todayTxs.length > 0) {
-              lines.push(``);
-              lines.push(`📋 *Hoje você registrou:*`);
-              todayTxs.slice(0, 3).forEach(t => {
-                lines.push(`${t.type === "expense" ? "💸" : "💰"} ${(t as any).categories?.name || "Gasto"}: ${fmt(Number(t.amount))}`);
-              });
-              if (todayTxs.length > 3) {
-                lines.push(`... e mais ${todayTxs.length - 3} transações`);
-              }
-            } else {
-              lines.push(``);
-              lines.push(`📋 Nenhuma transação registrada hoje.`);
-            }
-
-            if (todayExpense > 0) {
-              lines.push(``);
-              lines.push(`💸 Total gasto hoje: *${fmt(todayExpense)}*`);
-            }
-
-            lines.push(``);
-            lines.push(`📊 *No mês:* ${fmt(totalExpense)} gastos de ${fmt(monthlyIncome || totalIncome)} disponíveis`);
-
-            // AI-generated tip
-            try {
-              const aiTip = await generateAITip(name, totalExpense, totalIncome, saldo, pctUsed, monthlyIncome, todayExpense, todayTxs.length);
-              if (aiTip) {
-                lines.push(``);
-                lines.push(`🤖 *Dica da Brave IA:*`);
-                lines.push(aiTip);
-              }
-            } catch (e) {
-              console.error("AI tip generation failed:", e);
-              // Fallback to static tip
-              if (saldo >= 0) {
-                lines.push(``);
-                lines.push(`🌟 Ótimo dia! Continue assim.`);
-              } else {
-                lines.push(``);
-                lines.push(`💪 Amanhã é uma nova oportunidade de equilibrar.`);
-              }
-            }
-
-            lines.push(``);
-            lines.push(`_Brave IA - Seu assessor financeiro 🤖_`);
-            message = lines.join("\n");
+            message = await buildNightMessage(name, totalExpense, totalIncome, saldo, monthlyIncome, pctUsed, todayTxs, todayExpense);
           }
 
           await sendWhatsAppMessage(phone, message);
           sent++;
-          console.log(`Sent ${notificationType} notification to ${phone} (user: ${profile.id})`);
         } catch (e) {
-          console.error(`Failed to send to ${phone}:`, e);
+          console.error(`Failed to send to ${linkedMap.get(profile.id)}:`, e);
           skipped++;
         }
       }));
 
-      if (i + BATCH_SIZE < eligibleUsers.length) {
-        await delay(1000);
-      }
+      if (i + BATCH_SIZE < eligibleUsers.length) await delay(1000);
     }
 
     skipped += (profiles ?? []).length - eligibleUsers.length;
@@ -252,35 +112,143 @@ serve(async (req) => {
   }
 });
 
+// ── Morning Message Builder ──
+async function buildMorningMessage(
+  supabase: any, userId: string, name: string,
+  totalIncome: number, totalExpense: number, saldo: number,
+  monthlyIncome: number, pctUsed: number, nowBR: Date, todayBR: string,
+): Promise<string> {
+  const lines: string[] = [];
+
+  // Greeting
+  lines.push(`☀️ Bom dia, *${name}*!`);
+
+  // Monthly snapshot
+  lines.push(`📊 *Mês atual:*`);
+  lines.push(`📈 ${fmt(totalIncome)} receitas · 📉 ${fmt(totalExpense)} despesas`);
+  lines.push(`💳 Saldo: *${fmt(saldo)}*${monthlyIncome > 0 ? ` · 🎯 ${pctUsed.toFixed(0)}% usado` : ""}`);
+
+  // Bills due today/tomorrow
+  const tomorrow = new Date(nowBR);
+  tomorrow.setDate(nowBR.getDate() + 1);
+  const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+
+  const { data: dueBills } = await supabase
+    .from("transactions")
+    .select("description, amount, due_date")
+    .eq("user_id", userId)
+    .eq("type", "expense")
+    .eq("is_paid", false)
+    .gte("due_date", todayBR)
+    .lte("due_date", tomorrowStr)
+    .order("due_date", { ascending: true })
+    .limit(4);
+
+  // Recurring due today/tomorrow
+  const { data: recurringList } = await supabase
+    .from("recurring_transactions")
+    .select("description, amount, day_of_month")
+    .eq("user_id", userId)
+    .eq("is_active", true)
+    .eq("type", "expense");
+
+  const dueItems: { desc: string; amount: number; label: string }[] = [];
+
+  if (dueBills) {
+    for (const b of dueBills) {
+      dueItems.push({
+        desc: b.description,
+        amount: Number(b.amount),
+        label: b.due_date === todayBR ? "hoje" : "amanhã",
+      });
+    }
+  }
+
+  for (const r of recurringList || []) {
+    let dueDate = new Date(nowBR.getFullYear(), nowBR.getMonth(), r.day_of_month);
+    if (dueDate.getTime() < new Date(nowBR.getFullYear(), nowBR.getMonth(), nowBR.getDate()).getTime()) {
+      dueDate = new Date(nowBR.getFullYear(), nowBR.getMonth() + 1, r.day_of_month);
+    }
+    const ds = dueDate.toISOString().slice(0, 10);
+    if (ds === todayBR || ds === tomorrowStr) {
+      dueItems.push({ desc: r.description, amount: Number(r.amount), label: ds === todayBR ? "hoje" : "amanhã" });
+    }
+  }
+
+  if (dueItems.length > 0) {
+    lines.push(`📋 *Pendências:*`);
+    for (const item of dueItems.slice(0, 4)) {
+      const icon = item.label === "hoje" ? "🔴" : "🟡";
+      lines.push(`${icon} ${item.desc} · ${fmt(item.amount)} · ${item.label}`);
+    }
+    if (dueItems.length > 4) lines.push(`+${dueItems.length - 4} itens`);
+  }
+
+  // Quick tip
+  const tip = pctUsed > 80
+    ? `⚠️ Mais de 80% da renda usada. Fique de olho!`
+    : pctUsed > 50
+    ? `💡 Metade do orçamento consumido. Mantenha o foco!`
+    : `✅ Orçamento sob controle. Bom dia!`;
+  lines.push(tip);
+
+  lines.push(`_Brave IA 🤖_`);
+  return lines.join("\n");
+}
+
+// ── Night Message Builder ──
+async function buildNightMessage(
+  name: string, totalExpense: number, totalIncome: number,
+  saldo: number, monthlyIncome: number, pctUsed: number,
+  todayTxs: any[], todayExpense: number,
+): Promise<string> {
+  const lines: string[] = [];
+
+  lines.push(`🌙 Boa noite, *${name}*!`);
+
+  if (todayTxs.length > 0) {
+    lines.push(`📋 *Hoje:*`);
+    for (const t of todayTxs.slice(0, 3)) {
+      const icon = t.type === "expense" ? "💸" : "💰";
+      const cat = (t as any).categories?.name || "Geral";
+      lines.push(`${icon} ${cat}: ${fmt(Number(t.amount))}`);
+    }
+    if (todayTxs.length > 3) lines.push(`+${todayTxs.length - 3} transações`);
+    if (todayExpense > 0) lines.push(`💸 Total do dia: *${fmt(todayExpense)}*`);
+  } else {
+    lines.push(`📋 Nenhuma movimentação hoje.`);
+  }
+
+  lines.push(`📊 Mês: ${fmt(totalExpense)} de ${fmt(monthlyIncome || totalIncome)}`);
+
+  // AI tip
+  try {
+    const aiTip = await generateAITip(name, totalExpense, totalIncome, saldo, pctUsed, monthlyIncome, todayExpense, todayTxs.length);
+    if (aiTip) {
+      lines.push(`🤖 *Dica:* ${aiTip}`);
+    } else {
+      lines.push(saldo >= 0 ? `🌟 Dia positivo. Continue assim!` : `💪 Amanhã é uma nova chance de equilibrar.`);
+    }
+  } catch {
+    lines.push(saldo >= 0 ? `🌟 Dia positivo. Continue assim!` : `💪 Amanhã é uma nova chance de equilibrar.`);
+  }
+
+  lines.push(`_Brave IA 🤖_`);
+  return lines.join("\n");
+}
+
+// ── AI Tip Generator ──
 async function generateAITip(
-  name: string,
-  totalExpense: number,
-  totalIncome: number,
-  saldo: number,
-  pctUsed: number,
-  monthlyIncome: number,
-  todayExpense: number,
-  todayTxCount: number,
+  name: string, totalExpense: number, totalIncome: number,
+  saldo: number, pctUsed: number, monthlyIncome: number,
+  todayExpense: number, todayTxCount: number,
 ): Promise<string | null> {
   const GOOGLE_AI_KEY = Deno.env.get("GOOGLE_AI_KEY");
   if (!GOOGLE_AI_KEY) return null;
 
-  const prompt = `Você é a Brave IA, assessor financeiro pessoal. Gere UMA dica financeira curta (máximo 2 linhas) e personalizada baseada nesses dados do usuário:
-- Nome: ${name}
-- Gastos do mês: R$ ${totalExpense.toFixed(2)}
-- Receitas do mês: R$ ${totalIncome.toFixed(2)}
-- Saldo: R$ ${saldo.toFixed(2)}
-- Renda mensal: R$ ${monthlyIncome.toFixed(2)}
-- % usado da renda: ${pctUsed.toFixed(0)}%
-- Gasto hoje: R$ ${todayExpense.toFixed(2)}
-- Transações hoje: ${todayTxCount}
-
-Regras:
-- Seja motivador e prático
-- Use linguagem informal e brasileira
-- NÃO use emojis (já adicionamos depois)
-- Máximo 2 frases curtas
-- Foque no que o usuário pode fazer amanhã`;
+  const prompt = `Você é a Brave IA. Dê UMA dica financeira em no máximo 1 frase curta e prática.
+Dados: gastos mês R$${totalExpense.toFixed(0)}, receitas R$${totalIncome.toFixed(0)}, saldo R$${saldo.toFixed(0)}, renda R$${monthlyIncome.toFixed(0)}, ${pctUsed.toFixed(0)}% usado, gasto hoje R$${todayExpense.toFixed(0)}, ${todayTxCount} transações.
+Regras: sem emoji, informal, motivador, máximo 15 palavras.`;
 
   const resp = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GOOGLE_AI_KEY}`,
@@ -289,17 +257,12 @@ Regras:
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 100, temperature: 0.8 },
+        generationConfig: { maxOutputTokens: 50, temperature: 0.8 },
       }),
     },
   );
 
-  if (!resp.ok) {
-    console.error("Gemini AI error:", resp.status);
-    return null;
-  }
-
+  if (!resp.ok) return null;
   const data = await resp.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-  return text || null;
+  return data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
 }
