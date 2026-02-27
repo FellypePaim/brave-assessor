@@ -61,6 +61,7 @@ Deno.serve(async (req) => {
       password,
       fetchOnly,
       deleteUser,
+      resetUser,
       subscription_plan,
       subscription_expires_at,
       display_name,
@@ -97,22 +98,56 @@ Deno.serve(async (req) => {
 
     // deleteUser mode — permanently delete user
     if (deleteUser) {
-      // Prevent self-deletion
       if (userId === callerId) {
         return new Response(JSON.stringify({ error: "Você não pode excluir sua própria conta." }), {
-          status: 400,
-          headers: corsHeaders,
+          status: 400, headers: corsHeaders,
         });
       }
       const { error } = await adminClient.auth.admin.deleteUser(userId);
       if (error) {
         return new Response(JSON.stringify({ error: error.message }), {
-          status: 400,
-          headers: corsHeaders,
+          status: 400, headers: corsHeaders,
         });
       }
       return new Response(
         JSON.stringify({ success: true }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // resetUser mode — delete all user data EXCEPT profile (plan/whatsapp) and whatsapp_links
+    if (resetUser) {
+      const tables = [
+        "transactions",
+        "reminders",
+        "cards",
+        "financial_goals",
+        "recurring_transactions",
+        "categories",
+        "chat_messages",
+      ];
+      const errors: string[] = [];
+      for (const table of tables) {
+        const { error } = await adminClient.from(table).delete().eq("user_id", userId);
+        if (error) errors.push(`${table}: ${error.message}`);
+      }
+      // Reset wallets balance to 0 instead of deleting (keep structure)
+      const { error: walletErr } = await adminClient.from("wallets").delete().eq("user_id", userId);
+      if (walletErr) errors.push(`wallets: ${walletErr.message}`);
+
+      // Reset profile fields (keep plan, whatsapp, name)
+      await adminClient.from("profiles").update({
+        monthly_income: 0,
+        has_completed_onboarding: false,
+      }).eq("id", userId);
+
+      if (errors.length > 0) {
+        return new Response(JSON.stringify({ error: `Erros parciais: ${errors.join("; ")}` }), {
+          status: 400, headers: corsHeaders,
+        });
+      }
+      return new Response(
+        JSON.stringify({ success: true, message: "Dados do usuário resetados com sucesso." }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
