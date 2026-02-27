@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Navigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -7,8 +7,12 @@ type PlanStatus = "loading" | "active" | "blocked";
 
 function usePlanStatus(userId?: string, authLoading?: boolean): PlanStatus {
   const [status, setStatus] = useState<PlanStatus>("loading");
+  const initialCheckDone = useRef(false);
 
   useEffect(() => {
+    // Reset when user changes
+    initialCheckDone.current = false;
+
     // Don't evaluate plan status until auth has resolved
     if (authLoading) {
       setStatus("loading");
@@ -16,62 +20,73 @@ function usePlanStatus(userId?: string, authLoading?: boolean): PlanStatus {
     }
 
     if (!userId) {
-      // Auth resolved but no user — let ProtectedRoute handle redirect to /login
       setStatus("blocked");
       return;
     }
 
+    let isTeste = false;
+
     const check = async () => {
-      // Check if admin first — admins always have access
-      const { data: roleData } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", userId)
-        .eq("role", "admin")
-        .maybeSingle();
+      try {
+        // Check if admin first — admins always have access
+        const { data: roleData } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", userId)
+          .eq("role", "admin")
+          .maybeSingle();
 
-      if (roleData) {
-        setStatus("active");
-        return;
-      }
+        if (roleData) {
+          setStatus("active");
+          initialCheckDone.current = true;
+          return;
+        }
 
-      const { data } = await supabase
-        .from("profiles")
-        .select("subscription_plan, subscription_expires_at")
-        .eq("id", userId)
-        .maybeSingle();
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("subscription_plan, subscription_expires_at")
+          .eq("id", userId)
+          .maybeSingle();
 
-      if (!data) {
-        setStatus("blocked");
-        return;
-      }
-
-      const { subscription_plan, subscription_expires_at } = data;
-
-      // free = always blocked
-      if (!subscription_plan || subscription_plan === "free") {
-        setStatus("blocked");
-        return;
-      }
-
-      // mensal/anual/trimestral: only block if expiry has passed
-      // teste: block as soon as expiry passes (10 min limit)
-      if (subscription_expires_at) {
-        const expired = new Date(subscription_expires_at) < new Date();
-        if (expired) {
+        // If query failed (network/token issue) and user was already active, keep active
+        if (error || !data) {
+          if (initialCheckDone.current) return; // don't downgrade on transient errors
           setStatus("blocked");
           return;
         }
-      }
 
-      // Active plan with no expiry or valid expiry
-      setStatus("active");
+        const { subscription_plan, subscription_expires_at } = data;
+        isTeste = subscription_plan === "teste";
+
+        if (!subscription_plan || subscription_plan === "free") {
+          setStatus("blocked");
+          initialCheckDone.current = true;
+          return;
+        }
+
+        if (subscription_expires_at) {
+          const expired = new Date(subscription_expires_at) < new Date();
+          if (expired) {
+            setStatus("blocked");
+            initialCheckDone.current = true;
+            return;
+          }
+        }
+
+        setStatus("active");
+        initialCheckDone.current = true;
+      } catch {
+        // Network error — keep current status if already checked
+        if (!initialCheckDone.current) setStatus("blocked");
+      }
     };
 
     check();
 
-    // Only poll every 30s for "teste" plan (10min limit), otherwise check every 5min
-    const interval = setInterval(check, 30_000);
+    // Only poll for "teste" plan (10min limit), otherwise no need
+    const interval = setInterval(() => {
+      if (isTeste) check();
+    }, 30_000);
     return () => clearInterval(interval);
   }, [userId, authLoading]);
 
