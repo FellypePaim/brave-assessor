@@ -1337,8 +1337,11 @@ serve(async (req) => {
     }
 
     // ── "lembrete:" trigger — create reminder via WhatsApp ──
-    const reminderTrigger = /^\s*lembrete\s*[:;]?\s*/i;
-    if (reminderTrigger.test(messageText) && hasText) {
+    // IMPORTANT: Must NOT match "lembretes" (plural) which means "list my reminders"
+    const isListRemindersIntent = /^\s*(qual\s+)?(meus\s+lembretes|lembretes|ver\s+lembretes|meus\s+compromissos|quais\s+(meus\s+)?lembretes|listar\s+lembretes|mostrar\s+lembretes)\s*$/i.test(messageText);
+    const reminderTrigger = /^\s*lembrete\s*[:;]\s*/i;
+    const reminderTriggerLoose = /^\s*lembrete\s+(?!s\s*$)/i; // "lembrete reunião..." but NOT "lembretes"
+    if (!isListRemindersIntent && (reminderTrigger.test(messageText) || reminderTriggerLoose.test(messageText)) && hasText) {
       const { data: linkedForReminder } = await supabaseAdmin
         .from("whatsapp_links")
         .select("user_id")
@@ -1351,7 +1354,7 @@ serve(async (req) => {
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      const reminderText = messageText.replace(reminderTrigger, "").trim();
+      const reminderText = messageText.replace(/^\s*lembrete\s*[:;]?\s*/i, "").trim();
 
       // ── AI-first parsing, regex fallback ──
       let title = "";
