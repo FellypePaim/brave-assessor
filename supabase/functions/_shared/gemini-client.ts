@@ -79,7 +79,7 @@ export async function callGemini(opts: {
   const GOOGLE_AI_KEY = Deno.env.get("GOOGLE_AI_KEY");
   if (!GOOGLE_AI_KEY) throw new Error("GOOGLE_AI_KEY not configured");
 
-  const model = opts.model || "gemini-2.5-flash";
+  const model = opts.model || "gemini-2.0-flash-lite";
   const contents = convertToGeminiMessages(opts.systemPrompt, opts.messages);
 
   const resp = await fetch(
@@ -118,7 +118,7 @@ export async function callGeminiStream(opts: {
   const GOOGLE_AI_KEY = Deno.env.get("GOOGLE_AI_KEY");
   if (!GOOGLE_AI_KEY) throw new Error("GOOGLE_AI_KEY not configured");
 
-  const model = opts.model || "gemini-2.5-flash";
+  const model = opts.model || "gemini-2.0-flash-lite";
   const contents = convertToGeminiMessages(opts.systemPrompt, opts.messages);
 
   const resp = await fetch(
