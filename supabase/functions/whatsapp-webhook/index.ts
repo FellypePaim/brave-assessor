@@ -615,8 +615,8 @@ serve(async (req) => {
               await sendWhatsAppButtons(
                 cleanPhone,
                 `⏰ Com quanto tempo de antecedência você quer ser avisado?`,
-                [{ id: "30m", text: "30 minutos" }, { id: "1h", text: "1 hora" }, { id: "1d", text: "1 dia" }],
-                "Ou escreva: 2h, 15 min, 3 horas..."
+                [{ id: "5m", text: "5 minutos" }, { id: "10m", text: "10 minutos" }, { id: "30m", text: "30 minutos" }],
+                "Ou escreva: 1h, 15 min, 2 horas..."
               );
               return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
             }
@@ -815,8 +815,8 @@ serve(async (req) => {
             await sendWhatsAppButtons(
               cleanPhone,
               `⏰ Com quanto tempo de antecedência quer ser avisado sobre "${chosen.title}"?`,
-              [{ id: "30m", text: "30 minutos" }, { id: "1h", text: "1 hora" }, { id: "1d", text: "1 dia" }],
-              "Ou escreva: 2h, 15 min, 3 dias..."
+              [{ id: "5m", text: "5 minutos" }, { id: "10m", text: "10 minutos" }, { id: "30m", text: "30 minutos" }],
+              "Ou escreva: 1h, 15 min, 2 horas..."
             );
             return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
           }
@@ -852,8 +852,8 @@ serve(async (req) => {
               await sendWhatsAppButtons(
                 cleanPhone,
                 "❓ Não entendi. Escolha ou escreva o tempo de antecedência:",
-                [{ id: "30m", text: "30 minutos" }, { id: "1h", text: "1 hora" }, { id: "1d", text: "1 dia" }],
-                "Ou escreva: 2h, 15 min..."
+                [{ id: "5m", text: "5 minutos" }, { id: "10m", text: "10 minutos" }, { id: "30m", text: "30 minutos" }],
+                "Ou escreva: 1h, 15 min..."
               );
               return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
             }
@@ -1435,8 +1435,8 @@ serve(async (req) => {
         await sendWhatsAppButtons(
           cleanPhone,
           `🔔 *${title || reminderText}*\n📅 ${fmtDateStr}${recLbl ? `\n${recLbl}` : ""}\n\n⏰ Com quanto tempo de antecedência você quer ser avisado?`,
-          [{ id: "30m", text: "30 minutos" }, { id: "1h", text: "1 hora" }, { id: "1d", text: "1 dia" }],
-          "Ou escreva: 2h, 15 min, 3 horas..."
+          [{ id: "5m", text: "5 minutos" }, { id: "10m", text: "10 minutos" }, { id: "30m", text: "30 minutos" }],
+          "Ou escreva: 1h, 15 min, 2 horas..."
         );
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
