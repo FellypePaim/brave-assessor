@@ -21,6 +21,11 @@ interface Props {
   onOpenChange: (open: boolean) => void;
 }
 
+const DEFAULT_CATEGORY_NAMES = [
+  "Alimentação", "Transporte", "Moradia", "Saúde",
+  "Educação", "Lazer", "Vestuário", "Outros",
+];
+
 const colorOptions = [
   "#ef4444", "#f97316", "#f59e0b", "#10b981",
   "#3b82f6", "#8b5cf6", "#ec4899", "#6b7280",
@@ -51,6 +56,9 @@ export function EditCategoryDialog({ category, open, onOpenChange }: Props) {
   const [icon, setIcon] = useState("package");
   const [saving, setSaving] = useState(false);
   const isNew = !category;
+  const isDefault = !isNew && DEFAULT_CATEGORY_NAMES.some(
+    (n) => n.toLowerCase() === category?.name?.toLowerCase()
+  );
 
   useEffect(() => {
     if (category) {
@@ -86,7 +94,12 @@ export function EditCategoryDialog({ category, open, onOpenChange }: Props) {
   };
 
   const handleDelete = async () => {
-    if (!category || !window.confirm("Excluir esta categoria?")) return;
+    if (!category) return;
+    if (isDefault) {
+      toast({ title: "Categoria protegida", description: "Categorias padrão não podem ser excluídas.", variant: "destructive" });
+      return;
+    }
+    if (!window.confirm("Excluir esta categoria?")) return;
     const { error } = await supabase.from("categories").delete().eq("id", category.id);
     if (error) toast({ title: "Erro", description: error.message, variant: "destructive" });
     else { toast({ title: "Categoria excluída!" }); queryClient.invalidateQueries({ queryKey: ["categories"] }); onOpenChange(false); }
@@ -171,7 +184,7 @@ export function EditCategoryDialog({ category, open, onOpenChange }: Props) {
 
           {/* Actions */}
           <div className="flex gap-3 pt-1">
-            {!isNew && (
+            {!isNew && !isDefault && (
               <Button
                 variant="outline"
                 size="icon"
