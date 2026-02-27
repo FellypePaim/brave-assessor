@@ -108,6 +108,15 @@ async function executeAction(supabaseAdmin: any, userId: string, aiText: string)
     { r: /\{[\s\S]*"action"\s*:\s*"edit_reminder"[\s\S]*\}/, h: "edit_reminder" },
     { r: /\{[\s\S]*"action"\s*:\s*"list_reminders"[\s\S]*\}/, h: "list_reminders" },
     { r: /\{[\s\S]*"action"\s*:\s*"delete_transaction"[\s\S]*\}/, h: "delete_transaction" },
+    { r: /\{[\s\S]*"action"\s*:\s*"edit_transaction"[\s\S]*\}/, h: "edit_transaction" },
+    { r: /\{[\s\S]*"action"\s*:\s*"list_transactions"[\s\S]*\}/, h: "list_transactions" },
+    { r: /\{[\s\S]*"action"\s*:\s*"list_recurring"[\s\S]*\}/, h: "list_recurring" },
+    { r: /\{[\s\S]*"action"\s*:\s*"edit_recurring"[\s\S]*\}/, h: "edit_recurring" },
+    { r: /\{[\s\S]*"action"\s*:\s*"delete_recurring"[\s\S]*\}/, h: "delete_recurring" },
+    { r: /\{[\s\S]*"action"\s*:\s*"transfer_wallet"[\s\S]*\}/, h: "transfer_wallet" },
+    { r: /\{[\s\S]*"action"\s*:\s*"update_profile"[\s\S]*\}/, h: "update_profile" },
+    { r: /\{[\s\S]*"action"\s*:\s*"pay_bill"[\s\S]*\}/, h: "pay_bill" },
+    { r: /\{[\s\S]*"action"\s*:\s*"list_bills"[\s\S]*\}/, h: "list_bills" },
   ];
 
   const fmt = (v: number) => `R$ ${v.toFixed(2)}`;
@@ -121,11 +130,33 @@ async function executeAction(supabaseAdmin: any, userId: string, aiText: string)
         case "add_transaction": {
           const { data: cats } = await supabaseAdmin.from("categories").select("id, name").eq("user_id", userId);
           const cat = (cats || []).find((c: any) => c.name.toLowerCase() === (a.category || "").toLowerCase());
-          const { data: ws } = await supabaseAdmin.from("wallets").select("id, balance").eq("user_id", userId).order("created_at").limit(1);
-          const w = ws?.[0];
-          await supabaseAdmin.from("transactions").insert({ user_id: userId, amount: Number(a.amount), description: a.description, type: a.type || "expense", category_id: cat?.id || null, wallet_id: w?.id || null, date: new Date().toISOString().split("T")[0] });
-          if (w) { const ch = a.type === "income" ? Number(a.amount) : -Number(a.amount); await supabaseAdmin.from("wallets").update({ balance: Number(w.balance) + ch }).eq("id", w.id); }
-          return { executed: true, message: `✅ **Transação registrada!**\n\n📝 ${a.description}\n💵 ${fmt(Number(a.amount))}\n📂 ${a.category || "Sem categoria"}` };
+          // Support wallet/card selection
+          let walletId: string | null = null;
+          let cardId: string | null = null;
+          if (a.wallet) {
+            const { data: ws } = await supabaseAdmin.from("wallets").select("id, name, balance").eq("user_id", userId);
+            const w = (ws || []).find((w: any) => w.name.toLowerCase().includes(a.wallet.toLowerCase()));
+            if (w) walletId = w.id;
+          }
+          if (a.card) {
+            const { data: cs } = await supabaseAdmin.from("cards").select("id, name").eq("user_id", userId);
+            const c = (cs || []).find((c: any) => c.name.toLowerCase().includes(a.card.toLowerCase()));
+            if (c) cardId = c.id;
+          }
+          if (!walletId && !a.wallet) {
+            const { data: ws } = await supabaseAdmin.from("wallets").select("id, balance").eq("user_id", userId).order("created_at").limit(1);
+            if (ws?.[0]) walletId = ws[0].id;
+          }
+          const txDate = a.date || new Date().toISOString().split("T")[0];
+          await supabaseAdmin.from("transactions").insert({ user_id: userId, amount: Number(a.amount), description: a.description, type: a.type || "expense", category_id: cat?.id || null, wallet_id: walletId, card_id: cardId, date: txDate });
+          if (walletId) {
+            const { data: wData } = await supabaseAdmin.from("wallets").select("id, balance").eq("id", walletId).maybeSingle();
+            if (wData) {
+              const ch = a.type === "income" ? Number(a.amount) : -Number(a.amount);
+              await supabaseAdmin.from("wallets").update({ balance: Number(wData.balance) + ch }).eq("id", wData.id);
+            }
+          }
+          return { executed: true, message: `✅ **Transação registrada!**\n\n📝 ${a.description}\n💵 ${fmt(Number(a.amount))}\n📂 ${a.category || "Sem categoria"}${a.wallet ? `\n💳 ${a.wallet}` : ""}${a.card ? `\n💳 Cartão: ${a.card}` : ""}` };
         }
         case "add_goal": {
           await supabaseAdmin.from("financial_goals").insert({ user_id: userId, name: a.name, target_amount: Number(a.target_amount), current_amount: 0, deadline: a.deadline || null, color: a.color || "#10b981" });
@@ -304,6 +335,114 @@ async function executeAction(supabaseAdmin: any, userId: string, aiText: string)
           await supabaseAdmin.from("transactions").delete().eq("id", t.id);
           return { executed: true, message: `🗑️ Transação **${t.description}** (${fmt(Number(t.amount))}) excluída! Saldo atualizado.` };
         }
+        case "edit_transaction": {
+          const { data: ts } = await supabaseAdmin.from("transactions").select("id, description, amount, type, date, wallet_id, category_id")
+            .eq("user_id", userId).order("date", { ascending: false }).limit(20);
+          const t = (ts || []).find((t: any) => t.description.toLowerCase().includes((a.search || "").toLowerCase()));
+          if (!t) return { executed: true, message: `❓ Transação "${a.search}" não encontrada.` };
+          const u: any = {};
+          if (a.field === "amount") {
+            const oldAmount = Number(t.amount);
+            const newAmount = Number(a.new_value);
+            u.amount = newAmount;
+            if (t.wallet_id) {
+              const { data: w } = await supabaseAdmin.from("wallets").select("id, balance").eq("id", t.wallet_id).maybeSingle();
+              if (w) {
+                const diff = t.type === "income" ? (newAmount - oldAmount) : (oldAmount - newAmount);
+                await supabaseAdmin.from("wallets").update({ balance: Number(w.balance) + diff }).eq("id", w.id);
+              }
+            }
+          } else if (a.field === "description") u.description = a.new_value;
+          else if (a.field === "category") {
+            const { data: cats } = await supabaseAdmin.from("categories").select("id, name").eq("user_id", userId);
+            const cat = (cats || []).find((c: any) => c.name.toLowerCase().includes(String(a.new_value).toLowerCase()));
+            if (cat) u.category_id = cat.id;
+          } else if (a.field === "type") u.type = a.new_value;
+          if (Object.keys(u).length > 0) await supabaseAdmin.from("transactions").update(u).eq("id", t.id);
+          return { executed: true, message: `✅ Transação **${t.description}** atualizada!` };
+        }
+        case "list_transactions": {
+          const { data: ts } = await supabaseAdmin.from("transactions").select("description, amount, type, date, categories(name)")
+            .eq("user_id", userId).order("date", { ascending: false }).limit(10);
+          if (!ts || ts.length === 0) return { executed: true, message: "📭 Nenhuma transação recente." };
+          const list = ts.map((t: any, i: number) => {
+            const emoji = t.type === "income" ? "💰" : "💸";
+            const cat = (t as any).categories?.name || "";
+            return `${i + 1}. ${emoji} **${t.description}** — ${fmt(Number(t.amount))} · ${new Date(t.date + "T12:00:00").toLocaleDateString("pt-BR")}${cat ? ` · ${cat}` : ""}`;
+          }).join("\n");
+          return { executed: true, message: `📋 **Últimas transações:**\n\n${list}` };
+        }
+        case "list_recurring": {
+          const { data: rs } = await supabaseAdmin.from("recurring_transactions").select("*").eq("user_id", userId).eq("is_active", true).order("day_of_month");
+          if (!rs || rs.length === 0) return { executed: true, message: "📭 Nenhuma recorrência ativa." };
+          const total = rs.reduce((s: number, r: any) => s + Number(r.amount), 0);
+          const list = rs.map((r: any, i: number) => {
+            const emoji = r.type === "income" ? "💰" : "💸";
+            return `${i + 1}. ${emoji} **${r.description}** — ${fmt(Number(r.amount))} · dia ${r.day_of_month}`;
+          }).join("\n");
+          return { executed: true, message: `🔄 **Recorrências ativas:**\n\n${list}\n\n💸 **Total mensal: ${fmt(total)}**` };
+        }
+        case "edit_recurring": {
+          const { data: rs } = await supabaseAdmin.from("recurring_transactions").select("*").eq("user_id", userId).eq("is_active", true);
+          const r = (rs || []).find((r: any) => r.description.toLowerCase().includes((a.search || "").toLowerCase()));
+          if (!r) return { executed: true, message: `❓ Recorrência "${a.search}" não encontrada.` };
+          const u: any = {};
+          if (a.field === "amount") u.amount = Number(a.new_value);
+          else if (a.field === "description") u.description = a.new_value;
+          else if (a.field === "day_of_month") u.day_of_month = Number(a.new_value);
+          if (Object.keys(u).length > 0) await supabaseAdmin.from("recurring_transactions").update(u).eq("id", r.id);
+          return { executed: true, message: `✅ Recorrência **${r.description}** atualizada!` };
+        }
+        case "delete_recurring": {
+          const { data: rs } = await supabaseAdmin.from("recurring_transactions").select("*").eq("user_id", userId).eq("is_active", true);
+          const r = (rs || []).find((r: any) => r.description.toLowerCase().includes((a.search || "").toLowerCase()));
+          if (!r) return { executed: true, message: `❓ Recorrência "${a.search}" não encontrada.` };
+          await supabaseAdmin.from("recurring_transactions").update({ is_active: false }).eq("id", r.id);
+          return { executed: true, message: `🗑️ Recorrência **${r.description}** desativada!` };
+        }
+        case "transfer_wallet": {
+          const { data: ws } = await supabaseAdmin.from("wallets").select("*").eq("user_id", userId);
+          const from = (ws || []).find((w: any) => w.name.toLowerCase().includes((a.from || "").toLowerCase()));
+          const to = (ws || []).find((w: any) => w.name.toLowerCase().includes((a.to || "").toLowerCase()));
+          if (!from) return { executed: true, message: `❓ Carteira de origem "${a.from}" não encontrada.` };
+          if (!to) return { executed: true, message: `❓ Carteira de destino "${a.to}" não encontrada.` };
+          const amount = Number(a.amount);
+          if (Number(from.balance) < amount) return { executed: true, message: `❌ Saldo insuficiente em **${from.name}** (${fmt(Number(from.balance))}).` };
+          await supabaseAdmin.from("wallets").update({ balance: Number(from.balance) - amount }).eq("id", from.id);
+          await supabaseAdmin.from("wallets").update({ balance: Number(to.balance) + amount }).eq("id", to.id);
+          return { executed: true, message: `🔄 **Transferência realizada!**\n\n💳 ${from.name} → ${to.name}\n💵 ${fmt(amount)}\n\n📊 ${from.name}: ${fmt(Number(from.balance) - amount)}\n📊 ${to.name}: ${fmt(Number(to.balance) + amount)}` };
+        }
+        case "update_profile": {
+          const u: any = {};
+          if (a.field === "monthly_income") u.monthly_income = Number(a.new_value);
+          else if (a.field === "display_name") u.display_name = a.new_value;
+          if (Object.keys(u).length > 0) await supabaseAdmin.from("profiles").update(u).eq("id", userId);
+          const label = a.field === "monthly_income" ? `Renda mensal atualizada para ${fmt(Number(a.new_value))}` : `Nome atualizado para **${a.new_value}**`;
+          return { executed: true, message: `✅ ${label}` };
+        }
+        case "pay_bill": {
+          const { data: ts } = await supabaseAdmin.from("transactions").select("id, description, amount, type, wallet_id, due_date")
+            .eq("user_id", userId).eq("is_paid", false).eq("type", "expense").order("due_date").limit(20);
+          const t = (ts || []).find((t: any) => t.description.toLowerCase().includes((a.search || "").toLowerCase()));
+          if (!t) return { executed: true, message: `❓ Conta "${a.search}" não encontrada entre as pendentes.` };
+          await supabaseAdmin.from("transactions").update({ is_paid: true }).eq("id", t.id);
+          if (t.wallet_id) {
+            const { data: w } = await supabaseAdmin.from("wallets").select("id, balance").eq("id", t.wallet_id).maybeSingle();
+            if (w) await supabaseAdmin.from("wallets").update({ balance: Number(w.balance) - Number(t.amount) }).eq("id", w.id);
+          }
+          return { executed: true, message: `✅ Conta **${t.description}** (${fmt(Number(t.amount))}) marcada como paga!` };
+        }
+        case "list_bills": {
+          const { data: ts } = await supabaseAdmin.from("transactions").select("description, amount, due_date, categories(name)")
+            .eq("user_id", userId).eq("is_paid", false).eq("type", "expense").order("due_date").limit(15);
+          if (!ts || ts.length === 0) return { executed: true, message: "✅ Nenhuma conta pendente! Tudo em dia! 🎉" };
+          const total = ts.reduce((s: number, t: any) => s + Number(t.amount), 0);
+          const list = ts.map((t: any, i: number) => {
+            const due = t.due_date ? new Date(t.due_date + "T12:00:00").toLocaleDateString("pt-BR") : "sem vencimento";
+            return `${i + 1}. 📋 **${t.description}** — ${fmt(Number(t.amount))} · vence ${due}`;
+          }).join("\n");
+          return { executed: true, message: `📋 **Contas a pagar:**\n\n${list}\n\n💸 **Total: ${fmt(total)}**` };
+        }
       }
     } catch (e) { console.error("Action error:", e); }
   }
@@ -345,7 +484,12 @@ serve(async (req) => {
 
 💡 Capacidades executivas (responda SOMENTE com JSON quando executar):
 - Registrar transações: {"action":"add_transaction","amount":50,"description":"Almoço","category":"Alimentação","type":"expense"}
+- Com carteira específica: {"action":"add_transaction","amount":50,"description":"Almoço","category":"Alimentação","type":"expense","wallet":"Nubank"}
+- Com cartão específico: {"action":"add_transaction","amount":50,"description":"Almoço","category":"Alimentação","type":"expense","card":"Visa"}
+- Com data específica: {"action":"add_transaction","amount":50,"description":"Almoço","category":"Alimentação","type":"expense","date":"2026-02-26"}
+- Editar transação: {"action":"edit_transaction","search":"Almoço","field":"amount","new_value":60}
 - Excluir transação: {"action":"delete_transaction","search":"Almoço"}
+- Listar transações: {"action":"list_transactions"}
 - Criar metas: {"action":"add_goal","name":"Viagem","target_amount":5000,"deadline":"2026-06-30"}
 - Aportar em meta: {"action":"deposit_goal","search":"Viagem","amount":200}
 - Editar meta: {"action":"edit_goal","search":"Viagem","field":"target_amount","new_value":8000}
@@ -355,6 +499,7 @@ serve(async (req) => {
 - Editar carteira: {"action":"edit_wallet","search":"Nubank","field":"balance","new_value":1500}
 - Excluir carteira: {"action":"delete_wallet","search":"Nubank"}
 - Listar carteiras: {"action":"list_wallets"}
+- Transferir entre carteiras: {"action":"transfer_wallet","from":"Nubank","to":"Inter","amount":500}
 - Criar categoria: {"action":"add_category","name":"Pets","icon":"dog","budget_limit":300}
 - Editar categoria: {"action":"edit_category","search":"Alimentação","field":"budget_limit","new_value":800}
 - Excluir categoria: {"action":"delete_category","search":"Pets"}
@@ -367,6 +512,12 @@ serve(async (req) => {
 - Excluir lembrete: {"action":"delete_reminder","search":"Reunião"}
 - Editar lembrete: {"action":"edit_reminder","search":"Reunião","field":"time","new_value":"16:00"}
 - Listar lembretes: {"action":"list_reminders"}
+- Listar recorrências: {"action":"list_recurring"}
+- Editar recorrência: {"action":"edit_recurring","search":"Netflix","field":"amount","new_value":45}
+- Cancelar recorrência: {"action":"delete_recurring","search":"Netflix"}
+- Atualizar perfil: {"action":"update_profile","field":"monthly_income","new_value":5000}
+- Marcar conta como paga: {"action":"pay_bill","search":"Energia"}
+- Listar contas a pagar: {"action":"list_bills"}
 
 💡 Capacidades consultivas (responda em texto):
 - Analisar gastos, comparar meses, identificar padrões
@@ -393,7 +544,7 @@ ${financialContext}`;
 
     // Check if message might trigger an action
     const lastContent = typeof processedMessages[processedMessages.length - 1]?.content === "string" ? processedMessages[processedMessages.length - 1].content : "";
-    const actionKeywords = /gast|pagu|receb|comprei|almoc|uber|criar?\s+(meta|carteira|categoria|cart[aã]o|lembrete)|depositar|aportar|atualizar\s+saldo|adicionar\s+cart|mudar\s+or[cç]amento|lembrete|excluir|deletar|remover|apagar|listar|minhas?\s+(metas?|carteiras?|categorias?|cart[oõ]es|lembretes?)|meus\s+(cart[oõ]es|lembretes?)/i;
+    const actionKeywords = /gast|pagu|receb|comprei|almoc|uber|criar?\s+(meta|carteira|categoria|cart[aã]o|lembrete)|depositar|aportar|atualizar\s+saldo|adicionar\s+cart|mudar\s+or[cç]amento|lembrete|excluir|deletar|remover|apagar|listar|minhas?\s+(metas?|carteiras?|categorias?|cart[oõ]es|lembretes?|transa[cç][oõ]es|recorr[eê]ncias?|contas?)|meus\s+(cart[oõ]es|lembretes?|gastos?)|transfer|mover\s+\d|minha\s+renda|mudar\s+(?:meu\s+)?nome|contas?\s+(?:a\s+)?pag|pend[eê]nt|marcar\s+.+pag|[uú]ltim.+gast|extrato\s+recente|recorr[eê]nc/i;
 
     if (userId && actionKeywords.test(lastContent)) {
       const aiText = await callGemini({ model: "gemini-2.5-flash", systemPrompt, messages: processedMessages, temperature: 0.3 });
