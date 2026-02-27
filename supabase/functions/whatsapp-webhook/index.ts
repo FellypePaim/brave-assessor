@@ -586,6 +586,45 @@ serve(async (req) => {
             return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
           }
 
+          // ── Awaiting time input (user gave date but no time) ──
+          if (ctx.awaiting === "time") {
+            const timeMatch = effectiveText.match(/(\d{1,2})\s*[h:]\s*(\d{0,2})/i);
+            if (timeMatch) {
+              const hours = parseInt(timeMatch[1]);
+              const minutes = parseInt(timeMatch[2] || "0");
+              if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
+                const currentEventAt = new Date(ctx.event_at);
+                const brDate = new Date(currentEventAt.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+                brDate.setHours(hours, minutes, 0, 0);
+                const utcCorrected = new Date(brDate.getTime() + 3 * 60 * 60 * 1000);
+                const newEventAt = utcCorrected.toISOString();
+
+                // Remove awaiting flag, move to ask antecedência
+                const newCtx = { ...ctx, event_at: newEventAt };
+                delete newCtx.awaiting;
+
+                await supabaseAdmin.from("whatsapp_sessions").update({
+                  context: newCtx,
+                  expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+                }).eq("id", session.id);
+
+                const dtLabel = utcCorrected.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
+                const recLbl = recurrenceLabel(ctx.recurrence || "none", newEventAt, ctx.originalText || "");
+
+                await sendWhatsAppButtons(
+                  cleanPhone,
+                  `🔔 *${ctx.title}*\n📅 ${dtLabel}${recLbl ? `\n${recLbl}` : ""}\n\n⏰ Com quanto tempo de antecedência você quer ser avisado?`,
+                  [{ id: "5m", text: "5 minutos" }, { id: "10m", text: "10 minutos" }, { id: "30m", text: "30 minutos" }],
+                  "Ou escreva: 1h, 15 min, 2 horas..."
+                );
+                return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+              }
+            }
+            // Didn't understand time
+            await sendWhatsAppMessage(cleanPhone, "🕐 Não entendi o horário. Envie no formato: *14h*, *15:30*, *9h*");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
           // ── Detect time/date correction: "não é 11:00 é 14:00", "14:00", "14h", "as 14:00" ──
           const timeCorrectionMatch = effectiveText.match(/(?:(?:não|nao)\s+é?\s*\d{1,2}[h:]\d{0,2}\s*(?:é|e|,)\s*)?(\d{1,2})[h:](\d{0,2})/i);
           const isTimeCorrection = /(?:não|nao)\s+é?\s*\d{1,2}|^\s*\d{1,2}[h:]\d{0,2}\s*$/i.test(effectiveText) && !parseNotifyMinutes(effectiveText);
@@ -595,10 +634,6 @@ serve(async (req) => {
             const minutes = parseInt(timeCorrectionMatch[2] || "0");
             if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
               const currentEventAt = new Date(ctx.event_at);
-              // Set the corrected time preserving the date
-              const corrected = new Date(currentEventAt);
-              corrected.setHours(hours + 3, minutes, 0, 0); // +3 because stored in UTC, user means BRT
-              // Actually, let's work with the ISO and adjust properly
               const brDate = new Date(currentEventAt.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
               brDate.setHours(hours, minutes, 0, 0);
               const utcCorrected = new Date(brDate.getTime() + 3 * 60 * 60 * 1000);
@@ -1408,6 +1443,35 @@ serve(async (req) => {
         await sendWhatsAppMessage(cleanPhone,
           `🔔 *Criando lembrete: ${title || "Lembrete"}*\n\n` +
           `📅 Qual a data e horário do evento?\n\nExemplo: amanhã 15h, 19/02 16:00, sexta 10h`
+        );
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Check if the user explicitly mentioned a time (e.g. "14h", "15:00", "3 da tarde", "meio-dia")
+      const hasExplicitTime = /\d{1,2}\s*[h:]\s*\d{0,2}|\d{1,2}\s*da\s*(tarde|manhã|manha|noite)|meio[\s-]?dia|meia[\s-]?noite/i.test(reminderText);
+
+      if (!hasExplicitTime) {
+        // User gave a date but no time — ask for the time first
+        await supabaseAdmin.from("whatsapp_sessions").insert({
+          phone_number: cleanPhone,
+          step: "reminder_notify",
+          context: {
+            user_id: linkedForReminder.user_id,
+            title: title || reminderText,
+            event_at: eventDate.toISOString(),
+            recurrence,
+            originalText: reminderText,
+            awaiting: "time",
+          },
+          expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+        });
+
+        const fmtDateOnly = eventDate.toLocaleDateString("pt-BR", {
+          day: "2-digit", month: "2-digit", year: "numeric", timeZone: "America/Sao_Paulo",
+        });
+
+        await sendWhatsAppMessage(cleanPhone,
+          `🔔 *${title || reminderText}*\n📅 Data: ${fmtDateOnly}\n\n🕐 Qual horário do evento?\n\nExemplo: 14h, 15:30, 9h`
         );
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
