@@ -712,6 +712,15 @@ serve(async (req) => {
             } else if (itemType === "wallet") {
               await supabaseAdmin.from("wallets").delete().eq("id", chosen.id);
               msg = `🗑️ Carteira *${chosen.name}* apagada!`;
+            } else if (itemType === "goal") {
+              await supabaseAdmin.from("financial_goals").delete().eq("id", chosen.id);
+              msg = `🗑️ Meta *${chosen.name}* apagada!`;
+            } else if (itemType === "category") {
+              await supabaseAdmin.from("categories").delete().eq("id", chosen.id);
+              msg = `🗑️ Categoria *${chosen.name}* apagada!`;
+            } else if (itemType === "recurring") {
+              await supabaseAdmin.from("recurring_transactions").delete().eq("id", chosen.id);
+              msg = `🗑️ Recorrência *${chosen.description}* apagada!`;
             }
             await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
             await sendWhatsAppMessage(cleanPhone, `${msg}\n\n_Brave IA 🤖_`);
@@ -724,6 +733,9 @@ serve(async (req) => {
               transaction: "select_transaction_to_delete",
               card: "select_card_to_delete",
               wallet: "select_wallet_to_delete",
+              goal: "select_goal_to_delete",
+              category: "select_category_to_delete",
+              recurring: "select_recurring_to_delete",
             };
             await supabaseAdmin.from("whatsapp_sessions").update({
               step: stepMap[itemType] || "select_transaction_to_delete",
@@ -737,6 +749,140 @@ serve(async (req) => {
           await sendWhatsAppButtons(cleanPhone,
             "⚠️ Responda *sim* para confirmar ou *não* para voltar.",
             [{ id: "CONFIRM_ITEM_DEL", text: "✅ Sim, apagar" }, { id: "BACK_ITEM_LIST", text: "❌ Não, voltar" }], "");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // ── Step: select goal to delete (numbered list) ──
+        if (session.step === "select_goal_to_delete") {
+          const items: any[] = ctx.items_list || [];
+          const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+          if (/^\s*(cancelar|sair|voltar)\s*$/i.test(effectiveText)) {
+            await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
+            await sendWhatsAppMessage(cleanPhone, "❌ Operação cancelada. Nenhuma meta foi apagada.");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          if (/^\s*(todos|tudo|all|0)\s*$/i.test(effectiveText)) {
+            await supabaseAdmin.from("whatsapp_sessions").update({
+              step: "confirm_bulk_delete", context: { ...ctx, delete_target: "goals" },
+              expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+            }).eq("id", session.id);
+            await sendWhatsAppButtons(cleanPhone,
+              `🎯 *ATENÇÃO!* Deseja apagar *TODAS as ${items.length} metas*?\n\n⚠️ Esta ação *NÃO pode ser desfeita*!`,
+              [{ id: "BULK_DELETE_YES", text: "✅ Sim, apagar tudo" }, { id: "BULK_DELETE_NO", text: "❌ Não, cancelar" }], "");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          const numMatch = effectiveText.match(/^(\d+)$/);
+          if (numMatch) {
+            const idx = parseInt(numMatch[1]) - 1;
+            if (idx >= 0 && idx < items.length) {
+              const chosen = items[idx];
+              await supabaseAdmin.from("whatsapp_sessions").update({
+                step: "confirm_single_item_delete", context: { ...ctx, chosen_item: chosen, item_type: "goal" },
+                expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+              }).eq("id", session.id);
+              await sendWhatsAppButtons(cleanPhone,
+                `⚠️ Apagar meta *${chosen.name}* (${fmt(Number(chosen.current_amount))}/${fmt(Number(chosen.target_amount))})?`,
+                [{ id: "CONFIRM_ITEM_DEL", text: "✅ Sim, apagar" }, { id: "BACK_ITEM_LIST", text: "❌ Não, voltar" }], "");
+              return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            }
+          }
+
+          const list = items.map((g: any, i: number) => {
+            const pct = Math.round((Number(g.current_amount) / Number(g.target_amount)) * 100);
+            return `${i + 1}. 🎯 *${g.name}* — ${pct}% (${fmt(Number(g.current_amount))}/${fmt(Number(g.target_amount))})`;
+          }).join("\n");
+          await sendWhatsAppMessage(cleanPhone, `❓ Responda com o *número*:\n\n${list}\n\n0️⃣ *Todas* — apagar todas\n❌ *Cancelar* — sair`);
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // ── Step: select category to delete (numbered list) ──
+        if (session.step === "select_category_to_delete") {
+          const items: any[] = ctx.items_list || [];
+
+          if (/^\s*(cancelar|sair|voltar)\s*$/i.test(effectiveText)) {
+            await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
+            await sendWhatsAppMessage(cleanPhone, "❌ Operação cancelada. Nenhuma categoria foi apagada.");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          if (/^\s*(todos|tudo|all|0)\s*$/i.test(effectiveText)) {
+            await supabaseAdmin.from("whatsapp_sessions").update({
+              step: "confirm_bulk_delete", context: { ...ctx, delete_target: "categories" },
+              expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+            }).eq("id", session.id);
+            await sendWhatsAppButtons(cleanPhone,
+              `📂 *ATENÇÃO!* Deseja apagar *TODAS as ${items.length} categorias*?\n\n⚠️ Esta ação *NÃO pode ser desfeita*!`,
+              [{ id: "BULK_DELETE_YES", text: "✅ Sim, apagar tudo" }, { id: "BULK_DELETE_NO", text: "❌ Não, cancelar" }], "");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          const numMatch = effectiveText.match(/^(\d+)$/);
+          if (numMatch) {
+            const idx = parseInt(numMatch[1]) - 1;
+            if (idx >= 0 && idx < items.length) {
+              const chosen = items[idx];
+              await supabaseAdmin.from("whatsapp_sessions").update({
+                step: "confirm_single_item_delete", context: { ...ctx, chosen_item: chosen, item_type: "category" },
+                expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+              }).eq("id", session.id);
+              await sendWhatsAppButtons(cleanPhone,
+                `⚠️ Apagar categoria *${chosen.name}*?`,
+                [{ id: "CONFIRM_ITEM_DEL", text: "✅ Sim, apagar" }, { id: "BACK_ITEM_LIST", text: "❌ Não, voltar" }], "");
+              return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            }
+          }
+
+          const list = items.map((c: any, i: number) => `${i + 1}. 📂 *${c.name}*`).join("\n");
+          await sendWhatsAppMessage(cleanPhone, `❓ Responda com o *número*:\n\n${list}\n\n0️⃣ *Todas* — apagar todas\n❌ *Cancelar* — sair`);
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // ── Step: select recurring to delete (numbered list) ──
+        if (session.step === "select_recurring_to_delete") {
+          const items: any[] = ctx.items_list || [];
+          const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+          if (/^\s*(cancelar|sair|voltar)\s*$/i.test(effectiveText)) {
+            await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
+            await sendWhatsAppMessage(cleanPhone, "❌ Operação cancelada. Nenhuma recorrência foi apagada.");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          if (/^\s*(todos|tudo|all|0)\s*$/i.test(effectiveText)) {
+            await supabaseAdmin.from("whatsapp_sessions").update({
+              step: "confirm_bulk_delete", context: { ...ctx, delete_target: "recurring" },
+              expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+            }).eq("id", session.id);
+            await sendWhatsAppButtons(cleanPhone,
+              `🔄 *ATENÇÃO!* Deseja apagar *TODAS as ${items.length} recorrências*?\n\n⚠️ Esta ação *NÃO pode ser desfeita*!`,
+              [{ id: "BULK_DELETE_YES", text: "✅ Sim, apagar tudo" }, { id: "BULK_DELETE_NO", text: "❌ Não, cancelar" }], "");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          const numMatch = effectiveText.match(/^(\d+)$/);
+          if (numMatch) {
+            const idx = parseInt(numMatch[1]) - 1;
+            if (idx >= 0 && idx < items.length) {
+              const chosen = items[idx];
+              await supabaseAdmin.from("whatsapp_sessions").update({
+                step: "confirm_single_item_delete", context: { ...ctx, chosen_item: chosen, item_type: "recurring" },
+                expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+              }).eq("id", session.id);
+              await sendWhatsAppButtons(cleanPhone,
+                `⚠️ Apagar recorrência *${chosen.description}* (${fmt(Number(chosen.amount))})?`,
+                [{ id: "CONFIRM_ITEM_DEL", text: "✅ Sim, apagar" }, { id: "BACK_ITEM_LIST", text: "❌ Não, voltar" }], "");
+              return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            }
+          }
+
+          const list = items.map((r: any, i: number) => {
+            const icon = r.type === "income" ? "📈" : "📉";
+            return `${i + 1}. ${icon} *${r.description}* — ${fmt(Number(r.amount))}/mês (dia ${r.day_of_month})`;
+          }).join("\n");
+          await sendWhatsAppMessage(cleanPhone, `❓ Responda com o *número*:\n\n${list}\n\n0️⃣ *Todas* — apagar todas\n❌ *Cancelar* — sair`);
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
@@ -4232,31 +4378,90 @@ Metas financeiras: ${goalsCtx}`;
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // ── Detect other delete_all_* actions (goals, categories, recurring, reset_all) ──
-      const bulkDeleteTargets: Record<string, { action: string; label: string; emoji: string }> = {
-        delete_all_goals: { action: "goals", label: "metas", emoji: "🎯" },
-        delete_all_categories: { action: "categories", label: "categorias", emoji: "📂" },
-        delete_all_recurring: { action: "recurring", label: "recorrências", emoji: "🔄" },
-        reset_all_data: { action: "all", label: "TODOS os dados financeiros", emoji: "⚠️" },
-      };
-      for (const [actionName, info] of Object.entries(bulkDeleteTargets)) {
-        const bulkAction = extractActionJson(aiResponse, actionName);
-        if (bulkAction) {
-          await supabaseAdmin.from("whatsapp_sessions").delete().eq("phone_number", cleanPhone);
-          await supabaseAdmin.from("whatsapp_sessions").insert({
-            phone_number: cleanPhone,
-            step: "confirm_bulk_delete",
-            context: { user_id: userId, delete_target: info.action },
-            expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-          });
-          await sendWhatsAppButtons(
-            cleanPhone,
-            `${info.emoji} *ATENÇÃO!* Você tem certeza que deseja apagar *${info.label}*?\n\n⚠️ Esta ação *NÃO pode ser desfeita*!`,
-            [{ id: "BULK_DELETE_YES", text: "✅ Sim, apagar tudo" }, { id: "BULK_DELETE_NO", text: "❌ Não, cancelar" }],
-            ""
-          );
+      // ── Detect delete_all_goals — show numbered list ──
+      const bulkDeleteGoals = extractActionJson(aiResponse, "delete_all_goals");
+      if (bulkDeleteGoals) {
+        const { data: allGoals } = await supabaseAdmin.from("financial_goals")
+          .select("id, name, target_amount, current_amount")
+          .eq("user_id", userId).order("name");
+        if (!allGoals || allGoals.length === 0) {
+          await sendWhatsAppMessage(cleanPhone, "📭 Você não tem metas para apagar.");
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
+        const fmtG = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        const list = allGoals.map((g: any, i: number) => {
+          const pct = Math.round((Number(g.current_amount) / Number(g.target_amount)) * 100);
+          return `${i + 1}. 🎯 *${g.name}* — ${pct}% (${fmtG(Number(g.current_amount))}/${fmtG(Number(g.target_amount))})`;
+        }).join("\n");
+        await supabaseAdmin.from("whatsapp_sessions").delete().eq("phone_number", cleanPhone);
+        await supabaseAdmin.from("whatsapp_sessions").insert({
+          phone_number: cleanPhone, step: "select_goal_to_delete",
+          context: { user_id: userId, items_list: allGoals },
+          expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+        });
+        await sendWhatsAppMessage(cleanPhone, `🗑️ *Qual meta deseja apagar?*\n\n${list}\n\n0️⃣ *Todas* — apagar todas\n❌ *Cancelar* — sair`);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ── Detect delete_all_categories — show numbered list ──
+      const bulkDeleteCats = extractActionJson(aiResponse, "delete_all_categories");
+      if (bulkDeleteCats) {
+        const { data: allCats } = await supabaseAdmin.from("categories")
+          .select("id, name, icon")
+          .eq("user_id", userId).order("name");
+        if (!allCats || allCats.length === 0) {
+          await sendWhatsAppMessage(cleanPhone, "📭 Você não tem categorias para apagar.");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        const list = allCats.map((c: any, i: number) => `${i + 1}. 📂 *${c.name}*`).join("\n");
+        await supabaseAdmin.from("whatsapp_sessions").delete().eq("phone_number", cleanPhone);
+        await supabaseAdmin.from("whatsapp_sessions").insert({
+          phone_number: cleanPhone, step: "select_category_to_delete",
+          context: { user_id: userId, items_list: allCats },
+          expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+        });
+        await sendWhatsAppMessage(cleanPhone, `🗑️ *Qual categoria deseja apagar?*\n\n${list}\n\n0️⃣ *Todas* — apagar todas\n❌ *Cancelar* — sair`);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ── Detect delete_all_recurring — show numbered list ──
+      const bulkDeleteRec = extractActionJson(aiResponse, "delete_all_recurring");
+      if (bulkDeleteRec) {
+        const { data: allRec } = await supabaseAdmin.from("recurring_transactions")
+          .select("id, description, amount, type, day_of_month")
+          .eq("user_id", userId).eq("is_active", true).order("description");
+        if (!allRec || allRec.length === 0) {
+          await sendWhatsAppMessage(cleanPhone, "📭 Você não tem recorrências para apagar.");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        const fmtR = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        const list = allRec.map((r: any, i: number) => {
+          const icon = r.type === "income" ? "📈" : "📉";
+          return `${i + 1}. ${icon} *${r.description}* — ${fmtR(Number(r.amount))}/mês (dia ${r.day_of_month})`;
+        }).join("\n");
+        await supabaseAdmin.from("whatsapp_sessions").delete().eq("phone_number", cleanPhone);
+        await supabaseAdmin.from("whatsapp_sessions").insert({
+          phone_number: cleanPhone, step: "select_recurring_to_delete",
+          context: { user_id: userId, items_list: allRec },
+          expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+        });
+        await sendWhatsAppMessage(cleanPhone, `🗑️ *Qual recorrência deseja apagar?*\n\n${list}\n\n0️⃣ *Todas* — apagar todas\n❌ *Cancelar* — sair`);
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ── Detect reset_all_data — direct confirmation (no list) ──
+      const resetAllAction = extractActionJson(aiResponse, "reset_all_data");
+      if (resetAllAction) {
+        await supabaseAdmin.from("whatsapp_sessions").delete().eq("phone_number", cleanPhone);
+        await supabaseAdmin.from("whatsapp_sessions").insert({
+          phone_number: cleanPhone, step: "confirm_bulk_delete",
+          context: { user_id: userId, delete_target: "all" },
+          expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+        });
+        await sendWhatsAppButtons(cleanPhone,
+          `⚠️ *ATENÇÃO!* Você tem certeza que deseja apagar *TODOS os dados financeiros*?\n\n⚠️ Esta ação *NÃO pode ser desfeita*!`,
+          [{ id: "BULK_DELETE_YES", text: "✅ Sim, apagar tudo" }, { id: "BULK_DELETE_NO", text: "❌ Não, cancelar" }], "");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
     } catch (parseErr) {
