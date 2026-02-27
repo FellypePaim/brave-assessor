@@ -85,56 +85,35 @@ ${(recurring || []).map((r: any) => `- ${r.description}: R$ ${Number(r.amount).t
 }
 
 async function executeAction(supabaseAdmin: any, userId: string, aiText: string): Promise<{ executed: boolean; message: string }> {
-  const patterns = [
-    { r: /\{[\s\S]*"action"\s*:\s*"add_transaction"[\s\S]*\}/, h: "add_transaction" },
-    { r: /\{[\s\S]*"action"\s*:\s*"add_goal"[\s\S]*\}/, h: "add_goal" },
-    { r: /\{[\s\S]*"action"\s*:\s*"deposit_goal"[\s\S]*\}/, h: "deposit_goal" },
-    { r: /\{[\s\S]*"action"\s*:\s*"edit_goal"[\s\S]*\}/, h: "edit_goal" },
-    { r: /\{[\s\S]*"action"\s*:\s*"delete_goal"[\s\S]*\}/, h: "delete_goal" },
-    { r: /\{[\s\S]*"action"\s*:\s*"list_goals"[\s\S]*\}/, h: "list_goals" },
-    { r: /\{[\s\S]*"action"\s*:\s*"add_wallet"[\s\S]*\}/, h: "add_wallet" },
-    { r: /\{[\s\S]*"action"\s*:\s*"edit_wallet"[\s\S]*\}/, h: "edit_wallet" },
-    { r: /\{[\s\S]*"action"\s*:\s*"delete_wallet"[\s\S]*\}/, h: "delete_wallet" },
-    { r: /\{[\s\S]*"action"\s*:\s*"list_wallets"[\s\S]*\}/, h: "list_wallets" },
-    { r: /\{[\s\S]*"action"\s*:\s*"add_category"[\s\S]*\}/, h: "add_category" },
-    { r: /\{[\s\S]*"action"\s*:\s*"edit_category"[\s\S]*\}/, h: "edit_category" },
-    { r: /\{[\s\S]*"action"\s*:\s*"delete_category"[\s\S]*\}/, h: "delete_category" },
-    { r: /\{[\s\S]*"action"\s*:\s*"list_categories"[\s\S]*\}/, h: "list_categories" },
-    { r: /\{[\s\S]*"action"\s*:\s*"add_card"[\s\S]*\}/, h: "add_card" },
-    { r: /\{[\s\S]*"action"\s*:\s*"edit_card"[\s\S]*\}/, h: "edit_card" },
-    { r: /\{[\s\S]*"action"\s*:\s*"delete_card"[\s\S]*\}/, h: "delete_card" },
-    { r: /\{[\s\S]*"action"\s*:\s*"list_cards"[\s\S]*\}/, h: "list_cards" },
-    { r: /\{[\s\S]*"action"\s*:\s*"add_reminder"[\s\S]*\}/, h: "add_reminder" },
-    { r: /\{[\s\S]*"action"\s*:\s*"delete_reminder"[\s\S]*\}/, h: "delete_reminder" },
-    { r: /\{[\s\S]*"action"\s*:\s*"edit_reminder"[\s\S]*\}/, h: "edit_reminder" },
-    { r: /\{[\s\S]*"action"\s*:\s*"list_reminders"[\s\S]*\}/, h: "list_reminders" },
-    { r: /\{[\s\S]*"action"\s*:\s*"delete_transaction"[\s\S]*\}/, h: "delete_transaction" },
-    { r: /\{[\s\S]*"action"\s*:\s*"edit_transaction"[\s\S]*\}/, h: "edit_transaction" },
-    { r: /\{[\s\S]*"action"\s*:\s*"list_transactions"[\s\S]*\}/, h: "list_transactions" },
-    { r: /\{[\s\S]*"action"\s*:\s*"list_recurring"[\s\S]*\}/, h: "list_recurring" },
-    { r: /\{[\s\S]*"action"\s*:\s*"edit_recurring"[\s\S]*\}/, h: "edit_recurring" },
-    { r: /\{[\s\S]*"action"\s*:\s*"delete_recurring"[\s\S]*\}/, h: "delete_recurring" },
-    { r: /\{[\s\S]*"action"\s*:\s*"transfer_wallet"[\s\S]*\}/, h: "transfer_wallet" },
-    { r: /\{[\s\S]*"action"\s*:\s*"update_profile"[\s\S]*\}/, h: "update_profile" },
-    { r: /\{[\s\S]*"action"\s*:\s*"pay_bill"[\s\S]*\}/, h: "pay_bill" },
-    { r: /\{[\s\S]*"action"\s*:\s*"list_bills"[\s\S]*\}/, h: "list_bills" },
-    { r: /\{[\s\S]*"action"\s*:\s*"delete_all_reminders"[\s\S]*\}/, h: "delete_all_reminders" },
-    { r: /\{[\s\S]*"action"\s*:\s*"delete_all_transactions"[\s\S]*\}/, h: "delete_all_transactions" },
-    { r: /\{[\s\S]*"action"\s*:\s*"delete_all_cards"[\s\S]*\}/, h: "delete_all_cards" },
-    { r: /\{[\s\S]*"action"\s*:\s*"delete_all_wallets"[\s\S]*\}/, h: "delete_all_wallets" },
-    { r: /\{[\s\S]*"action"\s*:\s*"delete_all_goals"[\s\S]*\}/, h: "delete_all_goals" },
-    { r: /\{[\s\S]*"action"\s*:\s*"delete_all_categories"[\s\S]*\}/, h: "delete_all_categories" },
-    { r: /\{[\s\S]*"action"\s*:\s*"delete_all_recurring"[\s\S]*\}/, h: "delete_all_recurring" },
-    { r: /\{[\s\S]*"action"\s*:\s*"reset_all_data"[\s\S]*\}/, h: "reset_all_data" },
+  const actionNames = [
+    "add_transaction", "add_list", "add_recurring_list", "add_goal", "deposit_goal", "edit_goal",
+    "delete_goal", "list_goals", "add_wallet", "edit_wallet", "delete_wallet",
+    "list_wallets", "add_category", "edit_category", "delete_category", "list_categories",
+    "add_card", "edit_card", "delete_card", "list_cards", "add_reminder",
+    "delete_reminder", "edit_reminder", "list_reminders", "delete_transaction",
+    "edit_transaction", "list_transactions", "list_recurring", "edit_recurring",
+    "delete_recurring", "transfer_wallet", "update_profile", "pay_bill", "list_bills",
+    "delete_all_reminders", "delete_all_transactions", "delete_all_cards",
+    "delete_all_wallets", "delete_all_goals", "delete_all_categories",
+    "delete_all_recurring", "reset_all_data",
   ];
 
   const fmt = (v: number) => `R$ ${v.toFixed(2)}`;
 
-  for (const { r, h } of patterns) {
-    const match = aiText.match(r);
-    if (!match) continue;
-    try {
-      const a = JSON.parse(match[0]);
+  // Use the robust shared parser to find the action
+  let a: any = null;
+  let h: string = "";
+  for (const name of actionNames) {
+    const found = extractActionJson(aiText, name);
+    if (found) {
+      a = found;
+      h = name;
+      break;
+    }
+  }
+  if (!a) return { executed: false, message: "" };
+
+  try {
       switch (h) {
         case "add_transaction": {
           const { data: cats } = await supabaseAdmin.from("categories").select("id, name").eq("user_id", userId);
@@ -507,8 +486,7 @@ async function executeAction(supabaseAdmin: any, userId: string, aiText: string)
           return { executed: true, message: "🗑️ **Todos os dados financeiros foram resetados!** Lembretes, transações, carteiras, cartões, metas, categorias e recorrências foram apagados." };
         }
       }
-    } catch (e) { console.error("Action error:", e); }
-  }
+  } catch (e) { console.error("Action error:", e); }
   return { executed: false, message: "" };
 }
 
