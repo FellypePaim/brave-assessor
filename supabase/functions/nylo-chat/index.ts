@@ -90,13 +90,24 @@ async function executeAction(supabaseAdmin: any, userId: string, aiText: string)
     { r: /\{[\s\S]*"action"\s*:\s*"deposit_goal"[\s\S]*\}/, h: "deposit_goal" },
     { r: /\{[\s\S]*"action"\s*:\s*"edit_goal"[\s\S]*\}/, h: "edit_goal" },
     { r: /\{[\s\S]*"action"\s*:\s*"delete_goal"[\s\S]*\}/, h: "delete_goal" },
+    { r: /\{[\s\S]*"action"\s*:\s*"list_goals"[\s\S]*\}/, h: "list_goals" },
     { r: /\{[\s\S]*"action"\s*:\s*"add_wallet"[\s\S]*\}/, h: "add_wallet" },
     { r: /\{[\s\S]*"action"\s*:\s*"edit_wallet"[\s\S]*\}/, h: "edit_wallet" },
+    { r: /\{[\s\S]*"action"\s*:\s*"delete_wallet"[\s\S]*\}/, h: "delete_wallet" },
+    { r: /\{[\s\S]*"action"\s*:\s*"list_wallets"[\s\S]*\}/, h: "list_wallets" },
     { r: /\{[\s\S]*"action"\s*:\s*"add_category"[\s\S]*\}/, h: "add_category" },
     { r: /\{[\s\S]*"action"\s*:\s*"edit_category"[\s\S]*\}/, h: "edit_category" },
+    { r: /\{[\s\S]*"action"\s*:\s*"delete_category"[\s\S]*\}/, h: "delete_category" },
+    { r: /\{[\s\S]*"action"\s*:\s*"list_categories"[\s\S]*\}/, h: "list_categories" },
     { r: /\{[\s\S]*"action"\s*:\s*"add_card"[\s\S]*\}/, h: "add_card" },
     { r: /\{[\s\S]*"action"\s*:\s*"edit_card"[\s\S]*\}/, h: "edit_card" },
+    { r: /\{[\s\S]*"action"\s*:\s*"delete_card"[\s\S]*\}/, h: "delete_card" },
+    { r: /\{[\s\S]*"action"\s*:\s*"list_cards"[\s\S]*\}/, h: "list_cards" },
     { r: /\{[\s\S]*"action"\s*:\s*"add_reminder"[\s\S]*\}/, h: "add_reminder" },
+    { r: /\{[\s\S]*"action"\s*:\s*"delete_reminder"[\s\S]*\}/, h: "delete_reminder" },
+    { r: /\{[\s\S]*"action"\s*:\s*"edit_reminder"[\s\S]*\}/, h: "edit_reminder" },
+    { r: /\{[\s\S]*"action"\s*:\s*"list_reminders"[\s\S]*\}/, h: "list_reminders" },
+    { r: /\{[\s\S]*"action"\s*:\s*"delete_transaction"[\s\S]*\}/, h: "delete_transaction" },
   ];
 
   const fmt = (v: number) => `R$ ${v.toFixed(2)}`;
@@ -188,6 +199,111 @@ async function executeAction(supabaseAdmin: any, userId: string, aiText: string)
           const dt = new Date(eventAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
           return { executed: true, message: `🔔 **Lembrete criado!**\n\n📝 ${a.title}\n📅 ${dt}` };
         }
+        case "delete_reminder": {
+          const { data: rs } = await supabaseAdmin.from("reminders").select("*").eq("user_id", userId).eq("is_active", true);
+          const r = (rs || []).find((r: any) => r.title.toLowerCase().includes((a.search || "").toLowerCase()));
+          if (!r) return { executed: true, message: `❓ Lembrete "${a.search}" não encontrado.` };
+          await supabaseAdmin.from("reminders").delete().eq("id", r.id);
+          return { executed: true, message: `🗑️ Lembrete **${r.title}** excluído!` };
+        }
+        case "edit_reminder": {
+          const { data: rs } = await supabaseAdmin.from("reminders").select("*").eq("user_id", userId).eq("is_active", true);
+          const r = (rs || []).find((r: any) => r.title.toLowerCase().includes((a.search || "").toLowerCase()));
+          if (!r) return { executed: true, message: `❓ Lembrete "${a.search}" não encontrado.` };
+          const u: any = {};
+          if (a.field === "title") u.title = a.new_value;
+          else if (a.field === "time" && a.new_value) {
+            const cd = new Date(r.event_at); const [h, m] = a.new_value.split(":").map(Number);
+            cd.setHours(h, m, 0, 0); u.event_at = cd.toISOString(); u.is_sent = false;
+          } else if (a.field === "date" && a.new_value) {
+            const ct = new Date(r.event_at);
+            u.event_at = new Date(`${a.new_value}T${ct.getHours().toString().padStart(2,"0")}:${ct.getMinutes().toString().padStart(2,"0")}:00-03:00`).toISOString();
+            u.is_sent = false;
+          } else if (a.field === "recurrence") u.recurrence = a.new_value;
+          if (Object.keys(u).length > 0) await supabaseAdmin.from("reminders").update(u).eq("id", r.id);
+          return { executed: true, message: `✅ Lembrete **${r.title}** atualizado!` };
+        }
+        case "list_reminders": {
+          const { data: rs } = await supabaseAdmin.from("reminders").select("*").eq("user_id", userId).eq("is_active", true).order("event_at").limit(10);
+          if (!rs || rs.length === 0) return { executed: true, message: "📭 Nenhum lembrete ativo." };
+          const list = rs.map((r: any, i: number) => {
+            const dt = new Date(r.event_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
+            const rec = r.recurrence !== "none" ? ` 🔁 ${r.recurrence}` : "";
+            return `${i + 1}. 🔔 **${r.title}** — ${dt}${rec}`;
+          }).join("\n");
+          return { executed: true, message: `📋 **Seus lembretes:**\n\n${list}` };
+        }
+        case "list_goals": {
+          const { data: gs } = await supabaseAdmin.from("financial_goals").select("*").eq("user_id", userId).order("created_at");
+          if (!gs || gs.length === 0) return { executed: true, message: "📭 Nenhuma meta cadastrada." };
+          const list = gs.map((g: any, i: number) => {
+            const pct = ((Number(g.current_amount) / Number(g.target_amount)) * 100).toFixed(0);
+            return `${i + 1}. 🎯 **${g.name}** — ${fmt(Number(g.current_amount))} / ${fmt(Number(g.target_amount))} (${pct}%)`;
+          }).join("\n");
+          return { executed: true, message: `🎯 **Suas metas:**\n\n${list}` };
+        }
+        case "list_wallets": {
+          const { data: ws } = await supabaseAdmin.from("wallets").select("*").eq("user_id", userId).order("created_at");
+          if (!ws || ws.length === 0) return { executed: true, message: "📭 Nenhuma carteira cadastrada." };
+          const total = ws.reduce((s: number, w: any) => s + Number(w.balance), 0);
+          const list = ws.map((w: any, i: number) => `${i + 1}. 💳 **${w.name}** (${w.type}) — ${fmt(Number(w.balance))}`).join("\n");
+          return { executed: true, message: `💳 **Suas carteiras:**\n\n${list}\n\n💰 **Total: ${fmt(total)}**` };
+        }
+        case "delete_wallet": {
+          const { data: ws } = await supabaseAdmin.from("wallets").select("*").eq("user_id", userId);
+          const w = (ws || []).find((w: any) => w.name.toLowerCase().includes((a.search || "").toLowerCase()));
+          if (!w) return { executed: true, message: `❓ Carteira "${a.search}" não encontrada.` };
+          await supabaseAdmin.from("wallets").delete().eq("id", w.id);
+          return { executed: true, message: `🗑️ Carteira **${w.name}** excluída!` };
+        }
+        case "list_categories": {
+          const { data: cs } = await supabaseAdmin.from("categories").select("*").eq("user_id", userId).order("name");
+          if (!cs || cs.length === 0) return { executed: true, message: "📭 Nenhuma categoria cadastrada." };
+          const list = cs.map((c: any, i: number) => {
+            const budget = c.budget_limit ? ` · Limite: ${fmt(Number(c.budget_limit))}` : "";
+            return `${i + 1}. 📂 **${c.name}**${budget}`;
+          }).join("\n");
+          return { executed: true, message: `📂 **Suas categorias:**\n\n${list}` };
+        }
+        case "delete_category": {
+          const { data: cs } = await supabaseAdmin.from("categories").select("*").eq("user_id", userId);
+          const c = (cs || []).find((c: any) => c.name.toLowerCase().includes((a.search || "").toLowerCase()));
+          if (!c) return { executed: true, message: `❓ Categoria "${a.search}" não encontrada.` };
+          await supabaseAdmin.from("categories").delete().eq("id", c.id);
+          return { executed: true, message: `🗑️ Categoria **${c.name}** excluída!` };
+        }
+        case "list_cards": {
+          const { data: cs } = await supabaseAdmin.from("cards").select("*").eq("user_id", userId).order("created_at");
+          if (!cs || cs.length === 0) return { executed: true, message: "📭 Nenhum cartão cadastrado." };
+          const list = cs.map((c: any, i: number) => {
+            const digits = c.last_4_digits ? ` (****${c.last_4_digits})` : "";
+            const limit = c.credit_limit ? ` · Limite: ${fmt(Number(c.credit_limit))}` : "";
+            return `${i + 1}. 💳 **${c.name}**${digits}${limit}`;
+          }).join("\n");
+          return { executed: true, message: `💳 **Seus cartões:**\n\n${list}` };
+        }
+        case "delete_card": {
+          const { data: cs } = await supabaseAdmin.from("cards").select("*").eq("user_id", userId);
+          const c = (cs || []).find((c: any) => c.name.toLowerCase().includes((a.search || "").toLowerCase()));
+          if (!c) return { executed: true, message: `❓ Cartão "${a.search}" não encontrado.` };
+          await supabaseAdmin.from("cards").delete().eq("id", c.id);
+          return { executed: true, message: `🗑️ Cartão **${c.name}** excluído!` };
+        }
+        case "delete_transaction": {
+          const { data: ts } = await supabaseAdmin.from("transactions").select("id, description, amount, type, date, wallet_id")
+            .eq("user_id", userId).order("date", { ascending: false }).limit(20);
+          const t = (ts || []).find((t: any) => t.description.toLowerCase().includes((a.search || "").toLowerCase()));
+          if (!t) return { executed: true, message: `❓ Transação "${a.search}" não encontrada.` };
+          if (t.wallet_id) {
+            const { data: w } = await supabaseAdmin.from("wallets").select("id, balance").eq("id", t.wallet_id).maybeSingle();
+            if (w) {
+              const change = t.type === "income" ? -Number(t.amount) : Number(t.amount);
+              await supabaseAdmin.from("wallets").update({ balance: Number(w.balance) + change }).eq("id", w.id);
+            }
+          }
+          await supabaseAdmin.from("transactions").delete().eq("id", t.id);
+          return { executed: true, message: `🗑️ Transação **${t.description}** (${fmt(Number(t.amount))}) excluída! Saldo atualizado.` };
+        }
       }
     } catch (e) { console.error("Action error:", e); }
   }
@@ -229,17 +345,28 @@ serve(async (req) => {
 
 💡 Capacidades executivas (responda SOMENTE com JSON quando executar):
 - Registrar transações: {"action":"add_transaction","amount":50,"description":"Almoço","category":"Alimentação","type":"expense"}
+- Excluir transação: {"action":"delete_transaction","search":"Almoço"}
 - Criar metas: {"action":"add_goal","name":"Viagem","target_amount":5000,"deadline":"2026-06-30"}
 - Aportar em meta: {"action":"deposit_goal","search":"Viagem","amount":200}
 - Editar meta: {"action":"edit_goal","search":"Viagem","field":"target_amount","new_value":8000}
 - Excluir meta: {"action":"delete_goal","search":"Viagem"}
+- Listar metas: {"action":"list_goals"}
 - Criar carteira: {"action":"add_wallet","name":"Nubank","type":"checking","balance":0}
 - Editar carteira: {"action":"edit_wallet","search":"Nubank","field":"balance","new_value":1500}
+- Excluir carteira: {"action":"delete_wallet","search":"Nubank"}
+- Listar carteiras: {"action":"list_wallets"}
 - Criar categoria: {"action":"add_category","name":"Pets","icon":"dog","budget_limit":300}
 - Editar categoria: {"action":"edit_category","search":"Alimentação","field":"budget_limit","new_value":800}
+- Excluir categoria: {"action":"delete_category","search":"Pets"}
+- Listar categorias: {"action":"list_categories"}
 - Adicionar cartão: {"action":"add_card","name":"Nubank","brand":"Visa","credit_limit":5000,"due_day":10}
 - Editar cartão: {"action":"edit_card","search":"Nubank","field":"credit_limit","new_value":8000}
+- Excluir cartão: {"action":"delete_card","search":"Nubank"}
+- Listar cartões: {"action":"list_cards"}
 - Criar lembrete: {"action":"add_reminder","title":"Reunião","date":"2026-03-01","time":"15:00","recurrence":"none","notify_minutes_before":30}
+- Excluir lembrete: {"action":"delete_reminder","search":"Reunião"}
+- Editar lembrete: {"action":"edit_reminder","search":"Reunião","field":"time","new_value":"16:00"}
+- Listar lembretes: {"action":"list_reminders"}
 
 💡 Capacidades consultivas (responda em texto):
 - Analisar gastos, comparar meses, identificar padrões
@@ -266,7 +393,7 @@ ${financialContext}`;
 
     // Check if message might trigger an action
     const lastContent = typeof processedMessages[processedMessages.length - 1]?.content === "string" ? processedMessages[processedMessages.length - 1].content : "";
-    const actionKeywords = /gast|pagu|receb|comprei|almoc|uber|criar?\s+(meta|carteira|categoria|cart[aã]o|lembrete)|depositar|aportar|atualizar\s+saldo|adicionar\s+cart|mudar\s+or[cç]amento|lembrete|excluir|deletar|remover\s+meta/i;
+    const actionKeywords = /gast|pagu|receb|comprei|almoc|uber|criar?\s+(meta|carteira|categoria|cart[aã]o|lembrete)|depositar|aportar|atualizar\s+saldo|adicionar\s+cart|mudar\s+or[cç]amento|lembrete|excluir|deletar|remover|apagar|listar|minhas?\s+(metas?|carteiras?|categorias?|cart[oõ]es|lembretes?)|meus\s+(cart[oõ]es|lembretes?)/i;
 
     if (userId && actionKeywords.test(lastContent)) {
       const aiText = await callGemini({ model: "gemini-2.5-flash", systemPrompt, messages: processedMessages, temperature: 0.3 });

@@ -126,28 +126,45 @@ Para CRIAR carteira: {"action":"add_wallet","name":"Nubank","type":"checking","b
 Tipos: "checking" (corrente), "savings" (poupança), "cash" (dinheiro), "investment" (investimento)
 Para EDITAR carteira: {"action":"edit_wallet","search":"Nubank","field":"balance","new_value":1500}
 Campos: "name", "balance", "type"
+Para EXCLUIR carteira: {"action":"delete_wallet","search":"Nubank"}
 Para LISTAR carteiras: {"action":"list_wallets"}
 
 Exemplos:
 - "criar carteira Nubank" → add_wallet
 - "atualizar saldo Nubank para 1500" → edit_wallet
+- "excluir carteira Nubank" → delete_wallet
 - "minhas carteiras" → list_wallets
 
 📂 CATEGORIAS:
 Para CRIAR categoria: {"action":"add_category","name":"Pets","icon":"dog","color":"#f97316","budget_limit":300}
 Para EDITAR categoria: {"action":"edit_category","search":"Alimentação","field":"budget_limit","new_value":800}
 Campos: "name", "budget_limit", "color", "icon"
+Para EXCLUIR categoria: {"action":"delete_category","search":"Pets"}
 Para LISTAR categorias: {"action":"list_categories"}
 
 Exemplos:
 - "criar categoria Pets com orçamento de 300" → add_category
 - "mudar orçamento de Alimentação para 800" → edit_category
+- "excluir categoria Pets" → delete_category
 
 💳 CARTÕES:
 Para CRIAR cartão: {"action":"add_card","name":"Nubank","brand":"Visa","last_4_digits":"1234","credit_limit":5000,"due_day":10}
 Para EDITAR cartão: {"action":"edit_card","search":"Nubank","field":"credit_limit","new_value":8000}
 Campos: "name", "brand", "credit_limit", "due_day", "last_4_digits"
+Para EXCLUIR cartão: {"action":"delete_card","search":"Nubank"}
 Para LISTAR cartões: {"action":"list_cards"}
+
+Exemplos:
+- "adicionar cartão Nubank Visa limite 5000" → add_card
+- "excluir cartão Nubank" → delete_card
+
+🗑️ EXCLUIR TRANSAÇÃO:
+Para EXCLUIR uma transação recente: {"action":"delete_transaction","search":"Almoço"}
+Busca pela descrição mais recente.
+
+Exemplos:
+- "excluir transação do almoço" → delete_transaction
+- "remover o gasto de gasolina" → delete_transaction
 
 🔔 LEMBRETES (PRIORIDADE ALTA):
 Quando o usuário pedir para criar um lembrete (ex: "lembrete: reunião amanhã 15h", "me lembra de pagar a conta dia 10", "adicione um lembrete para amanhã 11:00 para atualizar o SIA"), responda SOMENTE com JSON:
