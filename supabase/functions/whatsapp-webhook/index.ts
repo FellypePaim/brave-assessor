@@ -12,6 +12,11 @@ import {
   processWithNoxIA, processImageWithAI, processAudioWithAI,
   parseReminderWithAI,
 } from "../_shared/whatsapp-ai.ts";
+import {
+  extractActionJson, safeJsonParse, extractAllActions,
+  cleanDescription, normalizeAmount, normalizeType, cleanSearchTerm,
+  cleanReminderTitle, extractUserTime, forceTimeOnIso,
+} from "../_shared/ai-response-parser.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -2714,11 +2719,15 @@ Metas financeiras: ${goalsCtx}`;
     let replyText = aiResponse;
     try {
       // ── Detect recurring list action ──
-      const listMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"add_recurring_list"[\s\S]*\}/);
-      if (listMatch) {
-        const action = JSON.parse(listMatch[0]);
-        const items: any[] = action.items || [];
-
+      const listAction = extractActionJson(aiResponse, "add_recurring_list");
+      if (listAction) {
+        const action = listAction;
+        const items: any[] = (action.items || []).map((item: any) => ({
+          ...item,
+          amount: normalizeAmount(item.amount),
+          description: cleanDescription(item.description || ""),
+          type: normalizeType(item.type || "expense"),
+        }));
         if (items.length === 0) throw new Error("Empty list");
 
         const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -2765,9 +2774,12 @@ Metas financeiras: ${goalsCtx}`;
       }
 
       // ── Detect single transaction action ──
-      const jsonMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"add_transaction"[\s\S]*\}/);
-      if (jsonMatch) {
-        const action = JSON.parse(jsonMatch[0]);
+      const txAction = extractActionJson(aiResponse, "add_transaction");
+      if (txAction) {
+        const action = txAction;
+        action.amount = normalizeAmount(action.amount);
+        action.description = cleanDescription(action.description || "");
+        action.type = normalizeType(action.type || "expense");
 
         const matchedCategory = (categories || []).find(
           (c: any) => c.name.toLowerCase() === action.category?.toLowerCase()
@@ -2805,9 +2817,11 @@ Metas financeiras: ${goalsCtx}`;
       }
 
       // ── Detect add_reminder action from AI ──
-      const reminderMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"add_reminder"[\s\S]*\}/);
-      if (reminderMatch) {
-        const action = JSON.parse(reminderMatch[0]);
+      const reminderAction = extractActionJson(aiResponse, "add_reminder");
+      if (reminderAction) {
+        const action = reminderAction;
+        // Clean the title programmatically
+        action.title = cleanReminderTitle(action.title || "", effectiveText || messageText);
         
         // Build event_at from date + time provided by AI
         let eventAt: string | null = null;
@@ -2817,6 +2831,16 @@ Metas financeiras: ${goalsCtx}`;
           eventAt = new Date(`${action.date}T09:00:00-03:00`).toISOString();
         } else if (action.event_at) {
           eventAt = new Date(action.event_at).toISOString();
+        }
+
+        // Force user's intended time from original text (compensate for AI errors)
+        if (eventAt) {
+          const userTime = extractUserTime(effectiveText || messageText);
+          if (userTime) {
+            const dateStr = eventAt.length >= 10 ? new Date(eventAt).toISOString().substring(0, 10) : eventAt.substring(0, 10);
+            eventAt = forceTimeOnIso(dateStr + "T00:00:00-03:00", userTime.hours, userTime.minutes);
+            eventAt = new Date(eventAt).toISOString();
+          }
         }
 
         if (!eventAt || isNaN(new Date(eventAt).getTime())) {
@@ -2915,9 +2939,9 @@ Metas financeiras: ${goalsCtx}`;
       }
 
       // ── Detect delete_reminder action from AI ──
-      const deleteReminderMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"delete_reminder"[\s\S]*\}/);
-      if (deleteReminderMatch) {
-        const action = JSON.parse(deleteReminderMatch[0]);
+      const deleteReminderAction = extractActionJson(aiResponse, "delete_reminder");
+      if (deleteReminderAction) {
+        const action = deleteReminderAction;
         const searchTerm = (action.search || "").toLowerCase();
 
         const { data: userReminders } = await supabaseAdmin
@@ -2982,9 +3006,9 @@ Metas financeiras: ${goalsCtx}`;
       }
 
       // ── Detect edit_reminder action from AI ──
-      const editReminderMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"edit_reminder"[\s\S]*\}/);
-      if (editReminderMatch) {
-        const action = JSON.parse(editReminderMatch[0]);
+      const editReminderAction = extractActionJson(aiResponse, "edit_reminder");
+      if (editReminderAction) {
+        const action = editReminderAction;
         const searchTerm = (action.search || "").toLowerCase();
 
         const { data: userReminders } = await supabaseAdmin
@@ -3081,9 +3105,9 @@ Metas financeiras: ${goalsCtx}`;
         });
       }
       // ── Detect add_goal action ──
-      const addGoalMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"add_goal"[\s\S]*\}/);
-      if (addGoalMatch) {
-        const action = JSON.parse(addGoalMatch[0]);
+      const addGoalAction = extractActionJson(aiResponse, "add_goal");
+      if (addGoalAction) {
+        const action = addGoalAction;
         const { error } = await supabaseAdmin.from("financial_goals").insert({
           user_id: userId,
           name: action.name,
@@ -3107,9 +3131,9 @@ Metas financeiras: ${goalsCtx}`;
       }
 
       // ── Detect deposit_goal action ──
-      const depositGoalMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"deposit_goal"[\s\S]*\}/);
-      if (depositGoalMatch) {
-        const action = JSON.parse(depositGoalMatch[0]);
+      const depositGoalAction = extractActionJson(aiResponse, "deposit_goal");
+      if (depositGoalAction) {
+        const action = depositGoalAction;
         const searchTerm = (action.search || "").toLowerCase();
         const { data: goals } = await supabaseAdmin.from("financial_goals").select("*").eq("user_id", userId);
         const matched = (goals || []).find((g: any) => g.name.toLowerCase().includes(searchTerm));
@@ -3133,9 +3157,9 @@ Metas financeiras: ${goalsCtx}`;
       }
 
       // ── Detect edit_goal action ──
-      const editGoalMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"edit_goal"[\s\S]*\}/);
-      if (editGoalMatch) {
-        const action = JSON.parse(editGoalMatch[0]);
+      const editGoalAction = extractActionJson(aiResponse, "edit_goal");
+      if (editGoalAction) {
+        const action = editGoalAction;
         const searchTerm = (action.search || "").toLowerCase();
         const { data: goals } = await supabaseAdmin.from("financial_goals").select("*").eq("user_id", userId);
         const matched = (goals || []).find((g: any) => g.name.toLowerCase().includes(searchTerm));
@@ -3156,9 +3180,9 @@ Metas financeiras: ${goalsCtx}`;
       }
 
       // ── Detect delete_goal action ──
-      const deleteGoalMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"delete_goal"[\s\S]*\}/);
-      if (deleteGoalMatch) {
-        const action = JSON.parse(deleteGoalMatch[0]);
+      const deleteGoalAction = extractActionJson(aiResponse, "delete_goal");
+      if (deleteGoalAction) {
+        const action = deleteGoalAction;
         const searchTerm = (action.search || "").toLowerCase();
         const { data: goals } = await supabaseAdmin.from("financial_goals").select("*").eq("user_id", userId);
         const matched = (goals || []).find((g: any) => g.name.toLowerCase().includes(searchTerm));
@@ -3172,8 +3196,8 @@ Metas financeiras: ${goalsCtx}`;
       }
 
       // ── Detect list_goals action ──
-      const listGoalsMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"list_goals"[\s\S]*\}/);
-      if (listGoalsMatch) {
+      const listGoalsAction = extractActionJson(aiResponse, "list_goals");
+      if (listGoalsAction) {
         const { data: goals } = await supabaseAdmin.from("financial_goals").select("*").eq("user_id", userId).order("created_at");
         if (!goals || goals.length === 0) {
           await sendWhatsAppMessage(cleanPhone, "📭 Você não tem metas cadastradas.\n\nPara criar: _\"criar meta de viagem de 5000\"_\n\n_Brave IA 🤖_");
@@ -3189,9 +3213,9 @@ Metas financeiras: ${goalsCtx}`;
       }
 
       // ── Detect add_wallet action ──
-      const addWalletMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"add_wallet"[\s\S]*\}/);
-      if (addWalletMatch) {
-        const action = JSON.parse(addWalletMatch[0]);
+      const addWalletAction = extractActionJson(aiResponse, "add_wallet");
+      if (addWalletAction) {
+        const action = addWalletAction;
         const { error } = await supabaseAdmin.from("wallets").insert({
           user_id: userId,
           name: action.name,
@@ -3213,9 +3237,9 @@ Metas financeiras: ${goalsCtx}`;
       }
 
       // ── Detect edit_wallet action ──
-      const editWalletMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"edit_wallet"[\s\S]*\}/);
-      if (editWalletMatch) {
-        const action = JSON.parse(editWalletMatch[0]);
+      const editWalletAction = extractActionJson(aiResponse, "edit_wallet");
+      if (editWalletAction) {
+        const action = editWalletAction;
         const searchTerm = (action.search || "").toLowerCase();
         const { data: wList } = await supabaseAdmin.from("wallets").select("*").eq("user_id", userId);
         const matched = (wList || []).find((w: any) => w.name.toLowerCase().includes(searchTerm));
@@ -3235,8 +3259,8 @@ Metas financeiras: ${goalsCtx}`;
       }
 
       // ── Detect list_wallets action ──
-      const listWalletsMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"list_wallets"[\s\S]*\}/);
-      if (listWalletsMatch) {
+      const listWalletsAction = extractActionJson(aiResponse, "list_wallets");
+      if (listWalletsAction) {
         const { data: wList } = await supabaseAdmin.from("wallets").select("*").eq("user_id", userId).order("created_at");
         if (!wList || wList.length === 0) {
           await sendWhatsAppMessage(cleanPhone, "📭 Nenhuma carteira cadastrada.\n\nPara criar: _\"criar carteira Nubank\"_\n\n_Brave IA 🤖_");
@@ -3250,9 +3274,9 @@ Metas financeiras: ${goalsCtx}`;
       }
 
       // ── Detect add_category action ──
-      const addCategoryMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"add_category"[\s\S]*\}/);
-      if (addCategoryMatch) {
-        const action = JSON.parse(addCategoryMatch[0]);
+      const addCategoryAction = extractActionJson(aiResponse, "add_category");
+      if (addCategoryAction) {
+        const action = addCategoryAction;
         const { error } = await supabaseAdmin.from("categories").insert({
           user_id: userId,
           name: action.name,
@@ -3274,9 +3298,9 @@ Metas financeiras: ${goalsCtx}`;
       }
 
       // ── Detect edit_category action ──
-      const editCategoryMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"edit_category"[\s\S]*\}/);
-      if (editCategoryMatch) {
-        const action = JSON.parse(editCategoryMatch[0]);
+      const editCategoryAction = extractActionJson(aiResponse, "edit_category");
+      if (editCategoryAction) {
+        const action = editCategoryAction;
         const searchTerm = (action.search || "").toLowerCase();
         const matched = (categories || []).find((c: any) => c.name.toLowerCase().includes(searchTerm));
         if (!matched) {
@@ -3296,8 +3320,8 @@ Metas financeiras: ${goalsCtx}`;
       }
 
       // ── Detect list_categories action ──
-      const listCategoriesMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"list_categories"[\s\S]*\}/);
-      if (listCategoriesMatch) {
+      const listCategoriesAction = extractActionJson(aiResponse, "list_categories");
+      if (listCategoriesAction) {
         if (!categories || categories.length === 0) {
           await sendWhatsAppMessage(cleanPhone, "📭 Nenhuma categoria cadastrada.\n\n_Brave IA 🤖_");
         } else {
@@ -3311,9 +3335,9 @@ Metas financeiras: ${goalsCtx}`;
       }
 
       // ── Detect add_card action ──
-      const addCardMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"add_card"[\s\S]*\}/);
-      if (addCardMatch) {
-        const action = JSON.parse(addCardMatch[0]);
+      const addCardAction = extractActionJson(aiResponse, "add_card");
+      if (addCardAction) {
+        const action = addCardAction;
         const { error } = await supabaseAdmin.from("cards").insert({
           user_id: userId,
           name: action.name,
@@ -3338,9 +3362,9 @@ Metas financeiras: ${goalsCtx}`;
       }
 
       // ── Detect edit_card action ──
-      const editCardMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"edit_card"[\s\S]*\}/);
-      if (editCardMatch) {
-        const action = JSON.parse(editCardMatch[0]);
+      const editCardAction = extractActionJson(aiResponse, "edit_card");
+      if (editCardAction) {
+        const action = editCardAction;
         const searchTerm = (action.search || "").toLowerCase();
         const { data: cardList } = await supabaseAdmin.from("cards").select("*").eq("user_id", userId);
         const matched = (cardList || []).find((c: any) => c.name.toLowerCase().includes(searchTerm));
@@ -3362,8 +3386,8 @@ Metas financeiras: ${goalsCtx}`;
       }
 
       // ── Detect list_cards action ──
-      const listCardsMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"list_cards"[\s\S]*\}/);
-      if (listCardsMatch) {
+      const listCardsAction = extractActionJson(aiResponse, "list_cards");
+      if (listCardsAction) {
         const { data: cardList } = await supabaseAdmin.from("cards").select("*").eq("user_id", userId).order("created_at");
         if (!cardList || cardList.length === 0) {
           await sendWhatsAppMessage(cleanPhone, "📭 Nenhum cartão cadastrado.\n\nPara adicionar: _\"adicionar cartão Nubank Visa limite 5000 vence dia 10\"_\n\n_Brave IA 🤖_");
@@ -3380,9 +3404,9 @@ Metas financeiras: ${goalsCtx}`;
       }
 
       // ── Detect delete_wallet action ──
-      const deleteWalletMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"delete_wallet"[\s\S]*\}/);
-      if (deleteWalletMatch) {
-        const action = JSON.parse(deleteWalletMatch[0]);
+      const deleteWalletAction = extractActionJson(aiResponse, "delete_wallet");
+      if (deleteWalletAction) {
+        const action = deleteWalletAction;
         const searchTerm = (action.search || "").toLowerCase();
         const { data: wList } = await supabaseAdmin.from("wallets").select("*").eq("user_id", userId);
         const matched = (wList || []).find((w: any) => w.name.toLowerCase().includes(searchTerm));
@@ -3396,9 +3420,9 @@ Metas financeiras: ${goalsCtx}`;
       }
 
       // ── Detect delete_category action ──
-      const deleteCategoryMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"delete_category"[\s\S]*\}/);
-      if (deleteCategoryMatch) {
-        const action = JSON.parse(deleteCategoryMatch[0]);
+      const deleteCategoryAction = extractActionJson(aiResponse, "delete_category");
+      if (deleteCategoryAction) {
+        const action = deleteCategoryAction;
         const searchTerm = (action.search || "").toLowerCase();
         const matched = (categories || []).find((c: any) => c.name.toLowerCase().includes(searchTerm));
         if (!matched) {
@@ -3411,9 +3435,9 @@ Metas financeiras: ${goalsCtx}`;
       }
 
       // ── Detect delete_card action ──
-      const deleteCardMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"delete_card"[\s\S]*\}/);
-      if (deleteCardMatch) {
-        const action = JSON.parse(deleteCardMatch[0]);
+      const deleteCardAction = extractActionJson(aiResponse, "delete_card");
+      if (deleteCardAction) {
+        const action = deleteCardAction;
         const searchTerm = (action.search || "").toLowerCase();
         const { data: cList } = await supabaseAdmin.from("cards").select("*").eq("user_id", userId);
         const matched = (cList || []).find((c: any) => c.name.toLowerCase().includes(searchTerm));
@@ -3427,9 +3451,9 @@ Metas financeiras: ${goalsCtx}`;
       }
 
       // ── Detect delete_transaction action ──
-      const deleteTransactionMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"delete_transaction"[\s\S]*\}/);
-      if (deleteTransactionMatch) {
-        const action = JSON.parse(deleteTransactionMatch[0]);
+      const deleteTransactionAction = extractActionJson(aiResponse, "delete_transaction");
+      if (deleteTransactionAction) {
+        const action = deleteTransactionAction;
         const searchTerm = (action.search || "").toLowerCase();
         const { data: txList } = await supabaseAdmin.from("transactions").select("id, description, amount, type, date, wallet_id")
           .eq("user_id", userId).order("date", { ascending: false }).limit(20);
@@ -3459,9 +3483,9 @@ Metas financeiras: ${goalsCtx}`;
       }
 
       // ── Detect edit_transaction action ──
-      const editTransactionMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"edit_transaction"[\s\S]*\}/);
-      if (editTransactionMatch) {
-        const action = JSON.parse(editTransactionMatch[0]);
+      const editTransactionAction = extractActionJson(aiResponse, "edit_transaction");
+      if (editTransactionAction) {
+        const action = editTransactionAction;
         const searchTerm = (action.search || "").toLowerCase();
         const { data: txList } = await supabaseAdmin.from("transactions").select("id, description, amount, type, date, wallet_id, category_id")
           .eq("user_id", userId).order("date", { ascending: false }).limit(20);
@@ -3495,8 +3519,8 @@ Metas financeiras: ${goalsCtx}`;
       }
 
       // ── Detect list_transactions action ──
-      const listTransactionsMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"list_transactions"[\s\S]*\}/);
-      if (listTransactionsMatch) {
+      const listTransactionsAction = extractActionJson(aiResponse, "list_transactions");
+      if (listTransactionsAction) {
         const { data: txList } = await supabaseAdmin.from("transactions").select("description, amount, type, date, categories(name)")
           .eq("user_id", userId).order("date", { ascending: false }).limit(10);
         if (!txList || txList.length === 0) {
@@ -3515,8 +3539,8 @@ Metas financeiras: ${goalsCtx}`;
       }
 
       // ── Detect list_recurring action ──
-      const listRecurringMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"list_recurring"[\s\S]*\}/);
-      if (listRecurringMatch) {
+      const listRecurringAction = extractActionJson(aiResponse, "list_recurring");
+      if (listRecurringAction) {
         const { data: recList } = await supabaseAdmin.from("recurring_transactions").select("*").eq("user_id", userId).eq("is_active", true).order("day_of_month");
         if (!recList || recList.length === 0) {
           await sendWhatsAppMessage(cleanPhone, "📭 Nenhuma recorrência ativa.\n\n_Brave IA 🤖_");
@@ -3533,9 +3557,9 @@ Metas financeiras: ${goalsCtx}`;
       }
 
       // ── Detect edit_recurring action ──
-      const editRecurringMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"edit_recurring"[\s\S]*\}/);
-      if (editRecurringMatch) {
-        const action = JSON.parse(editRecurringMatch[0]);
+      const editRecurringAction = extractActionJson(aiResponse, "edit_recurring");
+      if (editRecurringAction) {
+        const action = editRecurringAction;
         const searchTerm = (action.search || "").toLowerCase();
         const { data: recList } = await supabaseAdmin.from("recurring_transactions").select("*").eq("user_id", userId).eq("is_active", true);
         const matched = (recList || []).find((r: any) => r.description.toLowerCase().includes(searchTerm));
@@ -3555,9 +3579,9 @@ Metas financeiras: ${goalsCtx}`;
       }
 
       // ── Detect delete_recurring action ──
-      const deleteRecurringMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"delete_recurring"[\s\S]*\}/);
-      if (deleteRecurringMatch) {
-        const action = JSON.parse(deleteRecurringMatch[0]);
+      const deleteRecurringAction = extractActionJson(aiResponse, "delete_recurring");
+      if (deleteRecurringAction) {
+        const action = deleteRecurringAction;
         const searchTerm = (action.search || "").toLowerCase();
         const { data: recList } = await supabaseAdmin.from("recurring_transactions").select("*").eq("user_id", userId).eq("is_active", true);
         const matched = (recList || []).find((r: any) => r.description.toLowerCase().includes(searchTerm));
@@ -3571,9 +3595,9 @@ Metas financeiras: ${goalsCtx}`;
       }
 
       // ── Detect transfer_wallet action ──
-      const transferWalletMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"transfer_wallet"[\s\S]*\}/);
-      if (transferWalletMatch) {
-        const action = JSON.parse(transferWalletMatch[0]);
+      const transferWalletAction = extractActionJson(aiResponse, "transfer_wallet");
+      if (transferWalletAction) {
+        const action = transferWalletAction;
         const { data: wList } = await supabaseAdmin.from("wallets").select("*").eq("user_id", userId);
         const from = (wList || []).find((w: any) => w.name.toLowerCase().includes((action.from || "").toLowerCase()));
         const to = (wList || []).find((w: any) => w.name.toLowerCase().includes((action.to || "").toLowerCase()));
@@ -3602,9 +3626,9 @@ Metas financeiras: ${goalsCtx}`;
       }
 
       // ── Detect update_profile action ──
-      const updateProfileMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"update_profile"[\s\S]*\}/);
-      if (updateProfileMatch) {
-        const action = JSON.parse(updateProfileMatch[0]);
+      const updateProfileAction = extractActionJson(aiResponse, "update_profile");
+      if (updateProfileAction) {
+        const action = updateProfileAction;
         const updateData: any = {};
         if (action.field === "monthly_income") updateData.monthly_income = Number(action.new_value);
         else if (action.field === "display_name") updateData.display_name = action.new_value;
@@ -3620,9 +3644,9 @@ Metas financeiras: ${goalsCtx}`;
       }
 
       // ── Detect pay_bill action ──
-      const payBillMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"pay_bill"[\s\S]*\}/);
-      if (payBillMatch) {
-        const action = JSON.parse(payBillMatch[0]);
+      const payBillAction = extractActionJson(aiResponse, "pay_bill");
+      if (payBillAction) {
+        const action = payBillAction;
         const searchTerm = (action.search || "").toLowerCase();
         const { data: bills } = await supabaseAdmin.from("transactions").select("id, description, amount, type, wallet_id, due_date")
           .eq("user_id", userId).eq("is_paid", false).eq("type", "expense").order("due_date").limit(20);
@@ -3642,8 +3666,8 @@ Metas financeiras: ${goalsCtx}`;
       }
 
       // ── Detect list_bills action ──
-      const listBillsMatch = aiResponse.match(/\{[\s\S]*"action"\s*:\s*"list_bills"[\s\S]*\}/);
-      if (listBillsMatch) {
+      const listBillsAction = extractActionJson(aiResponse, "list_bills");
+      if (listBillsAction) {
         const { data: bills } = await supabaseAdmin.from("transactions").select("description, amount, due_date, categories(name)")
           .eq("user_id", userId).eq("is_paid", false).eq("type", "expense").order("due_date").limit(15);
         if (!bills || bills.length === 0) {

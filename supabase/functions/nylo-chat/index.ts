@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { callGemini, callGeminiStream, geminiStreamToOpenAI } from "../_shared/gemini-client.ts";
+import { extractActionJson, normalizeAmount, cleanDescription, normalizeType, cleanSearchTerm } from "../_shared/ai-response-parser.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
