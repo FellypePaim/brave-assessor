@@ -581,12 +581,48 @@ serve(async (req) => {
             return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
           }
 
+          // ── Detect time/date correction: "não é 11:00 é 14:00", "14:00", "14h", "as 14:00" ──
+          const timeCorrectionMatch = effectiveText.match(/(?:(?:não|nao)\s+é?\s*\d{1,2}[h:]\d{0,2}\s*(?:é|e|,)\s*)?(\d{1,2})[h:](\d{0,2})/i);
+          const isTimeCorrection = /(?:não|nao)\s+é?\s*\d{1,2}|^\s*\d{1,2}[h:]\d{0,2}\s*$/i.test(effectiveText) && !parseNotifyMinutes(effectiveText);
+          
+          if (isTimeCorrection && timeCorrectionMatch) {
+            const hours = parseInt(timeCorrectionMatch[1]);
+            const minutes = parseInt(timeCorrectionMatch[2] || "0");
+            if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
+              const currentEventAt = new Date(ctx.event_at);
+              // Set the corrected time preserving the date
+              const corrected = new Date(currentEventAt);
+              corrected.setHours(hours + 3, minutes, 0, 0); // +3 because stored in UTC, user means BRT
+              // Actually, let's work with the ISO and adjust properly
+              const brDate = new Date(currentEventAt.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+              brDate.setHours(hours, minutes, 0, 0);
+              const utcCorrected = new Date(brDate.getTime() + 3 * 60 * 60 * 1000);
+              const newEventAt = utcCorrected.toISOString();
+              
+              await supabaseAdmin.from("whatsapp_sessions").update({
+                context: { ...ctx, event_at: newEventAt },
+                expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+              }).eq("id", session.id);
+              
+              const dtLabel = utcCorrected.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
+              await sendWhatsAppMessage(cleanPhone, `✅ Horário corrigido para *${dtLabel}*!`);
+              
+              await sendWhatsAppButtons(
+                cleanPhone,
+                `⏰ Com quanto tempo de antecedência você quer ser avisado?`,
+                [{ id: "30m", text: "30 minutos" }, { id: "1h", text: "1 hora" }, { id: "1d", text: "1 dia" }],
+                "Ou escreva: 2h, 15 min, 3 horas..."
+              );
+              return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            }
+          }
+
           // Try button value first (e.g. "30 min", "1h", "1 dia")
           const notifyMins = parseNotifyMinutes(effectiveText);
           if (notifyMins === null) {
             await sendWhatsAppButtons(
               cleanPhone,
-              "⏰ Não entendi. Quanto tempo antes você quer ser avisado?\n\nExemplo: 30 min, 1h, 2h, 1 dia",
+              "⏰ Não entendi. Quanto tempo antes você quer ser avisado?\n\nExemplo: 30 min, 1h, 2h, 1 dia\n\n_Para corrigir o horário, digite o horário correto (ex: 14:00)_",
               [{ id: "30m", text: "30 minutos" }, { id: "1h", text: "1 hora" }, { id: "1d", text: "1 dia" }],
               "Ou escreva manualmente"
             );
@@ -896,6 +932,29 @@ serve(async (req) => {
             await sendWhatsAppMessage(cleanPhone, `✅ Data atualizada para *${dtLabel}*!`);
             await showReminderConfirm({ ...ctx, event_at: newEventAt });
             return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          // ── Natural language time correction: "não é 11:00 é 14:00", "14h", "14:00" ──
+          const confirmTimeFix = effectiveText.match(/(?:(?:não|nao)\s+é?\s*\d{1,2}[h:]\d{0,2}\s*(?:é|e|,)\s*)?(\d{1,2})[h:](\d{0,2})/i);
+          const isConfirmTimeCorr = /(?:não|nao)\s+é?\s*\d{1,2}|^\s*\d{1,2}[h:]\d{0,2}\s*$/i.test(effectiveText) 
+            && !effectiveText.match(/^(nome|data|aviso)\s/i);
+          if (isConfirmTimeCorr && confirmTimeFix) {
+            const hrs = parseInt(confirmTimeFix[1]);
+            const mins2 = parseInt(confirmTimeFix[2] || "0");
+            if (hrs >= 0 && hrs <= 23 && mins2 >= 0 && mins2 <= 59) {
+              const brDate = new Date(new Date(ctx.event_at).toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+              brDate.setHours(hrs, mins2, 0, 0);
+              const utcCorr = new Date(brDate.getTime() + 3 * 60 * 60 * 1000);
+              const corrEventAt = utcCorr.toISOString();
+              await supabaseAdmin.from("whatsapp_sessions").update({
+                context: { ...ctx, event_at: corrEventAt },
+                expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+              }).eq("id", session.id);
+              const dtLbl = utcCorr.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
+              await sendWhatsAppMessage(cleanPhone, `✅ Horário corrigido para *${dtLbl}*!`);
+              await showReminderConfirm({ ...ctx, event_at: corrEventAt });
+              return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            }
           }
 
           // ── Inline edit: "aviso 1h" or "aviso 30 min" ──
