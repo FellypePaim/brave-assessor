@@ -3713,6 +3713,53 @@ Metas financeiras: ${goalsCtx}`;
         });
       }
 
+      // ── Detect add_recurring action (single recurring bill) ──
+      const addRecurringAction = extractActionJson(aiResponse, "add_recurring");
+      if (addRecurringAction) {
+        const action = addRecurringAction;
+        action.amount = normalizeAmount(action.amount);
+        action.description = cleanDescription(action.description || "");
+        action.type = normalizeType(action.type || "expense");
+        const dayOfMonth = Math.min(Math.max(parseInt(action.day_of_month) || 1, 1), 31);
+
+        let matchedCategory = (categories || []).find(
+          (c: any) => c.name.toLowerCase() === action.category?.toLowerCase()
+        );
+        if (!matchedCategory && action.description) {
+          matchedCategory = autoCategorize(action.description, categories || []);
+        }
+
+        // Find default wallet
+        const { data: defaultWallet } = await supabaseAdmin.from("wallets").select("id").eq("user_id", userId).limit(1).maybeSingle();
+
+        const { error: recError } = await supabaseAdmin.from("recurring_transactions").insert({
+          user_id: userId,
+          description: action.description,
+          amount: action.amount,
+          type: action.type,
+          day_of_month: dayOfMonth,
+          category_id: matchedCategory?.id || null,
+          wallet_id: defaultWallet?.id || null,
+          is_active: true,
+        });
+
+        if (recError) {
+          console.error("Error creating recurring:", recError);
+          await sendWhatsAppMessage(cleanPhone, "❌ Erro ao cadastrar recorrência. Tente novamente.");
+        } else {
+          const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
+          await sendWhatsAppMessage(cleanPhone,
+            `🔄 *Recorrência cadastrada!*\n\n` +
+            `📝 ${action.description}\n` +
+            `💵 ${fmt(Number(action.amount))}\n` +
+            `📅 Todo dia ${dayOfMonth}\n` +
+            `📂 ${matchedCategory?.name || action.category || "Sem categoria"}\n\n` +
+            `_A conta será gerada automaticamente todo mês._\n_Brave IA 🤖_`
+          );
+        }
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
       // ── Detect add_reminder action from AI ──
       const reminderAction = extractActionJson(aiResponse, "add_reminder");
       if (reminderAction) {
