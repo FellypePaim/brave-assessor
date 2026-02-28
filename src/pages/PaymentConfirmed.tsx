@@ -34,13 +34,20 @@ export default function PaymentConfirmed() {
         setPlanName(label);
         setStatus("success");
 
-        // Meta Pixel — Purchase event
-        if (typeof window !== "undefined" && (window as any).fbq) {
-          (window as any).fbq("track", "Purchase", {
-            value,
-            currency: "BRL",
-          });
-        }
+        // Meta Pixel — Purchase event (retry até fbq estar disponível)
+        const firePurchase = () => {
+          if (typeof window !== "undefined" && (window as any).fbq) {
+            (window as any).fbq("track", "Purchase", {
+              value,
+              currency: "BRL",
+            });
+            console.log("[Meta Pixel] Purchase event fired:", { value, currency: "BRL" });
+          } else {
+            console.warn("[Meta Pixel] fbq not ready, retrying in 500ms...");
+            setTimeout(firePurchase, 500);
+          }
+        };
+        firePurchase();
         return;
       }
 
