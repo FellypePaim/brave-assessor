@@ -29,8 +29,18 @@ export default function PaymentConfirmed() {
 
       const plan = data?.subscription_plan;
       if (plan && plan !== "free" && data?.subscription_expires_at) {
-        setPlanName(plan === "anual" ? "Nox Anual" : "Nox Mensal");
+        const label = plan === "anual" ? "Nox Anual" : "Nox Mensal";
+        const value = plan === "anual" ? 178.80 : 19.90;
+        setPlanName(label);
         setStatus("success");
+
+        // Meta Pixel — Purchase event
+        if (typeof window !== "undefined" && (window as any).fbq) {
+          (window as any).fbq("track", "Purchase", {
+            value,
+            currency: "BRL",
+          });
+        }
         return;
       }
 
