@@ -1895,6 +1895,89 @@ serve(async (req) => {
           return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
+        // ── Step: confirm single recurring transaction ──
+        if (session.step === "confirm_single_recurring") {
+          const isConfirm = /sim|ok|yes|confirmar|✅/i.test(effectiveText);
+          const isCancel = /^(não|nao|n|cancelar|cancel|❌)$/i.test(effectiveText);
+
+          if (isCancel) {
+            await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
+            await sendWhatsAppMessage(cleanPhone, "❌ Recorrência cancelada.");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          // Inline edits: "valor 30", "dia 15", "descrição Netflix"
+          const valorEdit = effectiveText.match(/^valor\s+(\d+[\.,]?\d*)/i);
+          if (valorEdit) {
+            const newAmount = normalizeAmount(valorEdit[1]);
+            await supabaseAdmin.from("whatsapp_sessions").update({
+              context: { ...ctx, amount: newAmount },
+              expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+            }).eq("id", session.id);
+            await sendWhatsAppMessage(cleanPhone, `✅ Valor atualizado para *R$ ${Number(newAmount).toFixed(2)}*!`);
+            const updCtx = { ...ctx, amount: newAmount };
+            await sendWhatsAppButtons(cleanPhone,
+              `🔄 *Confirmar recorrência?*\n\n📝 ${updCtx.description}\n💵 ${fmt(Number(updCtx.amount))}\n📅 Todo dia ${updCtx.day_of_month}\n📂 ${updCtx.category_name}`,
+              [{ id: "sim", text: "✅ Confirmar" }, { id: "nao", text: "❌ Cancelar" }], "");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          const diaEdit = effectiveText.match(/^dia\s+(\d{1,2})/i);
+          if (diaEdit) {
+            const newDay = Math.min(Math.max(parseInt(diaEdit[1]), 1), 31);
+            await supabaseAdmin.from("whatsapp_sessions").update({
+              context: { ...ctx, day_of_month: newDay },
+              expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+            }).eq("id", session.id);
+            await sendWhatsAppMessage(cleanPhone, `✅ Dia atualizado para *${newDay}*!`);
+            const updCtx = { ...ctx, day_of_month: newDay };
+            await sendWhatsAppButtons(cleanPhone,
+              `🔄 *Confirmar recorrência?*\n\n📝 ${updCtx.description}\n💵 ${fmt(Number(updCtx.amount))}\n📅 Todo dia ${updCtx.day_of_month}\n📂 ${updCtx.category_name}`,
+              [{ id: "sim", text: "✅ Confirmar" }, { id: "nao", text: "❌ Cancelar" }], "");
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          if (isConfirm) {
+            // Find default wallet
+            const { data: defaultWallet } = await supabaseAdmin.from("wallets").select("id").eq("user_id", ctx.user_id).limit(1).maybeSingle();
+
+            const { error: recError } = await supabaseAdmin.from("recurring_transactions").insert({
+              user_id: ctx.user_id,
+              description: ctx.description,
+              amount: ctx.amount,
+              type: ctx.type || "expense",
+              day_of_month: ctx.day_of_month,
+              category_id: ctx.category_id || null,
+              wallet_id: defaultWallet?.id || null,
+              is_active: true,
+            });
+
+            await supabaseAdmin.from("whatsapp_sessions").delete().eq("id", session.id);
+
+            if (recError) {
+              console.error("Error creating recurring:", recError);
+              await sendWhatsAppMessage(cleanPhone, "❌ Erro ao cadastrar recorrência. Tente novamente.");
+            } else {
+              await sendWhatsAppMessage(cleanPhone,
+                `🔄 *Recorrência cadastrada!*\n\n` +
+                `📝 ${ctx.description}\n` +
+                `💵 ${fmt(Number(ctx.amount))}\n` +
+                `📅 Todo dia ${ctx.day_of_month}\n` +
+                `📂 ${ctx.category_name}\n\n` +
+                `_A conta será gerada automaticamente todo mês._\n_Brave IA 🤖_`
+              );
+            }
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          // Unknown input — re-show confirmation
+          await sendWhatsAppButtons(cleanPhone,
+            `🔄 *Confirmar recorrência?*\n\n📝 ${ctx.description}\n💵 ${fmt(Number(ctx.amount))}\n📅 Todo dia ${ctx.day_of_month}\n📂 ${ctx.category_name}`,
+            [{ id: "sim", text: "✅ Confirmar" }, { id: "nao", text: "❌ Cancelar" }],
+            "Ou corrija: valor 30, dia 15");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
         // ── Step: help category selection ──
         if (session.step === "help_category") {
           const helpMessages: Record<string, string> = {
@@ -3713,7 +3796,7 @@ Metas financeiras: ${goalsCtx}`;
         });
       }
 
-      // ── Detect add_recurring action (single recurring bill) ──
+      // ── Detect add_recurring action (single recurring bill) — confirmation flow ──
       const addRecurringAction = extractActionJson(aiResponse, "add_recurring");
       if (addRecurringAction) {
         const action = addRecurringAction;
@@ -3729,34 +3812,35 @@ Metas financeiras: ${goalsCtx}`;
           matchedCategory = autoCategorize(action.description, categories || []);
         }
 
-        // Find default wallet
-        const { data: defaultWallet } = await supabaseAdmin.from("wallets").select("id").eq("user_id", userId).limit(1).maybeSingle();
-
-        const { error: recError } = await supabaseAdmin.from("recurring_transactions").insert({
-          user_id: userId,
-          description: action.description,
-          amount: action.amount,
-          type: action.type,
-          day_of_month: dayOfMonth,
-          category_id: matchedCategory?.id || null,
-          wallet_id: defaultWallet?.id || null,
-          is_active: true,
+        // Store in session for confirmation
+        await supabaseAdmin.from("whatsapp_sessions").delete().eq("phone_number", cleanPhone);
+        await supabaseAdmin.from("whatsapp_sessions").insert({
+          phone_number: cleanPhone,
+          step: "confirm_single_recurring",
+          context: {
+            user_id: userId,
+            description: action.description,
+            amount: action.amount,
+            type: action.type,
+            day_of_month: dayOfMonth,
+            category_id: matchedCategory?.id || null,
+            category_name: matchedCategory?.name || action.category || "Sem categoria",
+          },
+          expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
         });
 
-        if (recError) {
-          console.error("Error creating recurring:", recError);
-          await sendWhatsAppMessage(cleanPhone, "❌ Erro ao cadastrar recorrência. Tente novamente.");
-        } else {
-          const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
-          await sendWhatsAppMessage(cleanPhone,
-            `🔄 *Recorrência cadastrada!*\n\n` +
-            `📝 ${action.description}\n` +
-            `💵 ${fmt(Number(action.amount))}\n` +
-            `📅 Todo dia ${dayOfMonth}\n` +
-            `📂 ${matchedCategory?.name || action.category || "Sem categoria"}\n\n` +
-            `_A conta será gerada automaticamente todo mês._\n_Brave IA 🤖_`
-          );
-        }
+        const fmt = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
+        const emoji = action.type === "income" ? "💰" : "🔄";
+        await sendWhatsAppButtons(
+          cleanPhone,
+          `${emoji} *Confirmar recorrência?*\n\n` +
+          `📝 ${action.description}\n` +
+          `💵 ${fmt(Number(action.amount))}\n` +
+          `📅 Todo dia ${dayOfMonth}\n` +
+          `📂 ${matchedCategory?.name || action.category || "Sem categoria"}`,
+          [{ id: "sim", text: "✅ Confirmar" }, { id: "nao", text: "❌ Cancelar" }],
+          "Ou corrija: valor, dia, descrição"
+        );
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
