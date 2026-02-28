@@ -188,10 +188,14 @@ Exemplos de formatos que indicam lista:
 Retorne SOMENTE JSON com action "add_list":
 {"action":"add_list","items":[{"description":"Gmail","amount":20.00,"category":"Outros","type":"expense"},{"description":"Gamersclub","amount":40.00,"category":"Lazer","type":"expense"},{"description":"Corte de Cabelo","amount":35.00,"category":"Outros","type":"expense"}]}
 
+Se o usuário mencionar o DIA de vencimento de cada item (ex: "todo dia 5", "dia 10"), inclua "day_of_month" em CADA item correspondente:
+{"action":"add_list","items":[{"description":"IPTV","amount":30.00,"category":"Lazer","type":"expense","day_of_month":5},{"description":"Academia","amount":90.00,"category":"Saúde","type":"expense","day_of_month":7},{"description":"Aluguel","amount":800.00,"category":"Moradia","type":"expense","day_of_month":1}]}
+
 REGRAS CRÍTICAS PARA LISTAS:
 - Extraia TODOS os itens. Se o usuário listou 8, retorne 8 itens. NUNCA retorne menos do que o usuário enviou.
 - "description" deve ser o nome limpo do item (sem "mensalidade de", "conta de", etc.)
-- NÃO inclua "day_of_month" no JSON — será perguntado depois
+- Se o usuário mencionou "todo dia X", "dia X", "vence dia X" para um item, inclua "day_of_month": X nesse item
+- Se o usuário NÃO mencionou dia para um item, NÃO inclua "day_of_month" nesse item
 - NÃO decida se é recorrente ou não — será perguntado ao usuário depois
 - Escolha a melhor categoria das disponíveis no contexto
 

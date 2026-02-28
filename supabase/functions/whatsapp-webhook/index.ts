@@ -263,16 +263,60 @@ serve(async (req) => {
           }
 
           if (isRecurring) {
-            await supabaseAdmin.from("whatsapp_sessions").update({
-              step: "ask_recurring_day",
-              context: { ...ctx, list_type: "recurring" },
-              expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
-            }).eq("id", session.id);
-            await sendWhatsAppMessage(cleanPhone,
-              `📅 *Em qual dia do mês vencem essas contas?*\n\n` +
-              `Envie o dia (ex: _"10"_ ou _"todo dia 5"_)\n\n` +
-              `💡 _Se cada conta vence em um dia diferente, pode definir depois. Envie o dia mais comum._`
-            );
+            // Check if ALL items already have day_of_month from the AI extraction
+            const allHaveDays = items.length > 0 && items.every((i: any) => i.day_of_month && i.day_of_month >= 1 && i.day_of_month <= 31);
+            
+            if (allHaveDays) {
+              // Skip asking day — go directly to confirmation
+              const totalAmount = items.reduce((s: number, i: any) => s + Number(i.amount), 0);
+              const lines = items.map((i: any, idx: number) =>
+                `${idx + 1}. *${i.description}* — ${fmt(Number(i.amount))} · dia ${i.day_of_month}`
+              );
+              await supabaseAdmin.from("whatsapp_sessions").update({
+                step: "confirm_recurring_list",
+                context: { ...ctx, list_type: "recurring" },
+                expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+              }).eq("id", session.id);
+              await sendWhatsAppButtons(
+                cleanPhone,
+                `🔄 *Confirmar ${items.length} recorrências mensais?*\n\n` + lines.join("\n") +
+                `\n\n💸 *Total mensal: ${fmt(totalAmount)}*\n\n` +
+                `✏️ _Para editar:_\n` +
+                `• _"3 remover"_ — remove o item 3\n` +
+                `• _"2 valor 50"_ — muda valor do item 2\n` +
+                `• _"1 dia 15"_ — muda dia do item 1`,
+                [{ id: "sim", text: "✅ Cadastrar todas" }, { id: "nao", text: "❌ Cancelar" }],
+                "Confirme ou edite os itens"
+              );
+            } else {
+              // Some or no items have days — ask for the common day
+              await supabaseAdmin.from("whatsapp_sessions").update({
+                step: "ask_recurring_day",
+                context: { ...ctx, list_type: "recurring" },
+                expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+              }).eq("id", session.id);
+              // Build a smarter message — show which items already have days
+              const itemsWithDays = items.filter((i: any) => i.day_of_month);
+              if (itemsWithDays.length > 0) {
+                const withDayLines = items.map((i: any, idx: number) =>
+                  i.day_of_month
+                    ? `${idx + 1}. ✅ *${i.description}* — dia ${i.day_of_month}`
+                    : `${idx + 1}. ❓ *${i.description}* — dia ?`
+                ).join("\n");
+                await sendWhatsAppMessage(cleanPhone,
+                  `📅 *Falta definir o dia de vencimento de alguns itens:*\n\n` +
+                  withDayLines +
+                  `\n\nEnvie o dia para os itens que faltam (ex: _"10"_)\n` +
+                  `💡 _O dia será aplicado apenas aos itens sem dia definido._`
+                );
+              } else {
+                await sendWhatsAppMessage(cleanPhone,
+                  `📅 *Em qual dia do mês vencem essas contas?*\n\n` +
+                  `Envie o dia (ex: _"10"_ ou _"todo dia 5"_)\n\n` +
+                  `💡 _Se cada conta vence em um dia diferente, pode definir depois. Envie o dia mais comum._`
+                );
+              }
+            }
             return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
           }
 
@@ -317,7 +361,7 @@ serve(async (req) => {
           if (dayMatch) {
             const day = parseInt(dayMatch[1]);
             if (day >= 1 && day <= 31) {
-              const updatedItems = items.map((i: any) => ({ ...i, day_of_month: day }));
+              const updatedItems = items.map((i: any) => ({ ...i, day_of_month: i.day_of_month || day }));
               await supabaseAdmin.from("whatsapp_sessions").update({
                 step: "confirm_recurring_list",
                 context: { ...ctx, items: updatedItems },
