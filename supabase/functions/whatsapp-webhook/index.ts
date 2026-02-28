@@ -399,7 +399,7 @@ serve(async (req) => {
             return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
           }
 
-          const valorMatch = effectiveText.match(/^(\d+)\s+valor\s+([\d.,]+)$/i);
+          const valorMatch = effectiveText.match(/^(\d+)\s+valor\s+(?:R\$\s?)?([\d.,]+)$/i);
           if (valorMatch) {
             const idx = parseInt(valorMatch[1]) - 1;
             const newVal = parseFloat(valorMatch[2].replace(",", "."));
@@ -516,7 +516,7 @@ serve(async (req) => {
             return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
           }
 
-          const valorMatch = effectiveText.match(/^(\d+)\s+valor\s+([\d.,]+)$/i);
+          const valorMatch = effectiveText.match(/^(\d+)\s+valor\s+(?:R\$\s?)?([\d.,]+)$/i);
           if (valorMatch) {
             const idx = parseInt(valorMatch[1]) - 1;
             const newVal = parseFloat(valorMatch[2].replace(",", "."));
