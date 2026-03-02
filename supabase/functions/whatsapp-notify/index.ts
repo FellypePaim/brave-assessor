@@ -257,7 +257,7 @@ Regras: sem emoji, informal, motivador, máximo 15 palavras.`;
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 50, temperature: 0.8 },
+        generationConfig: { maxOutputTokens: 150, temperature: 0.8 },
       }),
     },
   );
