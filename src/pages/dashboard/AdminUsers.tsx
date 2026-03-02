@@ -203,13 +203,14 @@ export default function AdminUsers() {
     if (!editUser) return;
     setSaving(true);
 
-    // For "teste" plan, always set expiry to 10 minutes from now
+    // Determine expiry based on plan
+    const planChanged = editPlan !== editUser.subscription_plan;
     let expiresAt: string | null = editExpiry ? new Date(editExpiry).toISOString() : null;
     if (editPlan === "teste") {
       expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-    } else if (editPlan === "mensal" && !editExpiry) {
+    } else if (editPlan === "mensal" && (planChanged || !editExpiry)) {
       expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-    } else if (editPlan === "anual" && !editExpiry) {
+    } else if (editPlan === "anual" && (planChanged || !editExpiry)) {
       expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
     } else if (editPlan === "free") {
       expiresAt = null;
