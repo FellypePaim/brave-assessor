@@ -1,0 +1,1 @@
+ALTER TABLE public.whatsapp_pending_transactions ALTER COLUMN expires_at SET DEFAULT (now() + interval '2 hours');

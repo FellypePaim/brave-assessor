@@ -3706,7 +3706,7 @@ Metas financeiras: ${goalsCtx}`;
     // ── PRIORITY 2: Process media or text with AI ──
     let aiResponse: string;
 
-    if (isMedia && messageId) {
+    if (isMedia && messageId && !isButtonResponse) {
       const mediaLabel = isAudio ? "🎙️ Processando seu áudio..." : "📸 Analisando o comprovante...";
       console.log(`Downloading media: messageId=${messageId} mediaType=${mediaType}`);
       await sendWhatsAppMessage(cleanPhone, mediaLabel);
