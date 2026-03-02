@@ -9,9 +9,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
   Search, Users, Pencil, Shield, Zap, Star, UserCircle2,
-  Phone, Calendar, Crown, RefreshCw, ShieldCheck, ShieldOff, Eye, EyeOff, Mail, Lock, Trash2,
+  Phone, Calendar, Crown, RefreshCw, ShieldCheck, ShieldOff, Eye, EyeOff, Mail, Lock, Trash2, RotateCcw,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -70,6 +71,33 @@ export default function AdminUsers() {
   const [resettingId, setResettingId] = useState<string | null>(null);
   const [confirmResetAll, setConfirmResetAll] = useState(false);
   const [resettingAll, setResettingAll] = useState(false);
+  const [renewingId, setRenewingId] = useState<string | null>(null);
+
+  const renewUser = async (u: UserRow, plan: "mensal" | "anual") => {
+    setRenewingId(u.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Sem sessão");
+      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+      const days = plan === "anual" ? 365 : 30;
+      const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/admin-update-user`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({ userId: u.id, subscription_plan: plan, subscription_expires_at: expiresAt }),
+        }
+      );
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      const label = plan === "anual" ? "Anual (365 dias)" : "Mensal (30 dias)";
+      toast({ title: "Plano renovado!", description: `${u.display_name || u.id} → ${label}` });
+      fetchUsers();
+    } catch (err: any) {
+      toast({ title: "Erro ao renovar", description: err.message, variant: "destructive" });
+    } finally { setRenewingId(null); }
+  };
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -472,6 +500,29 @@ export default function AdminUsers() {
                         </Button>
                         {currentUserIsAdmin && (
                           <>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 px-2 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10"
+                                  disabled={renewingId === u.id}
+                                  title="Renovar plano"
+                                >
+                                  <RotateCcw className={`h-3.5 w-3.5 ${renewingId === u.id ? "animate-spin" : ""}`} />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => renewUser(u, "mensal")}>
+                                  <Zap className="h-4 w-4 mr-2 text-blue-500" />
+                                  Mensal (30 dias)
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => renewUser(u, "anual")}>
+                                  <Star className="h-4 w-4 mr-2 text-amber-500" />
+                                  Anual (365 dias)
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                             <Button
                               variant="ghost"
                               size="sm"
