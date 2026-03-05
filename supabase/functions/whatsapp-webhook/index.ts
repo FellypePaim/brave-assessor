@@ -88,10 +88,10 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    // ── RATE LIMITER: 30 messages per hour per phone ──
-    const { data: rateLimitAllowed } = await supabaseAdmin.rpc("check_whatsapp_rate_limit", { _phone: cleanPhone });
+    // ── RATE LIMITER: 80 messages per hour per phone ──
+    const { data: rateLimitAllowed } = await supabaseAdmin.rpc("check_whatsapp_rate_limit", { _phone: cleanPhone, _max_messages: 80 });
     if (rateLimitAllowed === false) {
-      await sendWhatsAppMessage(cleanPhone, "⚠️ Você atingiu o limite de 30 mensagens por hora. Aguarde um pouco e tente novamente! ⏳");
+      await sendWhatsAppMessage(cleanPhone, "⚠️ Você atingiu o limite de 80 mensagens por hora. Aguarde um pouco e tente novamente! ⏳");
       return new Response(JSON.stringify({ ok: true, rate_limited: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
