@@ -2944,24 +2944,11 @@ Dados financeiros para gerar dica personalizada:
 - Metas financeiras: ${goalsInfo}
 `;
 
-      const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-      if (!LOVABLE_API_KEY) {
-        await sendWhatsAppMessage(cleanPhone, "❌ Erro interno. Tente novamente mais tarde.");
-        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      }
-
-      const dicaResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
-          messages: [
-            {
-              role: "system",
-              content: `Você é o Brave IA, assessor financeiro pessoal. Gere UMA dica financeira personalizada e prática baseada nos dados do usuário abaixo.
+      let dicaText = "💡 Não foi possível gerar a dica agora. Tente novamente!";
+      try {
+        dicaText = await callGemini({
+          model: "gemini-2.5-flash",
+          systemPrompt: `Você é o Brave IA, assessor financeiro pessoal. Gere UMA dica financeira personalizada e prática baseada nos dados do usuário abaixo.
 
 REGRAS:
 - Use emojis relevantes
@@ -2975,17 +2962,11 @@ REGRAS:
 - Finalize com motivação curta
 
 ${dicaContext}`,
-            },
-            { role: "user", content: "Me dê uma dica financeira personalizada." },
-          ],
+          messages: [{ role: "user", content: "Me dê uma dica financeira personalizada." }],
           temperature: 0.7,
-        }),
-      });
-
-      let dicaText = "💡 Não foi possível gerar a dica agora. Tente novamente!";
-      if (dicaResp.ok) {
-        const dicaData = await dicaResp.json();
-        dicaText = dicaData.choices?.[0]?.message?.content || dicaText;
+        });
+      } catch (e) {
+        console.error("Dica AI error:", e);
       }
 
       await sendWhatsAppMessage(cleanPhone,
