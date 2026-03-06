@@ -2,7 +2,7 @@ const braveLogoIcon = "/brave-icon.png";
 import {
   LayoutDashboard, Wallet, Tag, CreditCard, CalendarCheck,
   Target, TrendingUp, Brain, FileText, HeadphonesIcon,
-  Settings, LogOut, Sparkles, ShieldCheck, Users, Bell, ArrowLeftRight
+  Settings, LogOut, Sparkles, ShieldCheck, Users, Bell, ArrowLeftRight, DatabaseBackup
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
@@ -66,6 +66,7 @@ export function AppSidebar() {
   const adminItems = [
     { title: "Atendimentos", url: "/dashboard/admin/support", icon: HeadphonesIcon },
     { title: "Usuários",     url: "/dashboard/admin/users",   icon: Users },
+    { title: "Exportar Dados", url: "/dashboard/admin/export", icon: DatabaseBackup },
   ];
 
   const handleSignOut = async () => {

@@ -26,6 +26,7 @@ import Reports from "./pages/dashboard/Reports";
 import SupportChat from "./pages/dashboard/SupportChat";
 import AdminSupport from "./pages/dashboard/AdminSupport";
 import AdminUsers from "./pages/dashboard/AdminUsers";
+import AdminExport from "./pages/dashboard/AdminExport";
 import Settings from "./pages/dashboard/Settings";
 import NyloChat from "./pages/dashboard/NyloChat";
 import Reminders from "./pages/dashboard/Reminders";
@@ -101,6 +102,7 @@ const App = () => (
               <Route path="behavior" element={<Behavior />} />
               <Route path="admin/support" element={<AdminSupport />} />
               <Route path="admin/users" element={<AdminUsers />} />
+              <Route path="admin/export" element={<AdminExport />} />
               <Route path="brave-ia" element={<NyloChat />} />
               <Route path="reminders" element={<Reminders />} />
             </Route>
