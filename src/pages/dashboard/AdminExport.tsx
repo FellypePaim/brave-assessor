@@ -50,7 +50,7 @@ const FULL_SCHEMA_SQL = [
   "",
   "-- 2. TABELAS",
   "",
-  "CREATE TABLE public.profiles (",
+  "CREATE TABLE IF NOT EXISTS public.profiles (",
   "  id uuid PRIMARY KEY,",
   "  display_name text,",
   "  avatar_url text,",
